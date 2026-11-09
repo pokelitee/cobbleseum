@@ -4,14 +4,14 @@ extends SceneTree
 ##        [--seconds=10] [--format=vertical|landscape|both]
 ##
 ## 1. Runs the battle headless to find where it ends and its checksum.
-## 2. For each format, launches a second Godot with Movie Maker on the battle view, skipping
-##    ahead so the clip covers the last --seconds (ending TAIL_SECONDS after the knockout),
-##    and checking the rendered battle's checksum against the headless one.
+## 2. For each format, launches a second Godot with Movie Maker on the battle view. The view
+##    plans the presentation (hit-stop, slow motion, camera shots), starts late enough that
+##    the clip lasts about --seconds and ends after the knockout, and checks the rendered
+##    battle's checksum against the headless one.
 ## 3. Encodes H.264 MP4 with ffmpeg as clip_<format>.mp4 and writes battle.json and
 ##    credits.txt beside it in recordings/<date>_<a>-vs-<b>_<seed>/.
 
 const VIEW_SCENE := "res://game/presentation/battle_view.tscn"
-const TAIL_SECONDS := 2.0
 const DEFAULT_SECONDS := 10.0
 const SAFETY_FRAMES := 300
 const DEFAULT_FORMAT := "vertical"
@@ -58,8 +58,6 @@ func _initialize() -> void:
 		return _fail(created.error)
 	var battle: Battle = created.battle
 	var end_tick := battle.run()
-	var until_tick := end_tick + Rules.seconds_to_ticks(TAIL_SECONDS)
-	var from_tick := maxi(0, until_tick - Rules.seconds_to_ticks(seconds))
 
 	var names: PackedStringArray = []
 	for entry: Dictionary in spec.fighters:
@@ -68,15 +66,15 @@ func _initialize() -> void:
 	_ensure_ignored(recordings)
 	var out_dir := recordings.path_join("%s_%s_%d" % [Time.get_date_string_from_system(), "-vs-".join(names), int(spec.seed)])
 	DirAccess.make_dir_recursive_absolute(out_dir)
-	print("battle: %s, checksum %s; clip ticks %d-%d" % [Battle.Result.keys()[battle.result], battle.checksum().left(12), from_tick, until_tick])
+	print("battle: %s after %d ticks, checksum %s" % [Battle.Result.keys()[battle.result], end_tick, battle.checksum().left(12)])
 	for clip_format: String in formats:
-		var err := _render(spec_path, clip_format, out_dir, from_tick, until_tick, battle.checksum())
+		var err := _render(spec_path, clip_format, out_dir, seconds, battle.checksum())
 		if not err.is_empty():
 			return _fail(err)
 
 	var record := {
 		"spec": spec, "rules_version": Rules.RULES_VERSION, "result": Battle.Result.keys()[battle.result],
-		"end_tick": end_tick, "clip_ticks": [from_tick, until_tick], "formats": formats, "checksum": battle.checksum(),
+		"end_tick": end_tick, "clip_seconds": seconds, "formats": formats, "checksum": battle.checksum(),
 		"events": battle.events,
 	}
 	_write(out_dir.path_join("battle.json"), JSON.stringify(record, "  "))
@@ -86,7 +84,7 @@ func _initialize() -> void:
 
 
 ## Renders one format to <out_dir>/clip_<format>.mp4. Returns an error message or "".
-func _render(spec_path: String, format: String, out_dir: String, from_tick: int, until_tick: int, checksum: String) -> String:
+func _render(spec_path: String, format: String, out_dir: String, seconds: float, checksum: String) -> String:
 	var movie := out_dir.path_join("clip_%s.ogv" % format)
 	var clip := out_dir.path_join("clip_%s.mp4" % format)
 	print("rendering %s..." % format)
@@ -96,9 +94,9 @@ func _render(spec_path: String, format: String, out_dir: String, from_tick: int,
 	var status := OS.execute(OS.get_executable_path(), [
 		"--path", ProjectSettings.globalize_path("res://"),
 		"--write-movie", movie, "--fixed-fps", str(Rules.TICK_RATE),
-		"--quit-after", str(until_tick - from_tick + SAFETY_FRAMES),
+		"--quit-after", str(roundi(seconds * Rules.TICK_RATE) + SAFETY_FRAMES),
 		VIEW_SCENE, "--",
-		spec_path, "--from-tick=%d" % from_tick, "--until-tick=%d" % until_tick,
+		spec_path, "--clip-seconds=%s" % seconds,
 		"--expect-checksum=%s" % checksum,
 	], output, true)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(OVERRIDE_FILE))

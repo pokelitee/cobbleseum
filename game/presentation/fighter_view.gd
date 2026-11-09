@@ -7,6 +7,8 @@ const MIN_HEIGHT := 0.5
 const MAX_HEIGHT := 3.0
 const CROSSFADE := 0.15
 
+## Rendered height in metres after scaling into the height band.
+var height := 1.0
 var _player: AnimationPlayer
 var _clips: Dictionary = {}
 var _fainted := false
@@ -23,8 +25,9 @@ static func from_model(path: String) -> FighterView:
 	view._player = model.get_node("AnimationPlayer")
 	view._clips = model.get_meta("clips", {})
 	var mesh: MeshInstance3D = model.get_node("Skeleton/Mesh")
-	var height := mesh.get_aabb().size.y if mesh.mesh != null else 1.0
-	model.scale = Vector3.ONE * (clampf(height, MIN_HEIGHT, MAX_HEIGHT) / height)
+	var model_height := mesh.get_aabb().size.y if mesh.mesh != null else 1.0
+	view.height = clampf(model_height, MIN_HEIGHT, MAX_HEIGHT)
+	model.scale = Vector3.ONE * (view.height / model_height)
 	view._player.animation_finished.connect(view._on_clip_finished)
 	view.play_idle()
 	return view
@@ -35,6 +38,11 @@ func place(position_2d: Vector2, facing: Vector2) -> void:
 	position = Vector3(position_2d.x, 0, position_2d.y)
 	if facing.length_squared() > 0.0:
 		look_at(position + Vector3(facing.x, 0, facing.y), Vector3.UP)
+
+
+## Animation speed relative to normal: 0 freezes (hit-stop), below 1 is slow motion.
+func set_time_scale(scale: float) -> void:
+	_player.speed_scale = scale
 
 
 func play_idle() -> void:
