@@ -46,7 +46,8 @@
         {"pattern": "assets/cobblemon/textures/pokemon/*.png", "min_count": 3000},
         {"pattern": "assets/cobblemon/sounds/pokemon/*.ogg", "min_count": 1500},
         {"pattern": "data/cobblemon/species/*.json", "min_count": 1000}
-      ]
+      ],
+      "build": "res://tools/sources/cobblemon.gd"
     }
   }
 }

@@ -27,6 +27,7 @@ static func build(geo_json: Dictionary, texture: Texture2D, name: String) -> Dic
 	var skeleton := Skeleton3D.new()
 	skeleton.name = "Skeleton"
 	var global_rest := {}
+	var rest_rotations := {}
 	var locators := {}
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -40,7 +41,8 @@ static func build(geo_json: Dictionary, texture: Texture2D, name: String) -> Dic
 			var parent_index := skeleton.find_bone(bone.parent)
 			skeleton.set_bone_parent(index, parent_index)
 			parent_pivot = to_godot(bones.by_name[bone.parent].get("pivot", [0, 0, 0]))
-		var rest := Transform3D(rotation_basis(bone.get("rotation", [0, 0, 0])), pivot - parent_pivot)
+		rest_rotations[bone_name] = bone.get("rotation", [0, 0, 0])
+		var rest := Transform3D(rotation_basis(rest_rotations[bone_name]), pivot - parent_pivot)
 		skeleton.set_bone_rest(index, rest)
 		skeleton.set_bone_pose(index, rest)
 		global_rest[bone_name] = (global_rest[bone.parent] * rest) if bone.has("parent") else rest
@@ -54,6 +56,8 @@ static func build(geo_json: Dictionary, texture: Texture2D, name: String) -> Dic
 	root.add_child(skeleton)
 	skeleton.owner = root
 	root.set_meta("locators", locators)
+	# Bedrock animations add their angles to these before building a bone's basis.
+	root.set_meta("rest_rotations", rest_rotations)
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "Mesh"
 	if vertex_count > 0:

@@ -20,13 +20,19 @@ Fetch and prepare the assets (about 157 MB to download the first time):
 godot --headless --path . --script res://tools/assets.gd
 ```
 
-This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout and exports Showdown's data to JSON. Extracting Cobblemon's roughly 12,000 files can take a few minutes. Re-running skips finished steps. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
+This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout, exports Showdown's data to JSON, converts the showcase Pokémon to Godot scenes and writes a conversion report for every Cobblemon species (`cache/build/cobblemon/<version>/report.json`). Extracting Cobblemon's roughly 12,000 files can take a few minutes. Re-running skips finished steps. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
 
 Run the tests:
 
 ```bash
 godot --headless --path . --import
 godot --headless --path . --script res://tests/run_tests.gd
+```
+
+Preview converted models (opens a window; images go to `cache/previews/`):
+
+```bash
+godot --path . --script res://tools/preview_model.gd -- 0009_blastoise --clip=physical
 ```
 
 Check that no third-party assets are tracked:
@@ -39,7 +45,7 @@ tools/check_no_assets.sh
 
 The design is described in the [concept brief](concepts_brief.md). In short:
 
-- An asset pipeline (`tools/assets.gd`, `tools/pipeline/`, one build script per source in `tools/sources/`) fetches pinned releases of Showdown's data and Cobblemon's jar, verifies them by SHA-256, extracts and checks them, and builds what the game needs in `cache/`. Converting Cobblemon's Bedrock models into Godot scenes is next.
+- An asset pipeline (`tools/assets.gd`, `tools/pipeline/`, one build script per source in `tools/sources/`) fetches pinned releases of Showdown's data and Cobblemon's jar, verifies them by SHA-256, extracts and checks them, and builds what the game needs in `cache/`. Cobblemon's Bedrock models and animations become Godot scenes (`tools/convert/`): a skeleton with one rigidly skinned mesh and clips baked at 60 Hz.
 - A deterministic, fixed-tick battle simulation written in plain GDScript runs headless for batch simulation and drives the 3D presentation.
 - A utility AI controls fighters through the same intents a player uses.
 - Godot's Movie Maker mode records clips; ffmpeg encodes them.
