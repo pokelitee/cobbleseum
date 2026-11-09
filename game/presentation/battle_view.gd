@@ -1,37 +1,39 @@
 class_name BattleView
 extends Node3D
-## Plays a battle in a 3D arena with a portrait camera and HP bars (concepts_brief.md §12).
-## User arguments (after --): <spec.json> [--from-tick=N] [--until-tick=N] [--expect-checksum=HEX].
-## The simulation advances one tick per video frame under Movie Maker and in real time
-## otherwise; ticks before --from-tick run instantly without drawing. With --until-tick the
-## view quits at that tick of presentation time (which keeps counting after the battle ends),
-## exiting with code 2 if the battle's checksum doesn't match --expect-checksum.
+## Plays a battle in a 3D arena (concepts_brief.md §12). User arguments (after --):
+## <spec.json> [--clip-seconds=S] [--expect-checksum=HEX].
+##
+## The battle is run headless first so the Director can plan the whole presentation: hit-stop,
+## slow motion and camera shots. Each video frame then either holds the current tick or
+## advances the simulation by one. Under Movie Maker every frame is 1/30 s; otherwise frames
+## follow real time. With --clip-seconds the view starts late enough to end on the knockout,
+## quits when the plan ends, and exits with code 2 if the battle's checksum doesn't match
+## --expect-checksum.
 
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
 const CHECKSUM_OK := "CHECKSUM_OK"
 const MODELS_DIR := "res://cache/build/cobblemon/1.8.4/models"
-## Camera framing per orientation. The angle is between the camera and the line from side B
-## to side A: portrait sits steeper and higher so the fighters stack diagonally in a tall
-## frame; landscape is nearly side-on so they face each other across a wide one.
-const PORTRAIT_CAMERA := {"distance": 6.0, "height": 4.0, "angle": 65.0, "fov": 55.0}
-const LANDSCAPE_CAMERA := {"distance": 5.0, "height": 2.6, "angle": 85.0, "fov": 45.0}
 const PROJECTILE_COLORS := {
 	"Water": Color(0.25, 0.55, 1.0), "Fire": Color(1.0, 0.45, 0.1), "Grass": Color(0.3, 0.85, 0.3),
 	"Electric": Color(1.0, 0.9, 0.2), "Ice": Color(0.6, 0.95, 1.0), "Psychic": Color(1.0, 0.4, 0.7),
 }
 
 var battle: Battle
+var plan: Dictionary
 var _views: Array[FighterView] = []
 var _projectile_meshes: Array[MeshInstance3D] = []
 var _bars: Array[ColorRect] = []
 var _camera: Camera3D
-var _camera_axis := Vector2(0, 1)
-var _framing: Dictionary
+var _rig: CameraRig
 var _portrait := false
 var _event_index := 0
-## Presentation time in ticks since the battle started, including ticks shown after it ended.
-var _clock := 0
-var _stop_tick := -1
+## Presentation position: the tick being shown and frames left before it advances.
+var _tick := 0
+var _hold_frames := 0
+var _hold_is_hitstop := false
+var _segment: Dictionary = {}
+var _segment_frames := 0
+var _clip_mode := false
 var _expected_checksum := ""
 var _accumulator := 0.0
 
@@ -48,12 +50,12 @@ func _ready() -> void:
 	if created.has("error"):
 		return _fail(created.error)
 	battle = created.battle
-	_stop_tick = options.until_tick
+	plan = _plan(spec, loaded.data)
+	_clip_mode = options.clip_seconds > 0.0
 	_expected_checksum = options.expect_checksum
 
 	var size := get_viewport().get_visible_rect().size
 	_portrait = VideoFormat.is_portrait(size)
-	_framing = PORTRAIT_CAMERA if _portrait else LANDSCAPE_CAMERA
 	_build_stage()
 	for side in 2:
 		var entry: Dictionary = spec.fighters[side]
@@ -63,36 +65,88 @@ func _ready() -> void:
 		add_child(view)
 		_views.append(view)
 	_build_hud(size)
+	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height])
 
-	while battle.tick < options.from_tick and not battle.is_over():
+	var start := _clip_start(options.clip_seconds) if _clip_mode else 0
+	while battle.tick < start and not battle.is_over():
 		battle.step()
-	_clock = battle.tick
+	_tick = battle.tick
 	_event_index = battle.events.size()
-	_sync_views(true)
+	_begin_tick()
+	_sync_views()
+
+
+## Runs a copy of the battle headless and plans its presentation.
+func _plan(spec: Dictionary, data: BattleData) -> Dictionary:
+	var preview: Battle = Battle.create(spec, data, SimpleAI.pair(int(spec.seed))).battle
+	preview.run()
+	var move_power := [{}, {}]
+	for side in 2:
+		for move in preview.fighters[side].moves:
+			move_power[side][move.id] = move.power
+	var max_hp := [preview.fighters[0].max_hp, preview.fighters[1].max_hp]
+	return Director.plan(preview.events, preview.tick, max_hp, move_power,
+		battle.random_stream(Battle.Stream.COSMETIC))
+
+
+## The latest tick from which the rest of the plan fills at least `seconds` of video.
+func _clip_start(seconds: float) -> int:
+	var wanted := roundi(seconds * Rules.TICK_RATE)
+	var total := 0
+	for t in range(plan.slow.size() - 1, -1, -1):
+		total += plan.slow[t] + plan.hitstop[t]
+		if total >= wanted:
+			return t
+	return 0
 
 
 func _process(delta: float) -> void:
 	if battle == null:
 		return
-	var ticks := 1
+	var frames := 1
 	if not _is_recording():
 		_accumulator += delta
-		ticks = int(_accumulator * Rules.TICK_RATE)
-		_accumulator -= ticks / float(Rules.TICK_RATE)
-	for i in ticks:
-		_advance()
+		frames = int(_accumulator * Rules.TICK_RATE)
+		_accumulator -= frames / float(Rules.TICK_RATE)
+	for i in frames:
+		_next_frame()
 
 
-## One tick of presentation time. After the battle ends, time keeps running (for the faint
-## and the tail of the clip) while the simulation stays still.
-func _advance() -> void:
-	_clock += 1
-	if not battle.is_over():
-		battle.step()
-		_play_events()
-	_sync_views(false)
-	if _stop_tick >= 0 and _clock >= _stop_tick:
-		_finish()
+## One video frame: hold the current tick, or advance to the next one.
+func _next_frame() -> void:
+	if _tick >= plan.slow.size():
+		if _clip_mode:
+			_finish()
+		return
+	_segment_frames += 1
+	if _hold_frames > 0:
+		_hold_frames -= 1
+	else:
+		if not battle.is_over():
+			battle.step()
+			_play_events()
+		_tick += 1
+		if _tick >= plan.slow.size():
+			return
+		_begin_tick()
+	_sync_views()
+
+
+## Sets how long the current tick is held and how fast animations play meanwhile:
+## frozen during hit-stop, slowed during slow motion.
+func _begin_tick() -> void:
+	if _tick >= plan.slow.size():
+		return
+	var hitstop: int = plan.hitstop[_tick]
+	var slow: int = plan.slow[_tick]
+	_hold_frames = hitstop + slow - 1
+	_hold_is_hitstop = hitstop > 0
+	for view in _views:
+		view.set_time_scale(0.0 if hitstop > 0 else 1.0 / slow)
+	var segment := Director.shot_for(plan.shots, _tick)
+	if segment != _segment:
+		_segment = segment
+		_segment_frames = 0
 
 
 func _finish() -> void:
@@ -129,7 +183,11 @@ func _move(side: int, move_id: String) -> BattleMove:
 	return battle.fighters[side].moves[0]
 
 
-func _sync_views(snap: bool) -> void:
+func _sync_views() -> void:
+	if _hold_is_hitstop and _hold_frames < plan.slow[mini(_tick, plan.slow.size() - 1)]:
+		_hold_is_hitstop = false
+		for view in _views:
+			view.set_time_scale(1.0 / plan.slow[mini(_tick, plan.slow.size() - 1)])
 	for side in 2:
 		var fighter := battle.fighters[side]
 		_views[side].place(fighter.position, fighter.facing)
@@ -153,27 +211,7 @@ func _sync_views(snap: bool) -> void:
 			material.emission_enabled = true
 			material.emission = material.albedo_color
 			mesh.material_override = material
-	_update_camera(snap)
-
-
-## Raised, at an angle across the line between the fighters with side A nearer the camera,
-## so A never hides B in close combat. The direction follows the fighters' line only slowly
-## so the shot doesn't swing around.
-func _update_camera(snap: bool) -> void:
-	var a := battle.fighters[0].position
-	var b := battle.fighters[1].position
-	var middle := (a + b) * 0.5
-	var axis := (b - a).normalized() if a.distance_to(b) > 0.01 else Vector2(0, 1)
-	_camera_axis = axis if snap else _camera_axis.slerp(axis, 0.02).normalized()
-	# This side keeps fighter A on screen-left, where its landscape HP bar is.
-	var across := Vector2(-_camera_axis.y, _camera_axis.x)
-	var angle := deg_to_rad(_framing.angle)
-	var direction := (-_camera_axis * cos(angle) + across * sin(angle)).normalized()
-	var distance: float = _framing.distance + a.distance_to(b) * 0.6
-	var eye := middle + direction * distance
-	var target := Vector3(eye.x, _framing.height, eye.y)
-	_camera.position = target if snap else _camera.position.lerp(target, 0.1)
-	_camera.look_at(Vector3(middle.x, 1.5, middle.y), Vector3.UP)
+	_rig.apply(_camera, _segment, battle, _segment_frames / float(Rules.TICK_RATE), _segment_frames == 0)
 
 
 func _build_stage() -> void:
@@ -200,7 +238,6 @@ func _build_stage() -> void:
 	environment.environment.ambient_light_color = Color(0.65, 0.65, 0.7)
 	add_child(environment)
 	_camera = Camera3D.new()
-	_camera.fov = _framing.fov
 	add_child(_camera)
 
 
@@ -252,12 +289,10 @@ func _is_recording() -> bool:
 
 
 func _parse_args(args: PackedStringArray) -> Dictionary:
-	var options := {"spec": DEFAULT_SPEC, "from_tick": 0, "until_tick": -1, "expect_checksum": ""}
+	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": ""}
 	for arg in args:
-		if arg.begins_with("--from-tick="):
-			options.from_tick = arg.get_slice("=", 1).to_int()
-		elif arg.begins_with("--until-tick="):
-			options.until_tick = arg.get_slice("=", 1).to_int()
+		if arg.begins_with("--clip-seconds="):
+			options.clip_seconds = arg.get_slice("=", 1).to_float()
 		elif arg.begins_with("--expect-checksum="):
 			options.expect_checksum = arg.get_slice("=", 1)
 		else:
