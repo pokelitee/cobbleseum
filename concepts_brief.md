@@ -1,6 +1,6 @@
 # Cobbleseum concept brief
 
-Status: draft for review. Date: 2026-11-08.
+Status: living document. First draft 2026-11-08; presentation section and milestones revised 2026-11-09.
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ Cobbleseum is a local-first 3D Pokémon battle game built with Godot 4.
 
 - **Battles:** two Pokémon fight in real time in a small arena. They are rendered with the models, textures and animations of the Cobblemon mod.
 - **Modes:** player-vs-AI and AI-vs-AI.
-- **Clips:** AI-vs-AI battles can be recorded as vertical 1080×1920 video clips for short-form posts.
+- **Clips:** AI-vs-AI battles can be recorded as video clips: vertical 1080×1920 for short-form posts, or landscape 1920×1080, from the same battle.
 - **Rankings:** later, many battles can be simulated to keep a local ranking of every Pokémon.
 
 Everything runs on the user's machine. The repository contains only original code and data. A pipeline then:
@@ -29,7 +29,8 @@ Everything runs on the user's machine. The repository contains only original cod
 | Missing models | Species without a Cobblemon model are left out of the roster, with no placeholders | §8 |
 | Determinism | Our own fixed-tick simulation with seeded random streams. A battle replays from its spec and is checked by checksum. | §10 |
 | AI | Utility AI that issues the same intents as a player | §11 |
-| Recording | Movie Maker at 1080×1920, 30 fps, encoded to MP4 with ffmpeg | §12 |
+| Presentation | A camera director, impact frames and slow motion driven by battle events, framed for landscape and vertical | §12 |
+| Recording | Movie Maker at 30 fps in either format, encoded to MP4 with ffmpeg | §12 |
 | Ranking | A Bradley–Terry fit over stored results, plus a matchup matrix | §13 |
 | Engine | Godot 4.7.2, GDScript | §4 |
 
@@ -39,7 +40,7 @@ Goals, in priority order:
 
 1. Watchable real-time 3D battles between two Pokémon, AI-vs-AI and player-vs-AI.
 2. An asset pipeline that fetches, verifies, extracts and converts assets on demand.
-3. Recording AI-vs-AI battles as vertical 1080×1920 clips with Godot's Movie Maker mode, so the output doesn't depend on rendering speed.
+3. Recording AI-vs-AI battles as clips with Godot's Movie Maker mode, so the output doesn't depend on rendering speed: vertical 1080×1920 for short-form posts, and landscape 1920×1080.
 4. Later: simulating many battles and keeping a local ranking per Pokémon.
 
 Non-goals:
@@ -200,7 +201,7 @@ The project won't support a Pokémon GO APK as a source:
 cache/
   downloads/<sha256>.<ext>                       verified archives
   sources/<source>/<version>/                    extracted subset
-  build/<source>/<version>/<tool-version>/       converted output, roster, credits
+  build/<source>/<version>/                       converted output, roster, credits
 ```
 
 **Running it.** One entry point runs in headless Godot:
@@ -269,7 +270,7 @@ Each cube has:
 
 The geometry header gives the texture size.
 
-**Conversion rules.** Golden tests in milestone 1 must confirm these:
+**Conversion rules.** Milestone 1 confirmed these with unit tests on hand-made geometry and with rendered previews of real models:
 
 - 16 model pixels = 1 metre.
 - **Axes:** Bedrock's X axis points the opposite way to Godot's.
@@ -572,43 +573,114 @@ The AI is a utility AI. At each decision step it scores every candidate action a
   - unit tests per consideration;
   - scenario tests, such as "dodges a telegraphed projectile" and "doesn't use a melee move out of range".
 
-## 12. Recording clips
+## 12. Presentation and recording
+
+The battle simulation is the source of truth, and presentation only reads it. Everything in this section can be as elaborate as we like without changing outcomes or determinism:
+
+- the presentation never feeds back into the simulation;
+- it draws its randomness from the battle's cosmetic stream.
+
+### 12.1 Formats
+
+- **Play is landscape** (1920×1080). Playing on a monitor wants 16:9, and one-on-one fights fill a wide frame naturally.
+- **Clips come in either format.** Battles are deterministic, so one battle renders identically in every format.
+  - Vertical 1080×1920, for Shorts, Reels and TikTok.
+  - Landscape 1920×1080, for longer videos.
+- **Everything visual is aspect-aware.**
+  - Each shot type defines its framing for both orientations.
+  - The HUD has a portrait layout, with HP bars at the top and bottom.
+  - It also has a landscape layout, with bars top-left and top-right and fighter A always on screen-left.
+- **How formats are rendered.** Milestone 1 confirmed two constraints:
+  - Movie Maker fixes its output size at startup, before any script runs.
+  - `--resolution` doesn't apply in `viewport` stretch mode.
+
+  So for each render, the recorder writes a temporary `override.cfg` with the format's viewport size, then deletes it afterwards.
+
+### 12.2 Presentation time
+
+Presentation time is counted separately from simulation ticks. That makes timing effects possible without touching the battle:
+
+| Mode | How the simulation advances |
+|---|---|
+| Normal play | One tick per frame, at 30 fps. |
+| Hit-stop | On heavy hits, frames keep rendering for a few frames while the simulation holds still. |
+| Slow motion | Fewer ticks per rendered frame, for knockouts and near-misses. |
+| Skip ahead | Many ticks in one frame without drawing, to start a clip mid-battle. |
+
+Recording runs the battle headless first, which produces the full event log. So the presentation knows in advance where every big moment is, including the knockout, and can build up to it.
+
+### 12.3 Camera director
+
+The camera director picks from a set of shot types based on battle events:
+
+| Shot | When |
+|---|---|
+| Wide establishing | At the opening, and as the default between moments |
+| Over-the-shoulder | When one fighter is closing in on the other |
+| Attacker close-up | During the wind-up of a strong move |
+| Projectile tracking | While a projectile is in flight |
+| Impact punch-in | On a heavy hit, critical hit or super-effective hit |
+| Low angle | On big hits from large fighters |
+| Knockout orbit | Around the faint, in slow motion |
+
+- **Cuts:** timed to events, with a minimum shot length so the edit never jitters.
+- **Repeatability:** shot choices draw from the cosmetic random stream, so re-rendering a battle produces the same edit.
+- **Readability:** every shot keeps both fighters readable, and no shot lets one fighter hide the other.
+
+### 12.4 Impact frames and hit feedback
+
+- **Hit-stop:** a few frames long, scaled with damage.
+- **Impact frames:** on critical and super-effective hits, one or two full-screen high-contrast frames (a flash or silhouette) at the moment of contact.
+- **Screen shake:** scaled with damage, and capped so it never obscures the action.
+- **Speed lines:** on dashes and big wind-ups.
+- **Hit flash:** on the defender's model, with a short knockback.
+- **Callouts:** "Critical hit!", "It's super effective!", and damage numbers.
+
+### 12.5 Move visuals, sound and HUD
+
+- **Move visuals:** type-themed effects for each move kind. Particles use fixed seeds. Converting Cobblemon's own move particle effects comes later.
+  - Trails for melee.
+  - Orbs and beams for projectiles.
+  - Rings and waves for area moves.
+  - Glows for buffs.
+- **Sound:**
+  - Cobblemon cries, impact sounds and whooshes, synced to events.
+  - No music unless it is original or properly licensed.
+- **HUD:**
+  - Animated HP bars that drain with a lagging "damage taken" segment and shake on big hits.
+  - Names and move-name callouts.
+  - Intro and outro cards. Every clip ends with the credits card (§14).
+
+### 12.6 Recording flow
 
 **Movie Maker facts** (Godot 4.7 documentation):
 
-- **Resolution:** in the `viewport` stretch mode, the output video size is the viewport size. Set the viewport to 1080×1920 and the window to a smaller override, applied only under the `movie` feature tag.
 - **Formats:**
-  - OGV: Theora video with Vorbis audio. Available only in editor builds, so recordings run the Godot editor binary.
-  - MJPEG AVI: capped at 4 GB.
+  - OGV (Theora video, Vorbis audio). Available only in editor builds, so recordings run the Godot editor binary. The recorder renders OGV, then encodes it to MP4.
+  - MJPEG AVI, capped at 4 GB.
   - PNG sequence plus WAV.
-- **Command line:** `--write-movie <file>` with `--fixed-fps 30` gives exact frame pacing whatever the hardware speed.
-- **Audio:** the mix rate must be divisible by the frame rate. 48 kHz works at 30 fps.
+- **Command line:** `--write-movie <file>` with `--fixed-fps 30` gives exact frame pacing, whatever the hardware speed.
+- **Audio:** the mix rate must be divisible by the frame rate. The project uses 48 kHz, which works at 30 fps.
 - **Finishing:** quit through `get_tree().quit()` so the file is finalised; don't kill the process.
 - **No headless rendering:** recording opens a window.
 
-**Flow:**
+**Flow** (implemented in `tools/record.gd`):
 
-1. Choose a matchup and seed, giving a battle spec.
-2. Run it headless to get the battle record. Choose the clip window from the event log, at most 60 seconds, usually ending shortly after the knockout.
-3. Record the same spec under Movie Maker. Skip ahead to the window's start without drawing, render the window, and compare the final checksum.
-4. Encode with ffmpeg to H.264 MP4 (yuv420p) with AAC audio.
-5. Write the output to `recordings/<date>_<a>-vs-<b>_<seed>/`: `clip.mp4`, `battle.json` and `credits.txt`. This folder is git-ignored.
+1. Choose a matchup and seed, which gives a battle spec.
+2. Run it headless to get the battle record.
+3. Choose the clip window from the event log: at most 60 seconds, usually ending shortly after the knockout.
+4. For each requested format, start a second Godot process under Movie Maker with that format's `override.cfg`. The process:
+   - skips ahead to the window's start without drawing;
+   - renders the window;
+   - prints the final checksum.
 
-**Presentation:**
-
-- **Camera director:** keeps both fighters framed in portrait. Shot choices are drawn from the cosmetic random stream: wide, attacker close-up during a wind-up, a punch-in on impact, slow motion for the knockout. A minimum time between cuts stops rapid cutting.
-- **HUD:**
-  - names and HP bars at the top and bottom of the frame;
-  - move-name callouts;
-  - a credits end card.
-- **Move visuals** in the first version are generic effects coloured by move type:
-  - a trail for melee;
-  - an orb for projectiles;
-  - a ring for area moves;
-  - a glow for buffs.
-
-  Particles use fixed seeds. Converting Cobblemon's own move effects comes later.
-- **Audio:** Cobblemon cries plus generic hit sounds. There's no music unless it is original.
+   A frame limit makes sure it always exits.
+5. Accept the movie only if its checksum matches the headless run.
+6. Encode with ffmpeg to H.264 MP4 (yuv420p) with AAC audio.
+7. Write the output to `recordings/<date>_<a>-vs-<b>_<seed>/`, which is git-ignored:
+   - a `clip_<format>.mp4` for each format;
+   - `battle.json`;
+   - `credits.txt`.
 
 ## 13. Ranking (later)
 
@@ -684,50 +756,54 @@ results/                git-ignored
 
 ## 17. Milestones
 
-**M1: vertical slice.**
+**M1: vertical slice. Done (2026-11-09).**
 
-1. **Pipeline:**
-   - Fetch, verify and extract Cobblemon 1.8.4 and Showdown 0.11.11.
-   - Export Showdown's data to JSON.
-   - Check both layouts.
-2. **Converter:**
-   - Convert two species from the 58 fully animated ones (for example Blastoise and Cinderace).
-   - Dry-run the geometry and animations of every roster species and report failures.
-3. **Simulation core:**
-   - Fixed tick, the melee and projectile move kinds, the damage formula, cooldowns and knockouts.
-   - A simple AI that closes to range and uses moves when they're ready.
-4. **Headless mode:**
-   - A spec in, a winner and checksum out.
-   - Determinism tests pass.
-   - Time per battle is recorded.
-5. **Recording:**
-   - The same spec rendered under Movie Maker at 1080×1920, 30 fps, with a basic portrait camera and HP bars.
-   - The checksum matches.
-   - A clip of about 10 seconds around the knockout, encoded to MP4.
+- **Pipeline:** fetches, verifies and extracts Cobblemon 1.8.4 and Showdown 0.11.11, exports Showdown's data to JSON, and checks both layouts.
+- **Converter:** Blastoise and Cinderace convert with working clips, and all 905 species pass a dry run.
+- **Simulation core:**
+  - Fixed tick, melee and projectile moves, the damage formula, cooldowns and knockouts, with a placeholder AI.
+  - About 37 ms per battle headless, with identical checksums across processes.
+- **Recording:** checksum-verified 10-second clips in vertical and landscape, encoded to MP4.
 
-Exit criteria: all five work on Windows. macOS and Linux are checked before M2 ends.
+So far M1 has been tested on Windows only. macOS and Linux get checked before M2 ends.
 
 **M2: rules and roster.**
 
 - All supported move kinds, stat changes, status conditions and dodging.
 - The moveset generator.
-- Full roster conversion with a QA report and the roster file.
+- Full roster conversion with per-species caching, a QA report and the roster file.
 - The procedural animation layer.
 - Batch simulation with a balance report, and a first tuning pass.
 
-**M3: AI and play.**
+**M3: presentation** (everything in §12.2–§12.5):
+
+- Presentation time: hit-stop and slow motion.
+- The camera director and its shot list, framed for both formats.
+- Impact frames, screen shake, speed lines, hit flashes and callouts.
+- Type-themed move effects and sound.
+- The animated HUD, with intro, outro and credits cards.
+- Highlight selection for clip windows.
+
+M2 and M3 don't depend on each other, so their order can swap if watchable clips matter sooner.
+
+**M4: AI and play.**
 
 - The utility AI, with profiles and a debug overlay.
 - Player-vs-AI controls (keyboard and gamepad) and a player camera.
-- The camera director, the HUD, highlight selection and credits.
 
-**M4: rankings.**
+**M5: rankings.**
 
 - The results store.
 - The Bradley–Terry fit, matchup matrix and ranking report.
 - The AI-sensitivity check.
 
-**Later:** Cobblemon's move effects, guarding, field moves, abilities and items, and shiny or form variants in clips.
+**Later:**
+
+- Cobblemon's move effects.
+- Guarding.
+- Field moves.
+- Abilities and items.
+- Shiny and form variants in clips.
 
 ## 18. Risks
 
@@ -736,18 +812,18 @@ Exit criteria: all five work on Windows. macOS and Linux are checked before M2 e
 | Licence and IP: Cobblemon assets are non-commercial, and Pokémon designs belong to their owners | No assets in git; attribution on every clip; monetisation decided explicitly |
 | Conversion rules (axes, rotation order, UVs) are wrong in some cases | Golden tests on original fixtures; `.glb` debug export; QA pass over the whole roster |
 | Most species lack attack, hit or faint clips | Procedural animation layer from M2 |
-| Per-aspect bone visibility (hats, form-specific parts) handled wrong | Investigate in M1 (§19) |
-| GDScript simulation too slow for full round-robins | Measure in M1; lower tick cost; sample pairings; consider other options only if those fail |
+| Per-aspect bone visibility (hats, form-specific parts) handled wrong | Investigate with full roster conversion in M2 (§19) |
+| GDScript simulation too slow for full round-robins | M1 measured about 37 ms per battle (roughly 1 hour for a full round robin on 8 processes); re-measure as rules grow; sample pairings before considering other options |
 | Replays differ across platforms | Guarantee replays per platform only; checksums fail loudly |
 | Real-time balance is our own design | Rankings are framed as "under Cobbleseum's rules"; batch-simulation tuning; AI-sensitivity check |
 | A new Cobblemon release changes the layout | The pinned version never changes silently; layout checks give clear errors |
-| Recording needs a window and is slow at 1080×1920 | Clip windows of at most 60 s; skip ahead before the window |
+| Recording needs a window, and each format is a separate render | Clip windows of at most 60 s; skip ahead before the window; render only the formats needed |
 
 ## 19. Open questions
 
 1. Will clips be monetised? Cobblemon's assets are non-commercial (§14).
-2. Which test framework: an existing Godot add-on or a small in-house runner? It must run headless on 4.7.2.
-3. How does Cobblemon hide bones per aspect (hats, form-specific parts)? The converter must reproduce it, or the wrong parts will show.
-4. Starting values for the tuning constants: HP multiplier, cooldown formula, speed band, dodge charges and status durations.
-5. Should stat stages wear off after a set time?
-6. For recording, OGV (smaller, editor binary only) or PNG plus WAV (lossless, large)?
+2. How does Cobblemon hide bones per aspect (hats, form-specific parts)? The converter must reproduce it, or the wrong parts will show.
+3. Starting values for the tuning constants: HP multiplier, cooldown formula, speed band, dodge charges and status durations.
+4. Should stat stages wear off after a set time?
+
+Resolved in milestone 1: tests use a small in-house runner (`tests/run_tests.gd`) instead of an add-on; recordings use OGV from Movie Maker, encoded to MP4.
