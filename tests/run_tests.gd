@@ -21,6 +21,12 @@ class ErrorCounter extends Logger:
 
 
 func _initialize() -> void:
+	_run.call_deferred()
+
+
+## Runs after the first frame starts, so tests can add nodes to a live scene tree.
+func _run() -> void:
+	await process_frame
 	var counter := ErrorCounter.new()
 	OS.add_logger(counter)
 	var total := 0

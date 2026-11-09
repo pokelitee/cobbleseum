@@ -6,10 +6,23 @@ extends Node3D
 const MIN_HEIGHT := 0.5
 const MAX_HEIGHT := 3.0
 const CROSSFADE := 0.15
+## Hit flash: frames it lasts and its peak strength.
+const FLASH_FRAMES := 6
+const FLASH_STRENGTH := 0.6
+## Visual knockback: peak distance in metres per HP share dealt, and frames to recover.
+const KNOCKBACK_PER_SHARE := 3.0
+const KNOCKBACK_MAX := 0.6
+const KNOCKBACK_FRAMES := 10
 
 ## Rendered height in metres after scaling into the height band.
 var height := 1.0
 var _player: AnimationPlayer
+var _mesh: MeshInstance3D
+var _flash_material: StandardMaterial3D
+var _flash_frames := 0
+var _flash_delay := 0
+var _knockback := Vector3.ZERO
+var _knockback_frames := 0
 var _clips: Dictionary = {}
 var _fainted := false
 
@@ -25,6 +38,11 @@ static func from_model(path: String) -> FighterView:
 	view._player = model.get_node("AnimationPlayer")
 	view._clips = model.get_meta("clips", {})
 	var mesh: MeshInstance3D = model.get_node("Skeleton/Mesh")
+	view._mesh = mesh
+	view._flash_material = StandardMaterial3D.new()
+	view._flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	view._flash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	view._flash_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var model_height := mesh.get_aabb().size.y if mesh.mesh != null else 1.0
 	view.height = clampf(model_height, MIN_HEIGHT, MAX_HEIGHT)
 	model.scale = Vector3.ONE * (view.height / model_height)
@@ -33,11 +51,38 @@ static func from_model(path: String) -> FighterView:
 	return view
 
 
-## Moves the view to a simulation position (x, z on the floor) facing a direction.
+## Moves the view to a simulation position (x, z on the floor) facing a direction, plus any
+## visual knockback (presentation only; the simulation has no knockback yet).
 func place(position_2d: Vector2, facing: Vector2) -> void:
-	position = Vector3(position_2d.x, 0, position_2d.y)
+	var recovery := float(_knockback_frames) / KNOCKBACK_FRAMES
+	position = Vector3(position_2d.x, 0, position_2d.y) + _knockback * recovery * recovery
 	if facing.length_squared() > 0.0:
 		look_at(position + Vector3(facing.x, 0, facing.y), Vector3.UP)
+
+
+## Flashes white and recoils away from `from` (a world position), scaled by HP share lost.
+## `delay_frames` holds the flash back, e.g. until full-screen impact frames have passed,
+## since a white model would vanish in the two-tone impact frame.
+func take_hit(from: Vector3, damage_share: float, delay_frames := 0) -> void:
+	_flash_frames = FLASH_FRAMES
+	_flash_delay = delay_frames
+	var away := (global_position - from) * Vector3(1, 0, 1)
+	var distance := minf(KNOCKBACK_MAX, damage_share * KNOCKBACK_PER_SHARE)
+	_knockback = away.normalized() * distance if away.length() > 0.01 else Vector3.ZERO
+	_knockback_frames = KNOCKBACK_FRAMES
+
+
+## Advances the hit flash and knockback by one video frame.
+func next_frame() -> void:
+	if _flash_delay > 0:
+		_flash_delay -= 1
+	elif _flash_frames > 0:
+		_flash_frames -= 1
+		var fade := float(_flash_frames) / FLASH_FRAMES
+		_flash_material.albedo_color = Color(1, 1, 1, FLASH_STRENGTH * fade * fade)
+		_mesh.material_overlay = _flash_material if _flash_frames > 0 else null
+	if _knockback_frames > 0:
+		_knockback_frames -= 1
 
 
 ## Animation speed relative to normal: 0 freezes (hit-stop), below 1 is slow motion.
