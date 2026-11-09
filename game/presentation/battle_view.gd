@@ -13,6 +13,8 @@ extends Node3D
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
 const CHECKSUM_OK := "CHECKSUM_OK"
 const MODELS_DIR := "res://cache/build/cobblemon/1.8.4/models"
+## Random stream id for the handheld wobble, after the simulation's own streams.
+const CAMERA_WOBBLE_STREAM := 100
 const PROJECTILE_COLORS := {
 	"Water": Color(0.25, 0.55, 1.0), "Fire": Color(1.0, 0.45, 0.1), "Grass": Color(0.3, 0.85, 0.3),
 	"Electric": Color(1.0, 0.9, 0.2), "Ice": Color(0.6, 0.95, 1.0), "Psychic": Color(1.0, 0.4, 0.7),
@@ -33,6 +35,7 @@ var _hold_frames := 0
 var _hold_is_hitstop := false
 var _segment: Dictionary = {}
 var _segment_frames := 0
+var _frames_shown := 0
 var _clip_mode := false
 var _expected_checksum := ""
 var _accumulator := 0.0
@@ -65,7 +68,9 @@ func _ready() -> void:
 		add_child(view)
 		_views.append(view)
 	_build_hud(size)
-	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height])
+	# The wobble gets its own stream so it can't change the director's choices.
+	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height],
+		SimRandom.stream(int(spec.seed), CAMERA_WOBBLE_STREAM))
 
 	var start := _clip_start(options.clip_seconds) if _clip_mode else 0
 	while battle.tick < start and not battle.is_over():
@@ -119,6 +124,7 @@ func _next_frame() -> void:
 			_finish()
 		return
 	_segment_frames += 1
+	_frames_shown += 1
 	if _hold_frames > 0:
 		_hold_frames -= 1
 	else:
@@ -211,7 +217,10 @@ func _sync_views() -> void:
 			material.emission_enabled = true
 			material.emission = material.albedo_color
 			mesh.material_override = material
-	_rig.apply(_camera, _segment, battle, _segment_frames / float(Rules.TICK_RATE), _segment_frames == 0)
+	var span := maxi(1, int(_segment.end) - int(_segment.start))
+	var progress := float(_tick - int(_segment.start)) / span
+	_rig.apply(_camera, _segment, battle, _segment_frames / float(Rules.TICK_RATE), progress,
+		_frames_shown / float(Rules.TICK_RATE), _segment_frames == 0)
 
 
 func _build_stage() -> void:
