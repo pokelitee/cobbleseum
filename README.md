@@ -11,8 +11,16 @@ Status: early development. See the [concept brief](concepts_brief.md).
 Prerequisites:
 
 - [Godot 4.7.2](https://godotengine.org/download/archive/4.7.2-stable/) (standard build, not .NET). Put it on your `PATH` as `godot`, or substitute its full path below.
-- Node.js 20 or later, for the asset pipeline's Showdown data export (coming in milestone 1).
+- Node.js 20 or later, for the asset pipeline's Showdown data export.
 - ffmpeg, for encoding recorded clips to MP4 (coming in milestone 1).
+
+Fetch and prepare the assets (about 157 MB to download the first time):
+
+```bash
+godot --headless --path . --script res://tools/assets.gd
+```
+
+This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout and exports Showdown's data to JSON. Extracting Cobblemon's roughly 12,000 files can take a few minutes. Re-running skips finished steps. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
 
 Run the tests:
 
@@ -31,7 +39,7 @@ tools/check_no_assets.sh
 
 The design is described in the [concept brief](concepts_brief.md). In short:
 
-- An asset pipeline fetches pinned releases of Showdown's data and Cobblemon's jar, verifies them by SHA-256, and converts Cobblemon's Bedrock models into Godot scenes in `cache/`.
+- An asset pipeline (`tools/assets.gd`, `tools/pipeline/`, one build script per source in `tools/sources/`) fetches pinned releases of Showdown's data and Cobblemon's jar, verifies them by SHA-256, extracts and checks them, and builds what the game needs in `cache/`. Converting Cobblemon's Bedrock models into Godot scenes is next.
 - A deterministic, fixed-tick battle simulation written in plain GDScript runs headless for batch simulation and drives the 3D presentation.
 - A utility AI controls fighters through the same intents a player uses.
 - Godot's Movie Maker mode records clips; ffmpeg encodes them.
