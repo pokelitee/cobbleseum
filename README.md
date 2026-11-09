@@ -22,6 +22,12 @@ godot --headless --path . --script res://tools/assets.gd
 
 This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout, exports Showdown's data to JSON, converts the showcase Pokémon to Godot scenes and writes a conversion report for every Cobblemon species (`cache/build/cobblemon/<version>/report.json`). Extracting Cobblemon's roughly 12,000 files can take a few minutes. Re-running skips finished steps. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
 
+Run a battle headless (prints the result, length and a checksum per seed):
+
+```bash
+godot --headless --path . --script res://tools/battle.gd -- game/data/battles/showcase.json --seeds=10
+```
+
 Run the tests:
 
 ```bash
@@ -46,7 +52,7 @@ tools/check_no_assets.sh
 The design is described in the [concept brief](concepts_brief.md). In short:
 
 - An asset pipeline (`tools/assets.gd`, `tools/pipeline/`, one build script per source in `tools/sources/`) fetches pinned releases of Showdown's data and Cobblemon's jar, verifies them by SHA-256, extracts and checks them, and builds what the game needs in `cache/`. Cobblemon's Bedrock models and animations become Godot scenes (`tools/convert/`): a skeleton with one rigidly skinned mesh and clips baked at 60 Hz.
-- A deterministic, fixed-tick battle simulation written in plain GDScript runs headless for batch simulation and drives the 3D presentation.
+- A deterministic, fixed-tick battle simulation written in plain GDScript (`game/sim/`) runs headless for batch simulation and drives the 3D presentation. Rules constants live in `game/sim/rules.gd`; randomness comes from seeded mulberry32 streams, so a battle replays exactly from its spec.
 - A utility AI controls fighters through the same intents a player uses.
 - Godot's Movie Maker mode records clips; ffmpeg encodes them.
 
