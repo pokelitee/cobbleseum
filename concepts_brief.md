@@ -126,6 +126,7 @@ Modrinth publishes only SHA-1 and SHA-512 hashes, so the manifest records a SHA-
 | Resolvers | `assets/cobblemon/bedrock/pokemon/resolvers/NNNN_name/N_*.json` | 1,091 files for 905 species |
 | Textures | `assets/cobblemon/textures/pokemon/NNNN_name/*.png` | 4,089 |
 | Cries and sounds | `assets/cobblemon/sounds/pokemon/<name>/*.ogg` | 2,116 |
+| Move sounds | `assets/cobblemon/sounds/move/<move>/<move>_{actor,target}*.ogg`, plus `impact_generic/impact_generic_<type>_N.ogg` | 302 (136 generic impacts) |
 | Species data | `data/cobblemon/species/generationN/<name>.json` | 1,025 |
 | Model licences | `assets/cobblemon/bedrock/pokemon/models/NNNN_name/license` | one per model folder |
 
@@ -134,7 +135,7 @@ Modrinth publishes only SHA-1 and SHA-512 hashes, so the manifest records a SHA-
 - A **poser** says which clips a species plays in each pose, such as standing or flying in battle. It also lists one-off clips (physical attack, special attack, cry), head-tracking bones and idle quirks like blinking.
 - A **resolver** lists a species' visual **variations**. Each variation is selected by **aspects** (shiny, female, Alolan, …) and names a model, a texture, a poser and optional extra texture layers.
 
-**What we use:** geometry, animations, textures, posers, resolvers and cries. From the species data we use only the `implemented` flag and `baseScale`. All battle data comes from Showdown, so stats and moves have a single source of truth.
+**What we use:** geometry, animations, textures, posers, resolvers, cries and move sounds. From the species data we use only the `implemented` flag and `baseScale`. All battle data comes from Showdown, so stats and moves have a single source of truth.
 
 **Facts that shape the design:**
 
@@ -825,5 +826,6 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 2. How does Cobblemon hide bones per aspect (hats, form-specific parts)? The converter must reproduce it, or the wrong parts will show.
 3. Starting values for the tuning constants: HP multiplier, cooldown formula, speed band, dodge charges and status durations.
 4. Should stat stages wear off after a set time?
+5. Cobblemon's per-model licence files cover models, animations and textures. The jar states no separate licence for its sounds, so the credits assume the same CC BY-NC 3.0 terms. Confirm with the Cobblemon team before any wider release.
 
 Resolved in milestone 1: tests use a small in-house runner (`tests/run_tests.gd`) instead of an add-on; recordings use OGV from Movie Maker, encoded to MP4.

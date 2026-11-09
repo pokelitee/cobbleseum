@@ -18,7 +18,7 @@ const HEALTHY := Color(0.3, 0.9, 0.4)
 const WARNING := Color(1.0, 0.8, 0.2)
 const DANGER := Color(1.0, 0.3, 0.25)
 ## Uses a non-breaking hyphen so the licence name never wraps mid-word.
-const CREDITS_TEXT := "Models and animations: Cobblemon (CC BY‑NC 3.0)\nBattle data: Pokémon Showdown\nAn unaffiliated, non-commercial fan project"
+const CREDITS_TEXT := "Models, animations and sounds: Cobblemon (CC BY‑NC 3.0)\nBattle data: Pokémon Showdown\nAn unaffiliated, non-commercial fan project"
 
 var _size := Vector2.ZERO
 var _scale := 1.0
@@ -70,7 +70,7 @@ func setup(names: Array, viewport_size: Vector2) -> void:
 		_panel_homes.append(home)
 		_bars.append(bar)
 		_lags.append(lag)
-	var credit := _label("Models and animations: Cobblemon (CC BY-NC 3.0)", 28, Color.WHITE)
+	var credit := _label("Models, animations and sounds: Cobblemon (CC BY-NC 3.0)", 28, Color.WHITE)
 	credit.position = Vector2(margin, viewport_size.y - 60 * _scale)
 	add_child(credit)
 	var matchup := ("%s
