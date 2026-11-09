@@ -10,6 +10,14 @@ func _init(stream: SimRandom) -> void:
 	random = stream
 
 
+## One controller per side, each on its own random stream from the battle seed.
+static func pair(seed: int) -> Array:
+	return [
+		SimpleAI.new(SimRandom.stream(seed, Battle.Stream.SIDE_A)),
+		SimpleAI.new(SimRandom.stream(seed, Battle.Stream.SIDE_B)),
+	]
+
+
 func decide(battle: Battle, side: int) -> Dictionary:
 	var me := battle.fighters[side]
 	var foe := battle.fighters[1 - side]

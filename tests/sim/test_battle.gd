@@ -27,11 +27,7 @@ func _spec(seed: int, a := "squirt", b := "blaze", moves_a := ["jet", "kick"], m
 
 
 func _run(spec: Dictionary) -> Battle:
-	var controllers := [
-		SimpleAI.new(SimRandom.stream(spec.seed, Battle.Stream.SIDE_A)),
-		SimpleAI.new(SimRandom.stream(spec.seed, Battle.Stream.SIDE_B)),
-	]
-	var created := Battle.create(spec, _data(), controllers)
+	var created := Battle.create(spec, _data(), SimpleAI.pair(spec.seed))
 	assert_false(created.has("error"), str(created.get("error", "")))
 	var battle: Battle = created.battle
 	battle.run()

@@ -36,11 +36,7 @@ func _initialize() -> void:
 
 
 static func run(spec: Dictionary, data: BattleData) -> Dictionary:
-	var controllers := [
-		SimpleAI.new(SimRandom.stream(int(spec.seed), Battle.Stream.SIDE_A)),
-		SimpleAI.new(SimRandom.stream(int(spec.seed), Battle.Stream.SIDE_B)),
-	]
-	var created := Battle.create(spec, data, controllers)
+	var created := Battle.create(spec, data, SimpleAI.pair(int(spec.seed)))
 	if created.has("error"):
 		return created
 	var battle: Battle = created.battle
