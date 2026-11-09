@@ -1,0 +1,52 @@
+{
+  "sources": {
+    "showdown": {
+      "version": "0.11.11",
+      "url": "https://registry.npmjs.org/pokemon-showdown/-/pokemon-showdown-0.11.11.tgz",
+      "size": 16897160,
+      "sha256": "49af14aaed1084887f756372c7386c9987905930cc848ed31e9202c10c592d66",
+      "archive": "tgz",
+      "license": "MIT",
+      "extract": [
+        "package/package.json",
+        "package/dist/data/pokedex.js",
+        "package/dist/data/moves.js",
+        "package/dist/data/learnsets.js",
+        "package/dist/data/typechart.js",
+        "package/dist/data/random-battles/gen9/sets.json"
+      ],
+      "layout": [
+        {"pattern": "package/dist/data/pokedex.js", "min_count": 1},
+        {"pattern": "package/dist/data/moves.js", "min_count": 1},
+        {"pattern": "package/dist/data/learnsets.js", "min_count": 1},
+        {"pattern": "package/dist/data/typechart.js", "min_count": 1},
+        {"pattern": "package/dist/data/random-battles/gen9/sets.json", "min_count": 1}
+      ],
+      "build": "res://tools/sources/showdown.gd"
+    },
+    "cobblemon": {
+      "version": "1.8.4",
+      "url": "https://cdn.modrinth.com/data/MdwFAVRL/versions/PdOzYHKU/Cobblemon-fabric-1.8.4%2B1.21.1.jar",
+      "size": 139966403,
+      "sha256": "77c4866b2e4c38afb488ed09b62ffd2729ce291dc793fca9c055c087f0b03978",
+      "archive": "zip",
+      "license": "Models, animations and textures: CC BY-NC 3.0 (per-model license files). Code: MPL-2.0 (not used).",
+      "extract": [
+        "assets/cobblemon/bedrock/pokemon/",
+        "assets/cobblemon/textures/pokemon/",
+        "assets/cobblemon/sounds/pokemon/",
+        "data/cobblemon/species/"
+      ],
+      "layout": [
+        {"pattern": "assets/cobblemon/bedrock/pokemon/models/*.geo.json", "min_count": 1000, "format_key": "format_version", "format_value": "1.12.0"},
+        {"pattern": "assets/cobblemon/bedrock/pokemon/animations/*.animation.json", "min_count": 900, "format_key": "format_version", "format_value": "1.8.0"},
+        {"pattern": "assets/cobblemon/bedrock/pokemon/posers/*.json", "min_count": 600},
+        {"pattern": "assets/cobblemon/bedrock/pokemon/resolvers/*.json", "min_count": 900},
+        {"pattern": "assets/cobblemon/bedrock/pokemon/models/*/license", "min_count": 500},
+        {"pattern": "assets/cobblemon/textures/pokemon/*.png", "min_count": 3000},
+        {"pattern": "assets/cobblemon/sounds/pokemon/*.ogg", "min_count": 1500},
+        {"pattern": "data/cobblemon/species/*.json", "min_count": 1000}
+      ]
+    }
+  }
+}
