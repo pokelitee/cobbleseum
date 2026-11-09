@@ -27,6 +27,7 @@ var _projectile_meshes: Array[MeshInstance3D] = []
 var _bars: Array[ColorRect] = []
 var _camera: Camera3D
 var _rig: CameraRig
+var _fx: ImpactFX
 var _portrait := false
 var _event_index := 0
 ## Presentation position: the tick being shown and frames left before it advances.
@@ -68,6 +69,10 @@ func _ready() -> void:
 		add_child(view)
 		_views.append(view)
 	_build_hud(size)
+	_fx = ImpactFX.new()
+	_fx.layer = 2  # callouts and impact frames draw over the HUD
+	add_child(_fx)
+	_fx.setup(_camera, size, _hud_bands(size))
 	# The wobble gets its own stream so it can't change the director's choices.
 	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height],
 		SimRandom.stream(int(spec.seed), CAMERA_WOBBLE_STREAM))
@@ -135,24 +140,34 @@ func _next_frame() -> void:
 		if _tick >= plan.slow.size():
 			return
 		_begin_tick()
+	for view in _views:
+		view.next_frame()
+	_fx.next_frame()
+	_fx.set_speed_lines(_segment.get("shot", -1) == Director.Shot.CLOSE_UP)
 	_sync_views()
 
 
-## Sets how long the current tick is held and how fast animations play meanwhile:
-## frozen during hit-stop, slowed during slow motion.
+## Sets how long the tick just shown is held and how fast animations play meanwhile:
+## frozen during hit-stop, slowed during slow motion. `_tick` has already moved past the
+## tick that was simulated, so its plan entry is at _tick - 1.
 func _begin_tick() -> void:
 	if _tick >= plan.slow.size():
 		return
-	var hitstop: int = plan.hitstop[_tick]
-	var slow: int = plan.slow[_tick]
+	var shown := _shown_tick()
+	var hitstop: int = plan.hitstop[shown]
+	var slow: int = plan.slow[shown]
 	_hold_frames = hitstop + slow - 1
 	_hold_is_hitstop = hitstop > 0
 	for view in _views:
 		view.set_time_scale(0.0 if hitstop > 0 else 1.0 / slow)
-	var segment := Director.shot_for(plan.shots, _tick)
+	var segment := Director.shot_for(plan.shots, shown)
 	if segment != _segment:
 		_segment = segment
 		_segment_frames = 0
+
+
+func _shown_tick() -> int:
+	return clampi(_tick - 1, 0, plan.slow.size() - 1)
 
 
 func _finish() -> void:
@@ -177,7 +192,13 @@ func _play_events() -> void:
 				var move := _move(event.side, event.move)
 				_views[event.side].play_role("physical" if move.kind == BattleMove.Kind.MELEE else "special")
 			"hit":
-				_views[1 - event.side].play_role("recoil")
+				var defender := 1 - int(event.side)
+				var share := float(event.damage) / battle.fighters[defender].max_hp
+				_views[defender].play_role("recoil")
+				var big: bool = event.crit or event.effectiveness > 1.0
+				_views[defender].take_hit(_views[event.side].global_position, share,
+					ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
+				_fx.on_hit(event, _views[defender], share, big)
 			"faint":
 				_views[event.side].play_role("faint")
 
@@ -190,10 +211,10 @@ func _move(side: int, move_id: String) -> BattleMove:
 
 
 func _sync_views() -> void:
-	if _hold_is_hitstop and _hold_frames < plan.slow[mini(_tick, plan.slow.size() - 1)]:
+	if _hold_is_hitstop and _hold_frames < plan.slow[_shown_tick()]:
 		_hold_is_hitstop = false
 		for view in _views:
-			view.set_time_scale(1.0 / plan.slow[mini(_tick, plan.slow.size() - 1)])
+			view.set_time_scale(1.0 / plan.slow[_shown_tick()])
 	for side in 2:
 		var fighter := battle.fighters[side]
 		_views[side].place(fighter.position, fighter.facing)
@@ -218,7 +239,7 @@ func _sync_views() -> void:
 			material.emission = material.albedo_color
 			mesh.material_override = material
 	var span := maxi(1, int(_segment.end) - int(_segment.start))
-	var progress := float(_tick - int(_segment.start)) / span
+	var progress := float(_shown_tick() - int(_segment.start)) / span
 	_rig.apply(_camera, _segment, battle, _segment_frames / float(Rules.TICK_RATE), progress,
 		_frames_shown / float(Rules.TICK_RATE), _segment_frames == 0)
 
@@ -291,6 +312,11 @@ func _build_hud(size: Vector2) -> void:
 	credit.add_theme_constant_override("outline_size", 8)
 	credit.position = Vector2(margin, size.y - 60)
 	hud.add_child(credit)
+
+
+## Heights of the HUD's top and bottom bands, matching the layout in _build_hud.
+func _hud_bands(size: Vector2) -> Vector2:
+	return Vector2(250, 240) if _portrait else Vector2(170, 80)
 
 
 func _is_recording() -> bool:
