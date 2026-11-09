@@ -30,9 +30,15 @@ static func base_files(root: String, folder: String) -> Dictionary:
 	return {"error": "%s: no base variation with a model" % folder}
 
 
-## "cobblemon:textures/x.png" -> <root>/assets/cobblemon/textures/x.png
-static func resource_path(root: String, id: String) -> String:
-	if not id.contains(":"):
+## "cobblemon:textures/x.png" -> <root>/assets/cobblemon/textures/x.png.
+## Animated textures are {"frames": [...], "fps": n}; until flipbooks are supported the
+## first frame stands in for the whole animation.
+static func resource_path(root: String, texture: Variant) -> String:
+	var id: Variant = texture
+	if texture is Dictionary:
+		var frames: Array = texture.get("frames", [])
+		id = frames[0] if not frames.is_empty() else ""
+	if not id is String or not id.contains(":"):
 		return ""
 	return root.path_join("assets").path_join(id.get_slice(":", 0)).path_join(id.get_slice(":", 1))
 

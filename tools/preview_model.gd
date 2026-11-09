@@ -1,13 +1,17 @@
 extends SceneTree
-## Renders converted models from four sides for visual checks of the converter.
+## Renders converted models for visual checks of the converter.
 ## Usage (needs a window, not --headless):
-##   godot --path . --script res://tools/preview_model.gd -- 0009_blastoise [0815_cinderace ...]
-## Writes cache/previews/<folder>.png. Previews show Cobblemon art, so they stay in the cache.
+##   godot --path . --script res://tools/preview_model.gd -- 0009_blastoise [more folders] [--clip=physical]
+## Without --clip: the rest pose from four sides. With --clip=<role>: four moments of that
+## role's clip from a three-quarter view. Writes cache/previews/<folder>[_<role>].png;
+## previews show Cobblemon art, so they stay in the cache.
 
 const SOURCE := "res://cache/sources/cobblemon/1.8.4"
 const VIEW_SIZE := 384
 ## Camera yaw per view: front (the model faces -Z), left side, back, three-quarter.
 const VIEWS: Array[float] = [0.0, 90.0, 180.0, 35.0]
+const CLIP_VIEW := 35.0
+const CLIP_MOMENTS: Array[float] = [0.0, 0.33, 0.5, 0.75]
 
 
 func _initialize() -> void:
@@ -19,34 +23,46 @@ func _run() -> void:
 	var source := ProjectSettings.globalize_path(SOURCE)
 	var out_dir := ProjectSettings.globalize_path("res://cache/previews")
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	var role := ""
+	var folders: Array[String] = []
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--clip="):
+			role = arg.trim_prefix("--clip=")
+		else:
+			folders.append(arg)
 	var status := 0
-	for folder in OS.get_cmdline_user_args():
-		var err: String = await _render(source, folder, out_dir.path_join(folder + ".png"))
+	for folder in folders:
+		var path := out_dir.path_join(folder + ("" if role.is_empty() else "_" + role) + ".png")
+		var err: String = await _render(source, folder, role, path)
 		if not err.is_empty():
 			printerr("error: " + err)
 			status = 1
 	quit(status)
 
 
-func _render(source: String, folder: String, path: String) -> String:
-	var files := CobblemonSpecies.base_files(source, folder)
-	if files.has("error"):
-		return files.error
-	var geo: Variant = JSON.parse_string(FileAccess.get_file_as_string(files.geo))
-	if not geo is Dictionary:
-		return "%s: cannot parse %s" % [folder, files.geo]
-	var built := BedrockGeometry.build(geo, CobblemonSpecies.load_texture(files.texture), folder)
-	if built.has("error"):
-		return "%s: %s" % [folder, built.error]
-	var model: Node3D = built.scene
+func _render(source: String, folder: String, role: String, path: String) -> String:
+	var converted := CobblemonModel.convert(source, folder)
+	if converted.has("error"):
+		return converted.error
+	var model: Node3D = converted.scene.instantiate()
+	var player: AnimationPlayer = model.get_node("AnimationPlayer")
+	var clips: Dictionary = model.get_meta("clips")
+	if not role.is_empty() and not clips.has(role):
+		model.free()
+		return "%s has no '%s' clip (has %s)" % [folder, role, ", ".join(clips.keys())]
 	var stage := _stage()
 	stage.add_child(model)
 	root.add_child(stage)
 	var bounds := _bounds(model)
 	var camera: Camera3D = stage.get_node("Camera")
-	var sheet := Image.create(VIEW_SIZE * VIEWS.size(), VIEW_SIZE, false, Image.FORMAT_RGBA8)
-	for i in VIEWS.size():
-		var yaw := deg_to_rad(VIEWS[i])
+	var shots := VIEWS.size() if role.is_empty() else CLIP_MOMENTS.size()
+	var sheet := Image.create(VIEW_SIZE * shots, VIEW_SIZE, false, Image.FORMAT_RGBA8)
+	for i in shots:
+		var yaw := deg_to_rad(VIEWS[i] if role.is_empty() else CLIP_VIEW)
+		if not role.is_empty():
+			player.play(clips[role])
+			player.seek(player.current_animation_length * CLIP_MOMENTS[i], true)
+			player.pause()
 		var distance := bounds.get_longest_axis_size() * 1.6 + 0.5
 		var target := bounds.get_center()
 		camera.position = target + Vector3(sin(yaw), 0.35, -cos(yaw)) * distance
@@ -58,7 +74,7 @@ func _render(source: String, folder: String, path: String) -> String:
 		sheet.blit_rect(image, Rect2i(0, 0, VIEW_SIZE, VIEW_SIZE), Vector2i(i * VIEW_SIZE, 0))
 	stage.queue_free()
 	sheet.save_png(path)
-	print("%s: wrote %s (bounds %s)" % [folder, path, bounds])
+	print("%s: wrote %s" % [folder, path])
 	return ""
 
 
