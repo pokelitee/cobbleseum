@@ -10,10 +10,11 @@ extends Node3D
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
 const CHECKSUM_OK := "CHECKSUM_OK"
 const MODELS_DIR := "res://cache/build/cobblemon/1.8.4/models"
-const CAMERA_DISTANCE := 6.0
-const CAMERA_HEIGHT := 4.0
-## Angle between the camera and the line from side B to side A, in radians.
-const CAMERA_ANGLE := deg_to_rad(65.0)
+## Camera framing per orientation. The angle is between the camera and the line from side B
+## to side A: portrait sits steeper and higher so the fighters stack diagonally in a tall
+## frame; landscape is nearly side-on so they face each other across a wide one.
+const PORTRAIT_CAMERA := {"distance": 6.0, "height": 4.0, "angle": 65.0, "fov": 55.0}
+const LANDSCAPE_CAMERA := {"distance": 5.0, "height": 2.6, "angle": 85.0, "fov": 45.0}
 const PROJECTILE_COLORS := {
 	"Water": Color(0.25, 0.55, 1.0), "Fire": Color(1.0, 0.45, 0.1), "Grass": Color(0.3, 0.85, 0.3),
 	"Electric": Color(1.0, 0.9, 0.2), "Ice": Color(0.6, 0.95, 1.0), "Psychic": Color(1.0, 0.4, 0.7),
@@ -25,6 +26,8 @@ var _projectile_meshes: Array[MeshInstance3D] = []
 var _bars: Array[ColorRect] = []
 var _camera: Camera3D
 var _camera_axis := Vector2(0, 1)
+var _framing: Dictionary
+var _portrait := false
 var _event_index := 0
 ## Presentation time in ticks since the battle started, including ticks shown after it ended.
 var _clock := 0
@@ -48,6 +51,9 @@ func _ready() -> void:
 	_stop_tick = options.until_tick
 	_expected_checksum = options.expect_checksum
 
+	var size := get_viewport().get_visible_rect().size
+	_portrait = VideoFormat.is_portrait(size)
+	_framing = PORTRAIT_CAMERA if _portrait else LANDSCAPE_CAMERA
 	_build_stage()
 	for side in 2:
 		var entry: Dictionary = spec.fighters[side]
@@ -56,7 +62,7 @@ func _ready() -> void:
 			return _fail("no converted model for '%s'; set \"model\" in the spec and run tools/assets.gd" % entry.get("model", ""))
 		add_child(view)
 		_views.append(view)
-	_build_hud(spec)
+	_build_hud(size)
 
 	while battle.tick < options.from_tick and not battle.is_over():
 		battle.step()
@@ -150,20 +156,22 @@ func _sync_views(snap: bool) -> void:
 	_update_camera(snap)
 
 
-## Raised, at an angle across the line between the fighters with side A nearer the camera:
-## steep enough that A never hides B in close combat, while both still fit a portrait frame.
-## The direction follows the fighters' line only slowly so the shot doesn't swing around.
+## Raised, at an angle across the line between the fighters with side A nearer the camera,
+## so A never hides B in close combat. The direction follows the fighters' line only slowly
+## so the shot doesn't swing around.
 func _update_camera(snap: bool) -> void:
 	var a := battle.fighters[0].position
 	var b := battle.fighters[1].position
 	var middle := (a + b) * 0.5
 	var axis := (b - a).normalized() if a.distance_to(b) > 0.01 else Vector2(0, 1)
 	_camera_axis = axis if snap else _camera_axis.slerp(axis, 0.02).normalized()
-	var across := Vector2(_camera_axis.y, -_camera_axis.x)
-	var direction := (-_camera_axis * cos(CAMERA_ANGLE) + across * sin(CAMERA_ANGLE)).normalized()
-	var distance := CAMERA_DISTANCE + a.distance_to(b) * 0.6
+	# This side keeps fighter A on screen-left, where its landscape HP bar is.
+	var across := Vector2(-_camera_axis.y, _camera_axis.x)
+	var angle := deg_to_rad(_framing.angle)
+	var direction := (-_camera_axis * cos(angle) + across * sin(angle)).normalized()
+	var distance: float = _framing.distance + a.distance_to(b) * 0.6
 	var eye := middle + direction * distance
-	var target := Vector3(eye.x, CAMERA_HEIGHT, eye.y)
+	var target := Vector3(eye.x, _framing.height, eye.y)
 	_camera.position = target if snap else _camera.position.lerp(target, 0.1)
 	_camera.look_at(Vector3(middle.x, 1.5, middle.y), Vector3.UP)
 
@@ -192,18 +200,23 @@ func _build_stage() -> void:
 	environment.environment.ambient_light_color = Color(0.65, 0.65, 0.7)
 	add_child(environment)
 	_camera = Camera3D.new()
-	_camera.fov = 55
+	_camera.fov = _framing.fov
 	add_child(_camera)
 
 
-## Side B (far from the camera) at the top, side A at the bottom.
-func _build_hud(spec: Dictionary) -> void:
+## Portrait: side B (far from the camera) at the top, side A at the bottom.
+## Landscape: side A top-left, side B top-right.
+func _build_hud(size: Vector2) -> void:
 	var hud := CanvasLayer.new()
 	add_child(hud)
+	var margin := 60.0
+	var bar_width := size.x - 2 * margin if _portrait else size.x * 0.4
 	for side in 2:
-		var top := side == 1
 		var panel := Control.new()
-		panel.position = Vector2(60, 90 if top else 1700)
+		if _portrait:
+			panel.position = Vector2(margin, 90 if side == 1 else size.y - 220)
+		else:
+			panel.position = Vector2(margin if side == 0 else size.x - margin - bar_width, 40)
 		hud.add_child(panel)
 		var label := Label.new()
 		label.text = battle.fighters[side].name
@@ -214,12 +227,15 @@ func _build_hud(spec: Dictionary) -> void:
 		var back := ColorRect.new()
 		back.color = Color(0, 0, 0, 0.6)
 		back.position = Vector2(0, 80)
-		back.size = Vector2(960, 36)
+		back.size = Vector2(bar_width, 36)
 		panel.add_child(back)
 		var bar := ColorRect.new()
 		bar.color = Color(0.3, 0.9, 0.4)
 		bar.position = Vector2(4, 84)
-		bar.size = Vector2(952, 28)
+		bar.size = Vector2(bar_width - 8, 28)
+		if not _portrait and side == 1:
+			# Mirror the right-hand bar so it drains toward the centre of the screen.
+			bar.pivot_offset = Vector2(bar.size.x, 0)
 		panel.add_child(bar)
 		_bars.append(bar)
 	var credit := Label.new()
@@ -227,7 +243,7 @@ func _build_hud(spec: Dictionary) -> void:
 	credit.add_theme_font_size_override("font_size", 28)
 	credit.add_theme_color_override("font_outline_color", Color.BLACK)
 	credit.add_theme_constant_override("outline_size", 8)
-	credit.position = Vector2(60, 1860)
+	credit.position = Vector2(margin, size.y - 60)
 	hud.add_child(credit)
 
 

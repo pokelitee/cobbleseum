@@ -15,10 +15,10 @@ driver/mix_rate=48000
 
 [display]
 
-; Clips are vertical 1080x1920. In viewport stretch mode the viewport size is the
-; Movie Maker output size, while the window override keeps the window on screen.
-window/size/viewport_width=1080
-window/size/viewport_height=1920
-window/size/window_width_override=405
+; Play is landscape. In viewport stretch mode the viewport size is also the Movie Maker
+; output size; tools/record.gd switches it per clip format with a temporary override.cfg.
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="viewport"
