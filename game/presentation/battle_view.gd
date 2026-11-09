@@ -15,16 +15,13 @@ const CHECKSUM_OK := "CHECKSUM_OK"
 const MODELS_DIR := "res://cache/build/cobblemon/1.8.4/models"
 ## Random stream id for the handheld wobble, after the simulation's own streams.
 const CAMERA_WOBBLE_STREAM := 100
-const PROJECTILE_COLORS := {
-	"Water": Color(0.25, 0.55, 1.0), "Fire": Color(1.0, 0.45, 0.1), "Grass": Color(0.3, 0.85, 0.3),
-	"Electric": Color(1.0, 0.9, 0.2), "Ice": Color(0.6, 0.95, 1.0), "Psychic": Color(1.0, 0.4, 0.7),
-}
 
 var battle: Battle
 var plan: Dictionary
 var _views: Array[FighterView] = []
-var _projectile_meshes: Array[MeshInstance3D] = []
-var _bars: Array[ColorRect] = []
+var _hud: Hud
+var _move_fx: MoveFX
+var _credits_frames := 0
 var _camera: Camera3D
 var _rig: CameraRig
 var _fx: ImpactFX
@@ -68,7 +65,11 @@ func _ready() -> void:
 			return _fail("no converted model for '%s'; set \"model\" in the spec and run tools/assets.gd" % entry.get("model", ""))
 		add_child(view)
 		_views.append(view)
-	_build_hud(size)
+	_hud = Hud.new()
+	add_child(_hud)
+	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size)
+	_move_fx = MoveFX.new()
+	add_child(_move_fx)
 	_fx = ImpactFX.new()
 	_fx.layer = 2  # callouts and impact frames draw over the HUD
 	add_child(_fx)
@@ -84,6 +85,8 @@ func _ready() -> void:
 	_event_index = battle.events.size()
 	_begin_tick()
 	_sync_views()
+	for side in 2:
+		_hud.set_hp(side, float(battle.fighters[side].hp) / battle.fighters[side].max_hp, true)
 
 
 ## Runs a copy of the battle headless and plans its presentation.
@@ -122,10 +125,16 @@ func _process(delta: float) -> void:
 		_next_frame()
 
 
-## One video frame: hold the current tick, or advance to the next one.
+## One video frame: hold the current tick, or advance to the next one. After the plan ends,
+## the credits card shows for Hud.CREDITS_FRAMES before a clip finishes.
 func _next_frame() -> void:
 	if _tick >= plan.slow.size():
-		if _clip_mode:
+		if _credits_frames == 0:
+			_hud.show_credits()
+		if _credits_frames < Hud.CREDITS_FRAMES:
+			_credits_frames += 1
+			_hud.next_frame()
+		elif _clip_mode:
 			_finish()
 		return
 	_segment_frames += 1
@@ -143,6 +152,8 @@ func _next_frame() -> void:
 	for view in _views:
 		view.next_frame()
 	_fx.next_frame()
+	_move_fx.next_frame()
+	_hud.next_frame()
 	_fx.set_speed_lines(_segment.get("shot", -1) == Director.Shot.CLOSE_UP)
 	_sync_views()
 
@@ -191,16 +202,31 @@ func _play_events() -> void:
 			"windup":
 				var move := _move(event.side, event.move)
 				_views[event.side].play_role("physical" if move.kind == BattleMove.Kind.MELEE else "special")
+				_move_fx.windup(_views[event.side], move)
+				_hud.banner(event.side, move.name, move.type)
 			"hit":
 				var defender := 1 - int(event.side)
+				var move := _move(event.side, event.move)
 				var share := float(event.damage) / battle.fighters[defender].max_hp
 				_views[defender].play_role("recoil")
 				var big: bool = event.crit or event.effectiveness > 1.0
 				_views[defender].take_hit(_views[event.side].global_position, share,
 					ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
 				_fx.on_hit(event, _views[defender], share, big)
+				if move.kind == BattleMove.Kind.MELEE:
+					_move_fx.swipe(_views[event.side], _views[defender], move)
+				_move_fx.hit(_views[defender], move, big)
+				if big:
+					_hud.shake(defender)
+			"miss":
+				var move := _move(event.side, event.move)
+				if move.kind == BattleMove.Kind.MELEE:
+					_move_fx.swipe(_views[event.side], _views[1 - int(event.side)], move)
 			"faint":
 				_views[event.side].play_role("faint")
+				_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
+			"time_up":
+				_hud.show_winner("Time up: draw")
 
 
 func _move(side: int, move_id: String) -> BattleMove:
@@ -218,26 +244,8 @@ func _sync_views() -> void:
 	for side in 2:
 		var fighter := battle.fighters[side]
 		_views[side].place(fighter.position, fighter.facing)
-		_bars[side].scale.x = float(fighter.hp) / fighter.max_hp
-	while _projectile_meshes.size() < battle.projectiles.size():
-		var mesh := MeshInstance3D.new()
-		mesh.mesh = SphereMesh.new()
-		mesh.mesh.radius = Rules.PROJECTILE_RADIUS
-		mesh.mesh.height = Rules.PROJECTILE_RADIUS * 2
-		add_child(mesh)
-		_projectile_meshes.append(mesh)
-	for i in _projectile_meshes.size():
-		var mesh := _projectile_meshes[i]
-		mesh.visible = i < battle.projectiles.size()
-		if mesh.visible:
-			var projectile: Dictionary = battle.projectiles[i]
-			var move := battle.fighters[projectile.owner].moves[projectile.move]
-			mesh.position = Vector3(projectile.position.x, 1.0, projectile.position.y)
-			var material := StandardMaterial3D.new()
-			material.albedo_color = PROJECTILE_COLORS.get(move.type, Color.WHITE)
-			material.emission_enabled = true
-			material.emission = material.albedo_color
-			mesh.material_override = material
+		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
+	_move_fx.sync_projectiles(battle)
 	var span := maxi(1, int(_segment.end) - int(_segment.start))
 	var progress := float(_shown_tick() - int(_segment.start)) / span
 	_rig.apply(_camera, _segment, battle, _segment_frames / float(Rules.TICK_RATE), progress,
@@ -271,50 +279,7 @@ func _build_stage() -> void:
 	add_child(_camera)
 
 
-## Portrait: side B (far from the camera) at the top, side A at the bottom.
-## Landscape: side A top-left, side B top-right.
-func _build_hud(size: Vector2) -> void:
-	var hud := CanvasLayer.new()
-	add_child(hud)
-	var margin := 60.0
-	var bar_width := size.x - 2 * margin if _portrait else size.x * 0.4
-	for side in 2:
-		var panel := Control.new()
-		if _portrait:
-			panel.position = Vector2(margin, 90 if side == 1 else size.y - 220)
-		else:
-			panel.position = Vector2(margin if side == 0 else size.x - margin - bar_width, 40)
-		hud.add_child(panel)
-		var label := Label.new()
-		label.text = battle.fighters[side].name
-		label.add_theme_font_size_override("font_size", 56)
-		label.add_theme_color_override("font_outline_color", Color.BLACK)
-		label.add_theme_constant_override("outline_size", 12)
-		panel.add_child(label)
-		var back := ColorRect.new()
-		back.color = Color(0, 0, 0, 0.6)
-		back.position = Vector2(0, 80)
-		back.size = Vector2(bar_width, 36)
-		panel.add_child(back)
-		var bar := ColorRect.new()
-		bar.color = Color(0.3, 0.9, 0.4)
-		bar.position = Vector2(4, 84)
-		bar.size = Vector2(bar_width - 8, 28)
-		if not _portrait and side == 1:
-			# Mirror the right-hand bar so it drains toward the centre of the screen.
-			bar.pivot_offset = Vector2(bar.size.x, 0)
-		panel.add_child(bar)
-		_bars.append(bar)
-	var credit := Label.new()
-	credit.text = "Models and animations: Cobblemon (CC BY-NC 3.0)"
-	credit.add_theme_font_size_override("font_size", 28)
-	credit.add_theme_color_override("font_outline_color", Color.BLACK)
-	credit.add_theme_constant_override("outline_size", 8)
-	credit.position = Vector2(margin, size.y - 60)
-	hud.add_child(credit)
-
-
-## Heights of the HUD's top and bottom bands, matching the layout in _build_hud.
+## Heights of the HUD's top and bottom bands, matching the layout in Hud.setup.
 func _hud_bands(size: Vector2) -> Vector2:
 	return Vector2(250, 240) if _portrait else Vector2(170, 80)
 
