@@ -1,0 +1,9 @@
+; Engine configuration file.
+; Pinned to Godot 4.7.2; see concepts_brief.md section 4.
+
+config_version=5
+
+[application]
+
+config/name="Cobbleseum"
+config/features=PackedStringArray("4.7", "Forward Plus")

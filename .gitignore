@@ -1,0 +1,16 @@
+# Godot
+.godot/
+*.translation
+
+# Downloaded, extracted and converted third-party assets (never commit)
+cache/
+
+# Generated outputs
+recordings/
+results/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
