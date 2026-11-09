@@ -250,9 +250,15 @@ static func _remove_tree(path: String) -> void:
 	# Delete indexed files directly first; the walk below then only meets folders and leftovers.
 	for file in indexed_files(path):
 		DirAccess.remove_absolute(path.path_join(file))
-	for sub in DirAccess.get_directories_at(path):
+	# The static get_files_at() skips dotfiles on Linux and macOS, which would leave .stamp
+	# and .files behind and keep the folder from being removed.
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.include_hidden = true
+	for sub in dir.get_directories():
 		_remove_tree(path.path_join(sub))
-	for file in DirAccess.get_files_at(path):
+	for file in dir.get_files():
 		DirAccess.remove_absolute(path.path_join(file))
 	DirAccess.remove_absolute(path)
 
