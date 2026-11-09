@@ -28,10 +28,10 @@ Run a battle headless (prints the result, length and a checksum per seed):
 godot --headless --path . --script res://tools/battle.gd -- game/data/battles/showcase.json --seeds=10
 ```
 
-Record a battle as a vertical 1080×1920 clip (needs a display and ffmpeg; output goes to `recordings/`):
+Record a battle as video clips (needs a display and ffmpeg; output goes to `recordings/`). `--format` is `vertical` (1080×1920, the default), `landscape` (1920×1080) or `both`; every format shows the same battle:
 
 ```bash
-godot --headless --path . --script res://tools/record.gd -- game/data/battles/showcase.json --seconds=10
+godot --headless --path . --script res://tools/record.gd -- game/data/battles/showcase.json --seconds=10 --format=both
 ```
 
 Watch the showcase battle in a window: `godot --path .`

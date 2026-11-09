@@ -5,7 +5,8 @@
 # Downloaded, extracted and converted third-party assets (never commit)
 cache/
 
-# Generated outputs
+# Generated outputs (override.cfg is written briefly by tools/record.gd)
+override.cfg
 recordings/
 results/
 
