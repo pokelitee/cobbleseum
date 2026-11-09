@@ -21,6 +21,7 @@ var plan: Dictionary
 var _views: Array[FighterView] = []
 var _hud: Hud
 var _move_fx: MoveFX
+var _sound: BattleSound
 var _credits_frames := 0
 var _camera: Camera3D
 var _rig: CameraRig
@@ -70,6 +71,10 @@ func _ready() -> void:
 	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size)
 	_move_fx = MoveFX.new()
 	add_child(_move_fx)
+	_sound = BattleSound.new()
+	add_child(_sound)
+	_sound.setup([spec.fighters[0].species, spec.fighters[1].species])
+	_sound.intro()
 	_fx = ImpactFX.new()
 	_fx.layer = 2  # callouts and impact frames draw over the HUD
 	add_child(_fx)
@@ -134,6 +139,7 @@ func _next_frame() -> void:
 		if _credits_frames < Hud.CREDITS_FRAMES:
 			_credits_frames += 1
 			_hud.next_frame()
+			_sound.next_frame()
 		elif _clip_mode:
 			_finish()
 		return
@@ -154,6 +160,7 @@ func _next_frame() -> void:
 	_fx.next_frame()
 	_move_fx.next_frame()
 	_hud.next_frame()
+	_sound.next_frame()
 	_fx.set_speed_lines(_segment.get("shot", -1) == Director.Shot.CLOSE_UP)
 	_sync_views()
 
@@ -204,6 +211,7 @@ func _play_events() -> void:
 				_views[event.side].play_role("physical" if move.kind == BattleMove.Kind.MELEE else "special")
 				_move_fx.windup(_views[event.side], move)
 				_hud.banner(event.side, move.name, move.type)
+				_sound.windup(move)
 			"hit":
 				var defender := 1 - int(event.side)
 				var move := _move(event.side, event.move)
@@ -216,14 +224,17 @@ func _play_events() -> void:
 				if move.kind == BattleMove.Kind.MELEE:
 					_move_fx.swipe(_views[event.side], _views[defender], move)
 				_move_fx.hit(_views[defender], move, big)
+				_sound.hit(move, big)
 				if big:
 					_hud.shake(defender)
 			"miss":
 				var move := _move(event.side, event.move)
 				if move.kind == BattleMove.Kind.MELEE:
 					_move_fx.swipe(_views[event.side], _views[1 - int(event.side)], move)
+				_sound.miss(move)
 			"faint":
 				_views[event.side].play_role("faint")
+				_sound.faint(event.side)
 				_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
 			"time_up":
 				_hud.show_winner("Time up: draw")

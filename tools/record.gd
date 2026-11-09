@@ -17,7 +17,7 @@ const SAFETY_FRAMES := 300
 const DEFAULT_FORMAT := "vertical"
 ## Godot reads this file from the project folder at startup (see VideoFormat.override_config).
 const OVERRIDE_FILE := "res://override.cfg"
-const CREDITS := """Pokémon models, textures and animations: Cobblemon (https://cobblemon.com),
+const CREDITS := """Pokémon models, textures, animations and sounds: Cobblemon (https://cobblemon.com),
 licensed CC BY-NC 3.0. Non-commercial use only.
 Battle data: Pokémon Showdown (MIT).
 Pokémon and Pokémon character names are trademarks of Nintendo, Creatures Inc. and GAME FREAK.

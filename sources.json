@@ -35,6 +35,7 @@
         "assets/cobblemon/bedrock/pokemon/",
         "assets/cobblemon/textures/pokemon/",
         "assets/cobblemon/sounds/pokemon/",
+        "assets/cobblemon/sounds/move/",
         "data/cobblemon/species/"
       ],
       "layout": [
@@ -45,6 +46,8 @@
         {"pattern": "assets/cobblemon/bedrock/pokemon/models/*/license", "min_count": 500},
         {"pattern": "assets/cobblemon/textures/pokemon/*.png", "min_count": 3000},
         {"pattern": "assets/cobblemon/sounds/pokemon/*.ogg", "min_count": 1500},
+        {"pattern": "assets/cobblemon/sounds/move/impact_generic/*.ogg", "min_count": 100},
+        {"pattern": "assets/cobblemon/sounds/move/*/*.ogg", "min_count": 250},
         {"pattern": "data/cobblemon/species/*.json", "min_count": 1000}
       ],
       "build": "res://tools/sources/cobblemon.gd"
