@@ -1,7 +1,8 @@
 class_name BattleView
 extends Node3D
 ## Plays a battle in a 3D arena (concepts_brief.md §12). User arguments (after --):
-## <spec.json> [--clip-seconds=S] [--expect-checksum=HEX].
+## <spec.json> [--clip-seconds=S] [--expect-checksum=HEX] [--ai-debug]. --ai-debug shows the
+## AI debug overlay from the start; F3 toggles it in the window.
 ##
 ## The battle is run headless first so the Director can plan the whole presentation: hit-stop,
 ## slow motion and camera shots. Each video frame then either holds the current tick or
@@ -40,6 +41,7 @@ var _end_tick := 0
 var _preview_events: Array = []
 var _views: Array[FighterView] = []
 var _hud: Hud
+var _overlay: AIOverlay
 var _move_fx: MoveFX
 var _sound: BattleSound
 var _credits_frames := 0
@@ -110,6 +112,11 @@ func _ready() -> void:
 	_fx.layer = 2  # callouts and impact frames draw over the HUD
 	add_child(_fx)
 	_fx.setup(_camera, size, _hud_bands(size))
+	_overlay = AIOverlay.new()
+	_overlay.layer = 3
+	add_child(_overlay)
+	_overlay.setup(controllers.controllers, [battle.fighters[0].name, battle.fighters[1].name], size, _hud_bands(size))
+	_overlay.visible = options.ai_debug
 	# The wobble gets its own stream so it can't change the director's choices.
 	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height],
 		SimRandom.stream(int(spec.seed), CAMERA_WOBBLE_STREAM))
@@ -200,6 +207,8 @@ func _next_frame() -> void:
 	_move_fx.next_frame()
 	_hud.next_frame()
 	_sound.next_frame()
+	if _overlay.visible:
+		_overlay.refresh()
 	_fx.set_speed_lines(_segment.get("shot", -1) == Director.Shot.CLOSE_UP)
 	_sync_views()
 
@@ -400,13 +409,22 @@ func _hud_bands(size: Vector2) -> Vector2:
 	return Vector2(250, 240) if _portrait else Vector2(170, 80)
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).keycode == KEY_F3:
+		_overlay.visible = not _overlay.visible
+		_overlay.refresh()
+
+
 func _is_recording() -> bool:
 	return not Array(OS.get_cmdline_args()).filter(func(a: String) -> bool: return a.begins_with("--write-movie")).is_empty()
 
 
 func _parse_args(args: PackedStringArray) -> Dictionary:
-	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": ""}
+	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": "", "ai_debug": false}
 	for arg in args:
+		if arg == "--ai-debug":
+			options.ai_debug = true
+			continue
 		if arg.begins_with("--clip-seconds="):
 			options.clip_seconds = arg.get_slice("=", 1).to_float()
 		elif arg.begins_with("--expect-checksum="):

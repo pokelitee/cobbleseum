@@ -627,7 +627,7 @@ The AI is a utility AI. At each decision step it scores every candidate action a
 - **Choosing:** the highest score wins. Exact ties are broken by the side's AI random stream, never by list order.
 - **Difficulty profiles** are resources. Each sets reaction delay, aim error, decision interval and mistake chance.
 - **Rankings** use one fixed "ranked" profile on both sides.
-- **Debugging:** an overlay shows each candidate's per-consideration scores.
+- **Debugging:** an overlay shows each candidate's per-consideration scores. It's implemented in `game/presentation/ai_overlay.gd`: a panel per side listing the last decision's candidates, best first, each with a score bar and its considerations, and the chosen action highlighted. F3 toggles it in the window, and `--ai-debug` shows it from the start or records it (`tools/record.gd -- … --ai-debug`). It only reads scores the AI keeps when asked, so it never changes a battle.
 - **Tests:**
   - unit tests per consideration;
   - scenario tests, such as "dodges a telegraphed projectile" and "doesn't use a melee move out of range".
@@ -877,7 +877,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 
 **M4: AI and play.**
 
-- The utility AI, with profiles and a debug overlay. The AI and profiles are done; the overlay is next.
+- The utility AI, with profiles and a debug overlay. The AI, profiles and overlay are done.
 - Player-vs-AI controls (keyboard and gamepad) and a player camera.
 
 **M5: rankings.**
