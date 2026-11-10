@@ -72,7 +72,10 @@ func _ready() -> void:
 	var loaded := BattleData.load_all()
 	if loaded.has("error"):
 		return _fail(loaded.error)
-	var created := Battle.create(spec, loaded.data, SimpleAI.pair(int(spec.seed)))
+	var controllers := Controllers.for_spec(spec)
+	if controllers.has("error"):
+		return _fail(controllers.error)
+	var created := Battle.create(spec, loaded.data, controllers.controllers)
 	if created.has("error"):
 		return _fail(created.error)
 	battle = created.battle
@@ -136,7 +139,7 @@ func _ready() -> void:
 
 ## Runs a copy of the battle headless and plans its presentation.
 func _plan(spec: Dictionary, data: BattleData) -> Dictionary:
-	var preview: Battle = Battle.create(spec, data, SimpleAI.pair(int(spec.seed))).battle
+	var preview: Battle = Battle.create(spec, data, Controllers.for_spec(spec).controllers).battle
 	preview.run()
 	_preview_events = preview.events
 	var move_power := [{}, {}]

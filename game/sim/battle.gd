@@ -27,6 +27,8 @@ var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
 const FIGHTER_STATE_SIZE := 17
 var _state := PackedFloat64Array()
+## Projectiles fired so far; each gets the next number as a stable id.
+var _projectile_count := 0
 
 
 ## `spec` = {"seed": int, "fighters": [{"species", "moves"?: [ids], "radius"?}, x2]}. Without
@@ -75,6 +77,11 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		battle.fighters.append(fighter)
 	battle._hash.start(HashingContext.HASH_SHA256)
 	return {"battle": battle}
+
+
+## The species, moves and type chart the battle runs on.
+func data() -> BattleData:
+	return _data
 
 
 func random_stream(stream: Stream) -> SimRandom:
@@ -248,7 +255,9 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> void:
 			else:
 				_hit(fighter, foe, move)
 		_:
+			_projectile_count += 1
 			projectiles.append({
+				"id": _projectile_count,
 				"owner": fighter.side,
 				"move": move_index,
 				"position": fighter.position + fighter.facing * fighter.radius,

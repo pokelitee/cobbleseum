@@ -36,7 +36,10 @@ func _initialize() -> void:
 
 
 static func run(spec: Dictionary, data: BattleData) -> Dictionary:
-	var created := Battle.create(spec, data, SimpleAI.pair(int(spec.seed)))
+	var controllers := Controllers.for_spec(spec)
+	if controllers.has("error"):
+		return controllers
+	var created := Battle.create(spec, data, controllers.controllers)
 	if created.has("error"):
 		return created
 	var battle: Battle = created.battle
