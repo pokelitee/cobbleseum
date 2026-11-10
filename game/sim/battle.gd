@@ -25,7 +25,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 16
+const FIGHTER_STATE_SIZE := 17
 var _state := PackedFloat64Array()
 
 
@@ -377,7 +377,24 @@ func _boost(fighter: Fighter, changes: Dictionary, move_id: String) -> void:
 		if fighter.boosts[stat] != before:
 			applied[stat] = fighter.boosts[stat] - before
 	if not applied.is_empty():
+		fighter.stage_ticks = 0
 		_event("boost", fighter.side, {"boosts": applied, "move": move_id})
+
+
+## Moves every stat stage one step toward 0 once they've gone unchanged long enough.
+func _decay_stages(fighter: Fighter) -> void:
+	fighter.stage_ticks += 1
+	if fighter.stage_ticks < Rules.seconds_to_ticks(Rules.STAGE_DECAY_SECONDS):
+		return
+	fighter.stage_ticks = 0
+	var applied := {}
+	for stat: String in fighter.boosts:
+		var stage: int = fighter.boosts[stat]
+		if stage != 0:
+			fighter.boosts[stat] = stage - signi(stage)
+			applied[stat] = -signi(stage)
+	if not applied.is_empty():
+		_event("stage_decay", fighter.side, {"boosts": applied})
 
 
 func _heal(fighter: Fighter, amount: int, move_id: String) -> void:
@@ -400,6 +417,7 @@ func _hurt(fighter: Fighter, amount: int, type: String, details: Dictionary) -> 
 
 ## Status timers, damage over time and paralysis stuns, once per tick before acting.
 func _tick_conditions(fighter: Fighter) -> void:
+	_decay_stages(fighter)
 	if fighter.stun_ticks > 0:
 		fighter.stun_ticks -= 1
 	if fighter.confusion_ticks > 0:
@@ -487,6 +505,7 @@ func _record_state() -> void:
 		_state[i + 13] = fighter.boosts.spa
 		_state[i + 14] = fighter.boosts.spd
 		_state[i + 15] = fighter.boosts.spe
+		_state[i + 16] = fighter.stage_ticks
 		i += FIGHTER_STATE_SIZE
 	for projectile in projectiles:
 		_state[i] = projectile.position.x

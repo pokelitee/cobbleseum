@@ -150,6 +150,9 @@ static func _damage_score(me: Fighter, move: BattleMove) -> float:
 		score *= Rules.stage_multiplier(stage)
 		var drop: int = move.self_boosts.get(stat, 0)
 		if drop < 0:
+			# Below -2 it waits for the stage to wear off rather than sinking it further.
+			if stage + drop < -STAGE_TARGET:
+				return 0.0
 			score *= Rules.stage_multiplier(stage + drop) / Rules.stage_multiplier(stage)
 	return score
 
