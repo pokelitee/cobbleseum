@@ -6,18 +6,23 @@ extends Node3D
 ## The battle is run headless first so the Director can plan the whole presentation: hit-stop,
 ## slow motion and camera shots. Each video frame then either holds the current tick or
 ## advances the simulation by one. Under Movie Maker every frame is 1/30 s; otherwise frames
-## follow real time. With --clip-seconds the view starts late enough to end on the knockout,
-## quits when the plan ends, and exits with code 2 if the battle's checksum doesn't match
-## --expect-checksum.
+## follow real time. With --clip-seconds the view plays only the window Highlights picks,
+## then the credits card, and quits. Before quitting it finishes the battle off screen and
+## exits with code 2 if the battle's checksum doesn't match --expect-checksum.
 
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
 const CHECKSUM_OK := "CHECKSUM_OK"
+## Printed in clip mode with the window's start and end ticks, for the recorder.
+const CLIP_WINDOW := "CLIP_WINDOW"
 const MODELS_DIR := "res://cache/build/cobblemon/1.8.4/models"
 ## Random stream id for the handheld wobble, after the simulation's own streams.
 const CAMERA_WOBBLE_STREAM := 100
 
 var battle: Battle
 var plan: Dictionary
+## Tick where presentation stops: the plan's end, or the clip window's end.
+var _end_tick := 0
+var _preview_events: Array = []
 var _views: Array[FighterView] = []
 var _hud: Hud
 var _move_fx: MoveFX
@@ -83,7 +88,14 @@ func _ready() -> void:
 	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height],
 		SimRandom.stream(int(spec.seed), CAMERA_WOBBLE_STREAM))
 
-	var start := _clip_start(options.clip_seconds) if _clip_mode else 0
+	var start := 0
+	_end_tick = plan.slow.size()
+	if _clip_mode:
+		var window := Highlights.choose(plan, _preview_events, [battle.fighters[0].max_hp, battle.fighters[1].max_hp],
+			roundi(options.clip_seconds * Rules.TICK_RATE))
+		start = window.start
+		_end_tick = window.end
+		print("%s %d %d" % [CLIP_WINDOW, start, _end_tick])
 	while battle.tick < start and not battle.is_over():
 		battle.step()
 	_tick = battle.tick
@@ -98,6 +110,7 @@ func _ready() -> void:
 func _plan(spec: Dictionary, data: BattleData) -> Dictionary:
 	var preview: Battle = Battle.create(spec, data, SimpleAI.pair(int(spec.seed))).battle
 	preview.run()
+	_preview_events = preview.events
 	var move_power := [{}, {}]
 	for side in 2:
 		for move in preview.fighters[side].moves:
@@ -105,17 +118,6 @@ func _plan(spec: Dictionary, data: BattleData) -> Dictionary:
 	var max_hp := [preview.fighters[0].max_hp, preview.fighters[1].max_hp]
 	return Director.plan(preview.events, preview.tick, max_hp, move_power,
 		battle.random_stream(Battle.Stream.COSMETIC))
-
-
-## The latest tick from which the rest of the plan fills at least `seconds` of video.
-func _clip_start(seconds: float) -> int:
-	var wanted := roundi(seconds * Rules.TICK_RATE)
-	var total := 0
-	for t in range(plan.slow.size() - 1, -1, -1):
-		total += plan.slow[t] + plan.hitstop[t]
-		if total >= wanted:
-			return t
-	return 0
 
 
 func _process(delta: float) -> void:
@@ -130,12 +132,13 @@ func _process(delta: float) -> void:
 		_next_frame()
 
 
-## One video frame: hold the current tick, or advance to the next one. After the plan ends,
-## the credits card shows for Hud.CREDITS_FRAMES before a clip finishes.
+## One video frame: hold the current tick, or advance to the next one. After the plan (or
+## the clip window) ends, the credits card shows for Hud.CREDITS_FRAMES before a clip finishes.
 func _next_frame() -> void:
-	if _tick >= plan.slow.size():
+	if _tick >= _end_tick:
 		if _credits_frames == 0:
 			_hud.show_credits()
+			_fx.visible = false  # callouts stop animating here and draw above the HUD
 		if _credits_frames < Hud.CREDITS_FRAMES:
 			_credits_frames += 1
 			_hud.next_frame()
@@ -152,7 +155,7 @@ func _next_frame() -> void:
 			battle.step()
 			_play_events()
 		_tick += 1
-		if _tick >= plan.slow.size():
+		if _tick >= _end_tick:
 			return
 		_begin_tick()
 	for view in _views:
@@ -191,6 +194,8 @@ func _shown_tick() -> int:
 func _finish() -> void:
 	set_process(false)
 	var status := 0
+	while not battle.is_over():
+		battle.step()
 	if not _expected_checksum.is_empty():
 		if battle.is_over() and battle.checksum() == _expected_checksum:
 			# The recorder looks for this line before it accepts the rendered movie.
