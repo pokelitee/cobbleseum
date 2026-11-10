@@ -46,6 +46,9 @@ var _intro: Control
 var _intro_age := 0
 var _winner: Label
 var _credits: Control
+## Play mode's move bar: per move {"panel", "shade"} (the shade covers it while cooling down).
+var _move_slots: Array[Dictionary] = []
+var _hint: Label
 ## Flashed titles: {"label": Label, "age": frames}.
 var _titles: Array[Dictionary] = []
 const TITLE_FRAMES := 45
@@ -180,6 +183,45 @@ func flash_title(text: String, colour: Color) -> void:
 	title.position = (_size - title.size) * Vector2(0.5, 0.35)
 	add_child(title)
 	_titles.append({"label": title, "age": 0})
+
+
+## Play mode: the player's moves along the bottom, each with its key and a cooldown shade.
+func show_move_bar(names: Array, types: Array, keys: Array) -> void:
+	var slot_width := 300.0 * _scale
+	var gap := 16.0 * _scale
+	var total := names.size() * slot_width + (names.size() - 1) * gap
+	for i in names.size():
+		var panel := ColorRect.new()
+		panel.color = Color(TypeColors.of(types[i]), 0.85)
+		panel.size = Vector2(slot_width, 70 * _scale)
+		panel.position = Vector2((_size.x - total) * 0.5 + i * (slot_width + gap), _size.y - 170 * _scale)
+		add_child(panel)
+		var label := _label("%s  %s" % [keys[i], names[i]], 30, Color.WHITE)
+		label.position = Vector2(12, 14) * _scale
+		panel.add_child(label)
+		var shade := ColorRect.new()
+		shade.color = Color(0, 0, 0, 0.6)
+		shade.size = panel.size
+		panel.add_child(shade)
+		_move_slots.append({"panel": panel, "shade": shade})
+
+
+## Shades each move by how much of its cooldown is left.
+func update_move_bar(fighter: Fighter) -> void:
+	for i in _move_slots.size():
+		var shade: ColorRect = _move_slots[i].shade
+		var total := maxi(fighter.moves[i].cooldown_ticks, 1)
+		shade.scale.x = clampf(float(fighter.cooldowns[i]) / total, 0.0, 1.0)
+
+
+## A line of help text along the bottom of the screen; "" hides it.
+func show_hint(text: String) -> void:
+	if _hint == null:
+		_hint = _label("", 32, Color.WHITE)
+		add_child(_hint)
+	_hint.text = text
+	_hint.size = _hint.get_minimum_size()
+	_hint.position = Vector2((_size.x - _hint.size.x) * 0.5, _size.y - 180 * _scale - _hint.size.y)  # above the move bar
 
 
 func show_credits() -> void:

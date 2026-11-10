@@ -4,6 +4,12 @@ extends Node3D
 ## <spec.json> [--clip-seconds=S] [--expect-checksum=HEX] [--ai-debug]. --ai-debug shows the
 ## AI debug overlay from the start; F3 toggles it in the window.
 ##
+## Play mode (--play=<species> [--vs=<species>] [--ai=<profile>] [--seed=N], or a spec with
+## "ai": "player"): the battle runs live, one tick per 1/30 s, since a player's choices can't
+## be planned ahead. A camera follows the player's fighter, heavy hits freeze play briefly,
+## a move bar shows keys and cooldowns, and the battle's intents are saved as a replay in
+## recordings/replays/ that tools/record.gd can render. R starts a rematch, Esc quits.
+##
 ## The battle is run headless first so the Director can plan the whole presentation: hit-stop,
 ## slow motion and camera shots. Each video frame then either holds the current tick or
 ## advances the simulation by one. Under Movie Maker every frame is 1/30 s; otherwise frames
@@ -12,15 +18,17 @@ extends Node3D
 ## exits with code 2 if the battle's checksum doesn't match --expect-checksum.
 
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
+const DEFAULT_FOE := "blastoise"
+const REPLAYS_DIR := "res://recordings/replays"
+## Play mode: frames the controls hint stays up, and frames after the knockout before the
+## replay is saved and the rematch hint shows.
+const HINT_FRAMES := 150
+const END_LINGER_FRAMES := 45
 const CHECKSUM_OK := "CHECKSUM_OK"
 ## Printed in clip mode with the window's start and end ticks, for the recorder.
 const CLIP_WINDOW := "CLIP_WINDOW"
 const MODELS_DIR := "res://cache/build/cobblemon/1.8.4/models"
-## The clip each move kind plays on wind-up.
-const ROLE_BY_KIND := {
-	BattleMove.Kind.MELEE: "physical", BattleMove.Kind.PROJECTILE: "special", BattleMove.Kind.SELF_BUFF: "status",
-	BattleMove.Kind.DEBUFF: "status", BattleMove.Kind.HEAL: "status", BattleMove.Kind.STATUS: "status",
-}
+
 const STAT_NAMES := {"atk": "Attack", "def": "Defense", "spa": "Sp. Atk", "spd": "Sp. Def", "spe": "Speed"}
 const STATUS_CALLOUTS := {
 	"brn": "Burned!", "par": "Paralyzed!", "psn": "Poisoned!", "tox": "Badly poisoned!", "slp": "Fell asleep!",
@@ -64,11 +72,19 @@ var _frames_shown := 0
 var _clip_mode := false
 var _expected_checksum := ""
 var _accumulator := 0.0
+## Play mode state.
+var _live := false
+var _player_side := -1
+var _player: PlayerController
+var _player_camera: PlayerCamera
+var _live_frames := 0
+var _end_frames := 0
 
 
 func _ready() -> void:
 	var options := _parse_args(OS.get_cmdline_user_args())
-	var spec: Variant = JSON.parse_string(FileAccess.get_file_as_string(options.spec))
+	var spec: Variant = _play_spec(options) if not options.play.is_empty() \
+		else JSON.parse_string(FileAccess.get_file_as_string(options.spec))
 	if not spec is Dictionary:
 		return _fail("cannot read battle spec %s" % options.spec)
 	var loaded := BattleData.load_all()
@@ -81,7 +97,17 @@ func _ready() -> void:
 	if created.has("error"):
 		return _fail(created.error)
 	battle = created.battle
-	plan = _plan(spec, loaded.data)
+	for side in 2:
+		if controllers.controllers[side] is PlayerController:
+			_player_side = side
+			_player = controllers.controllers[side]
+	_live = _player_side >= 0
+	if _live:
+		PlayerController.ensure_input_actions()
+		battle.record_intents = true
+		_player_camera = PlayerCamera.new()
+	else:
+		plan = _plan(spec, loaded.data)
 	_clip_mode = options.clip_seconds > 0.0
 	_expected_checksum = options.expect_checksum
 
@@ -121,6 +147,15 @@ func _ready() -> void:
 	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height],
 		SimRandom.stream(int(spec.seed), CAMERA_WOBBLE_STREAM))
 
+	if _live:
+		var player := battle.fighters[_player_side]
+		_hud.show_move_bar(player.moves.map(func(m: BattleMove) -> String: return m.name),
+			player.moves.map(func(m: BattleMove) -> String: return m.type), PlayerController.MOVE_KEYS)
+		_hud.show_hint("Move: WASD / stick   Dodge: Space / A   F3: AI scores")
+		_event_index = 0
+		for side in 2:
+			_hud.set_hp(side, 1.0, true)
+		return
 	var start := 0
 	_end_tick = plan.slow.size()
 	if _clip_mode:
@@ -161,6 +196,9 @@ func _plan(spec: Dictionary, data: BattleData) -> Dictionary:
 func _process(delta: float) -> void:
 	if battle == null:
 		return
+	if _live:
+		_player.camera_forward = _player_camera.forward()
+		_player.poll()
 	var frames := 1
 	if not _is_recording():
 		_accumulator += delta
@@ -173,6 +211,9 @@ func _process(delta: float) -> void:
 ## One video frame: hold the current tick, or advance to the next one. After the plan (or
 ## the clip window) ends, the credits card shows for Hud.CREDITS_FRAMES before a clip finishes.
 func _next_frame() -> void:
+	if _live:
+		_next_live_frame()
+		return
 	if _tick >= _end_tick:
 		if _credits_frames == 0:
 			_hud.show_credits()
@@ -211,6 +252,76 @@ func _next_frame() -> void:
 		_overlay.refresh()
 	_fx.set_speed_lines(_segment.get("shot", -1) == Director.Shot.CLOSE_UP)
 	_sync_views()
+
+
+## Play mode: one tick per frame, except while a hit freezes play.
+func _next_live_frame() -> void:
+	_live_frames += 1
+	if battle.is_over():
+		_end_frames += 1
+		if _end_frames == END_LINGER_FRAMES:
+			_save_replay()
+			_hud.show_hint("R: rematch   Esc: quit")
+	elif _hold_frames > 0:
+		_hold_frames -= 1
+		if _hold_frames == 0:
+			for view in _views:
+				view.set_time_scale(1.0)
+	else:
+		var before: Array[Vector2] = [battle.fighters[0].position, battle.fighters[1].position]
+		battle.step()
+		for side in 2:
+			var fighter := battle.fighters[side]
+			_views[side].set_moving(fighter.action == Fighter.Action.READY
+				and fighter.position.distance_to(before[side]) > WALK_THRESHOLD)
+		_play_events()
+	if _live_frames == HINT_FRAMES and not battle.is_over():
+		_hud.show_hint("")
+	for view in _views:
+		view.next_frame()
+	_fx.next_frame()
+	_move_fx.next_frame()
+	_hud.next_frame()
+	_sound.next_frame()
+	if _overlay.visible:
+		_overlay.refresh()
+	for side in 2:
+		var fighter := battle.fighters[side]
+		_views[side].place(fighter.position, fighter.facing)
+		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
+	_hud.update_move_bar(battle.fighters[_player_side])
+	_move_fx.sync_projectiles(battle)
+	_player_camera.apply(_camera, _views[_player_side], _views[1 - _player_side])
+
+
+## Saves the battle as a replay: its spec with every tick's intents per side, so it plays
+## back exactly (and tools/record.gd can render it).
+func _save_replay() -> void:
+	var replay: Dictionary = battle.spec.duplicate(true)
+	for side in 2:
+		replay.fighters[side].erase("ai")
+		replay.fighters[side].intents = battle.intent_log[side]
+	replay.checksum = battle.checksum()
+	var dir := ProjectSettings.globalize_path(REPLAYS_DIR)
+	DirAccess.make_dir_recursive_absolute(dir)
+	if not FileAccess.file_exists(dir.get_base_dir().path_join(".gdignore")):
+		FileAccess.open(dir.get_base_dir().path_join(".gdignore"), FileAccess.WRITE).close()
+	var names := "-vs-".join(battle.fighters.map(func(f: Fighter) -> String: return f.species_id))
+	var path := dir.path_join("%s_%s_%d.json" % [Time.get_datetime_string_from_system().replace(":", "-"), names, int(battle.spec.seed)])
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(replay, "", false, true))
+	file.close()
+	print("replay saved to %s" % path)
+
+
+## The spec for --play: the player's species against --vs, controlled by --ai, with --seed or
+## a seed from the clock.
+static func _play_spec(options: Dictionary) -> Dictionary:
+	var seed: int = options.seed if options.seed >= 0 else int(Time.get_ticks_usec() % 1000000)
+	return {"seed": seed, "fighters": [
+		{"species": options.play, "ai": "player"},
+		{"species": options.vs if not options.vs.is_empty() else DEFAULT_FOE, "ai": options.ai},
+	]}
 
 
 ## Sets how long the tick just shown is held and how fast animations play meanwhile:
@@ -258,7 +369,7 @@ func _play_events() -> void:
 		match event.type:
 			"windup":
 				var move := _move(event.side, event.move)
-				_views[event.side].play_role(ROLE_BY_KIND[move.kind])
+				_views[event.side].play_role(wind_up_role(move))
 				_move_fx.windup(_views[event.side], move)
 				_hit_counts[event.side] = 0
 				_hud.banner(event.side, move.name, move.type)
@@ -273,6 +384,11 @@ func _play_events() -> void:
 				_views[defender].take_hit(_views[event.side].global_position, share,
 					ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
 				_fx.on_hit(event, _views[defender], share, big)
+				if _live:
+					# Hit-stop in play pauses the battle itself, so it stays fair and replays exactly.
+					_hold_frames = Director.HEAVY_HITSTOP_FRAMES if big else Director.HITSTOP_FRAMES
+					for view in _views:
+						view.set_time_scale(0.0)
 				if move.kind == BattleMove.Kind.MELEE:
 					_move_fx.melee(_views[event.side], _views[defender], move)
 				elif _fired_tick[event.side] == int(event.tick):
@@ -354,6 +470,14 @@ func _announce_boost(event: Dictionary) -> void:
 	_fx.announce(_views[event.side], "%s %s!" % [subject, verb], RISE_COLOUR if rising else DROP_COLOUR, 52)
 
 
+## The clip a move plays on wind-up: damaging moves by category (area moves can be either),
+## everything else the status clip.
+static func wind_up_role(move: BattleMove) -> String:
+	if not move.is_damaging():
+		return "status"
+	return "physical" if move.physical else "special"
+
+
 func _move(side: int, move_id: String) -> BattleMove:
 	for move in battle.fighters[side].moves:
 		if move.id == move_id:
@@ -410,9 +534,18 @@ func _hud_bands(size: Vector2) -> Vector2:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).keycode == KEY_F3:
-		_overlay.visible = not _overlay.visible
-		_overlay.refresh()
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	match (event as InputEventKey).keycode:
+		KEY_F3:
+			_overlay.visible = not _overlay.visible
+			_overlay.refresh()
+		KEY_R:
+			if _live and battle.is_over():
+				get_tree().reload_current_scene()
+		KEY_ESCAPE:
+			if _live:
+				get_tree().quit()
 
 
 func _is_recording() -> bool:
@@ -420,10 +553,18 @@ func _is_recording() -> bool:
 
 
 func _parse_args(args: PackedStringArray) -> Dictionary:
-	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": "", "ai_debug": false}
+	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": "", "ai_debug": false,
+		"play": "", "vs": "", "ai": Controllers.DEFAULT_AI, "seed": -1}
 	for arg in args:
 		if arg == "--ai-debug":
 			options.ai_debug = true
+			continue
+		for key in ["play", "vs", "ai"]:
+			if arg.begins_with("--%s=" % key):
+				options[key] = arg.get_slice("=", 1)
+		if arg.begins_with("--seed="):
+			options.seed = arg.get_slice("=", 1).to_int()
+		if arg.begins_with("--play=") or arg.begins_with("--vs=") or arg.begins_with("--ai=") or arg.begins_with("--seed="):
 			continue
 		if arg.begins_with("--clip-seconds="):
 			options.clip_seconds = arg.get_slice("=", 1).to_float()

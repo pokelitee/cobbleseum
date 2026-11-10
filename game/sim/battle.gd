@@ -17,6 +17,10 @@ var projectiles: Array[Dictionary] = []
 ## Events for presentation and highlight picking: {"tick", "type", "side", ...}.
 var events: Array[Dictionary] = []
 var spec: Dictionary
+## With record_intents set (battles with a player), every tick's intents per side, as
+## [move x, move y, use, dodge x, dodge y]; a ReplayController plays them back.
+var record_intents := false
+var intent_log: Array = [[], []]
 
 var _data: BattleData
 var _random: SimRandom
@@ -79,6 +83,22 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 	return {"battle": battle}
 
 
+## An intent in the compact form intent_log stores.
+static func intent_to_log(intent: Dictionary) -> Array:
+	var move: Vector2 = intent.get("move", Vector2.ZERO)
+	var dodge: Vector2 = intent.get("dodge", Vector2.ZERO)
+	return [move.x, move.y, int(intent.get("use", -1)), dodge.x, dodge.y]
+
+
+static func intent_from_log(entry: Array) -> Dictionary:
+	var intent := {"move": Vector2(entry[0], entry[1])}
+	if int(entry[2]) >= 0:
+		intent.use = int(entry[2])
+	if float(entry[3]) != 0.0 or float(entry[4]) != 0.0:
+		intent.dodge = Vector2(entry[3], entry[4])
+	return intent
+
+
 ## The species, moves and type chart the battle runs on.
 func data() -> BattleData:
 	return _data
@@ -97,7 +117,10 @@ func step() -> void:
 		return
 	var intents := []
 	for side in 2:
-		intents.append(_controllers[side].decide(self, side))
+		var intent: Dictionary = _controllers[side].decide(self, side)
+		intents.append(intent)
+		if record_intents:
+			intent_log[side].append(intent_to_log(intent))
 	var order := [0, 1] if tick % 2 == 0 else [1, 0]
 	for side: int in order:
 		_act(fighters[side], fighters[1 - side], intents[side])
