@@ -669,7 +669,7 @@ The camera director picks from a set of shot types based on battle events:
 
 1. Choose a matchup and seed, which gives a battle spec.
 2. Run it headless to get the battle record.
-3. Choose the clip window from the event log: at most 60 seconds, usually ending shortly after the knockout.
+3. Choose the clip window from the event log: at most 60 seconds, usually ending shortly after the knockout. `Highlights` scores events (hits by damage share, plus crits, super-effective hits and comebacks; misses a little; the faint or time-up a lot) and keeps the best-scoring window of the requested length. A window ends either a short linger after a hit or at the end of the plan, and one that reaches the faint always plays the whole knockout.
 4. For each requested format, start a second Godot process under Movie Maker with that format's `override.cfg`. The process:
    - skips ahead to the window's start without drawing;
    - renders the window;

@@ -28,7 +28,7 @@ Run a battle headless (prints the result, length and a checksum per seed):
 godot --headless --path . --script res://tools/battle.gd -- game/data/battles/showcase.json --seeds=10
 ```
 
-Record a battle as video clips (needs a display and ffmpeg; output goes to `recordings/`). The clip ends after the knockout, with hit-stop, slow motion and camera shots planned from the battle's events. `--format` is `vertical` (1080×1920, the default), `landscape` (1920×1080) or `both`; every format shows the same battle:
+Record a battle as video clips (needs a display and ffmpeg; output goes to `recordings/`). The clip is the most exciting stretch of about `--seconds` (usually ending on the knockout), with hit-stop, slow motion and camera shots planned from the battle's events. `--format` is `vertical` (1080×1920, the default), `landscape` (1920×1080) or `both`; every format shows the same battle:
 
 ```bash
 godot --headless --path . --script res://tools/record.gd -- game/data/battles/showcase.json --seconds=10 --format=both
@@ -62,7 +62,7 @@ The design is described in the [concept brief](concepts_brief.md). In short:
 - An asset pipeline (`tools/assets.gd`, `tools/pipeline/`, one build script per source in `tools/sources/`) fetches pinned releases of Showdown's data and Cobblemon's jar, verifies them by SHA-256, extracts and checks them, and builds what the game needs in `cache/`. Cobblemon's Bedrock models and animations become Godot scenes (`tools/convert/`): a skeleton with one rigidly skinned mesh and clips baked at 60 Hz.
 - A deterministic, fixed-tick battle simulation written in plain GDScript (`game/sim/`) runs headless for batch simulation and drives the 3D presentation. Rules constants live in `game/sim/rules.gd`; randomness comes from seeded mulberry32 streams, so a battle replays exactly from its spec.
 - A utility AI controls fighters through the same intents a player uses.
-- The battle view (`game/presentation/`) replays the simulation with the converted models, a portrait camera and HP bars. `tools/record.gd` runs a battle headless to find the knockout, renders the last seconds with Godot's Movie Maker mode in a second Godot process, checks that the rendered battle's checksum matches, and encodes an MP4 with ffmpeg.
+- The battle view (`game/presentation/`) replays the simulation with the converted models, a portrait camera and HP bars. `tools/record.gd` runs a battle headless, picks the clip window from its events, renders it with Godot's Movie Maker mode in a second Godot process, checks that the rendered battle's checksum matches, and encodes an MP4 with ffmpeg.
 
 ## Documentation
 

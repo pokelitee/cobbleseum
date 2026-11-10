@@ -5,9 +5,9 @@ extends SceneTree
 ##
 ## 1. Runs the battle headless to find where it ends and its checksum.
 ## 2. For each format, launches a second Godot with Movie Maker on the battle view. The view
-##    plans the presentation (hit-stop, slow motion, camera shots), starts late enough that
-##    the clip lasts about --seconds and ends after the knockout, and checks the rendered
-##    battle's checksum against the headless one.
+##    plans the presentation (hit-stop, slow motion, camera shots), plays the most exciting
+##    window of about --seconds (see Highlights; usually ending on the knockout), and checks
+##    the rendered battle's checksum against the headless one.
 ## 3. Encodes H.264 MP4 with ffmpeg as clip_<format>.mp4 and writes battle.json and
 ##    credits.txt beside it in recordings/<date>_<a>-vs-<b>_<seed>/.
 
@@ -17,6 +17,9 @@ const SAFETY_FRAMES := 300
 const DEFAULT_FORMAT := "vertical"
 ## Godot reads this file from the project folder at startup (see VideoFormat.override_config).
 const OVERRIDE_FILE := "res://override.cfg"
+
+## The clip window the view reported: {"start": tick, "end": tick}.
+var _window := {}
 const CREDITS := """Pokémon models, textures, animations and sounds: Cobblemon (https://cobblemon.com),
 licensed CC BY-NC 3.0. Non-commercial use only.
 Battle data: Pokémon Showdown (MIT).
@@ -74,7 +77,7 @@ func _initialize() -> void:
 
 	var record := {
 		"spec": spec, "rules_version": Rules.RULES_VERSION, "result": Battle.Result.keys()[battle.result],
-		"end_tick": end_tick, "clip_seconds": seconds, "formats": formats, "checksum": battle.checksum(),
+		"end_tick": end_tick, "clip_seconds": seconds, "clip_window": _window, "formats": formats, "checksum": battle.checksum(),
 		"events": battle.events,
 	}
 	_write(out_dir.path_join("battle.json"), JSON.stringify(record, "  "))
@@ -105,6 +108,10 @@ func _render(spec_path: String, format: String, out_dir: String, seconds: float,
 		DirAccess.remove_absolute(movie)
 		return "rendering %s failed or didn't verify (exit %d):
 %s" % [format, status, log.strip_edges().right(2000)]
+	for line in log.split("
+"):
+		if line.begins_with(BattleView.CLIP_WINDOW + " "):
+			_window = {"start": line.get_slice(" ", 1).to_int(), "end": line.get_slice(" ", 2).to_int()}
 	print("encoding %s..." % clip)
 	output.clear()
 	status = OS.execute("ffmpeg", ["-y", "-loglevel", "error", "-i", movie,
