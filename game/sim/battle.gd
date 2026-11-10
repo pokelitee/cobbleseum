@@ -119,7 +119,15 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			fighter.dodge_recharge_ticks = 0
 	_tick_conditions(fighter)
 	if fighter.is_fainted() or fighter.is_incapacitated():
+		fighter.followups.clear()
 		return
+	for followup in fighter.followups.duplicate():
+		followup.ticks -= 1
+		if followup.ticks <= 0:
+			fighter.followups.erase(followup)
+			_strike(fighter, foe, followup.move)
+			if followup.last:
+				_event("multi_hit_end", fighter.side, {"move": fighter.moves[followup.move].id})
 	var to_foe := foe.position - fighter.position
 	if to_foe.length_squared() > 0.0:
 		fighter.facing = to_foe.normalized()
@@ -202,23 +210,55 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 			_heal(fighter, roundi(fighter.max_hp * move.heal_share), move.id)
 		else:
 			_boost(fighter, move.boosts, move.id)
-	elif move.kind == BattleMove.Kind.MELEE:
-		if _gap(fighter, foe) > Rules.MELEE_REACH:
-			_event("miss", fighter.side, {"move": move.id})
-		elif foe.is_invulnerable():
-			_event("miss", fighter.side, {"move": move.id})
-			_event("dodged", foe.side, {"move": move.id})
-		else:
-			_hit(fighter, foe, move)
 	else:
-		projectiles.append({
-			"owner": fighter.side,
-			"move": fighter.action_move,
-			"position": fighter.position + fighter.facing * fighter.radius,
-			"velocity": fighter.facing * (move.projectile_speed / Rules.TICK_RATE),
-			"travelled": 0.0,
-		})
-		_event("fire", fighter.side, {"move": move.id})
+		var hits := _roll_hits(move)
+		_strike(fighter, foe, fighter.action_move)
+		var interval := Rules.seconds_to_ticks(Rules.MULTI_HIT_INTERVAL)
+		for i in range(1, hits):
+			fighter.followups.append({"ticks": i * interval, "move": fighter.action_move, "last": i == hits - 1})
+		if move.recharges:
+			_event("recharge", fighter.side, {"move": move.id})
+		if move.self_destructs:
+			_hurt(fighter, fighter.hp, "self_destruct", {"move": move.id})
+
+
+## One strike of a damaging move, or the launch of a projectile.
+func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> void:
+	var move := fighter.moves[move_index]
+	match move.kind:
+		BattleMove.Kind.MELEE, BattleMove.Kind.AREA:
+			var reach := Rules.MELEE_REACH if move.kind == BattleMove.Kind.MELEE else Rules.AREA_RADIUS
+			if move.kind == BattleMove.Kind.AREA:
+				_event("blast", fighter.side, {"move": move.id})
+			if _gap(fighter, foe) > reach or foe.is_fainted():
+				_event("miss", fighter.side, {"move": move.id})
+			elif foe.is_invulnerable():
+				_event("miss", fighter.side, {"move": move.id})
+				_event("dodged", foe.side, {"move": move.id})
+			else:
+				_hit(fighter, foe, move)
+		_:
+			projectiles.append({
+				"owner": fighter.side,
+				"move": move_index,
+				"position": fighter.position + fighter.facing * fighter.radius,
+				"velocity": fighter.facing * (move.projectile_speed / Rules.TICK_RATE),
+				"travelled": 0.0,
+			})
+			_event("fire", fighter.side, {"move": move.id})
+
+
+## Hits for one use: fixed, or 2-5 with the main-series weights.
+func _roll_hits(move: BattleMove) -> int:
+	if move.hits_min == move.hits_max:
+		return move.hits_min
+	var roll := _random.next_float()
+	var total := 0.0
+	for i in Rules.MULTI_HIT_WEIGHTS.size():
+		total += Rules.MULTI_HIT_WEIGHTS[i]
+		if roll < total:
+			return mini(move.hits_min + i, move.hits_max)
+	return move.hits_max
 
 
 func _move_projectiles() -> void:
@@ -299,6 +339,8 @@ func _inflict(fighter: Fighter, status: String) -> void:
 			return
 	fighter.status = status
 	fighter.toxic_level = 0
+	if status == "slp" or status == "frz":
+		fighter.followups.clear()
 	match status:
 		"slp":
 			fighter.status_ticks = Rules.seconds_to_ticks(_random.range_float(Rules.SLEEP_MIN_SECONDS, Rules.SLEEP_MAX_SECONDS))
@@ -384,8 +426,10 @@ func _hurt_in_confusion(fighter: Fighter) -> void:
 
 
 ## Main-series damage formula with Cobbleseum's compressed type multipliers (§9.4), using
-## stats after stat stages and burn.
+## stats after stat stages and burn. Fixed-damage moves ignore stats, type and crits.
 static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData, random: SimRandom) -> Dictionary:
+	if move.fixed_damage > 0:
+		return {"damage": move.fixed_damage, "crit": false, "effectiveness": 1.0}
 	var attack := attacker.stat("atk" if move.physical else "spa")
 	var defense := defender.stat("def" if move.physical else "spd")
 	var base := floorf(floorf(floorf(2.0 * Rules.LEVEL / 5.0 + 2.0) * move.power * attack / defense) / 50.0) + 2.0
@@ -415,7 +459,7 @@ func _record_state() -> void:
 	var state := PackedFloat64Array()
 	for fighter in fighters:
 		state.append_array([fighter.position.x, fighter.position.y, fighter.hp, fighter.action, fighter.action_ticks,
-			fighter.dodge_charges, fighter.status_ticks, fighter.confusion_ticks, fighter.stun_ticks,
+			fighter.dodge_charges, fighter.status_ticks, fighter.confusion_ticks, fighter.stun_ticks, fighter.followups.size(),
 			Fighter.STATUS_CODES.find(fighter.status)])
 		for stat in BattleMove.STATS:
 			state.append(fighter.boosts[stat])

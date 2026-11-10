@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 3
+const RULES_VERSION := 4
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -51,6 +51,20 @@ const PROJECTILE_MIN_SPEED := 8.0
 const PROJECTILE_MAX_SPEED := 16.0
 ## Priority moves wind up faster.
 const PRIORITY_WINDUP_FACTOR := 0.5
+## Area moves hit the opponent within this gap of the user when they release.
+const AREA_RADIUS := 3.0
+const AREA_WINDUP := 0.45
+const AREA_RECOVERY := 0.4
+## Multi-hit moves strike this far apart. Moves that hit 2-5 times roll the count with
+## the main-series weights (2 and 3 hits 35% each, 4 and 5 hits 15% each).
+const MULTI_HIT_INTERVAL := 0.12
+const MULTI_HIT_WEIGHTS: Array[float] = [0.35, 0.35, 0.15, 0.15]
+## Fixed-damage moves (Seismic Toss) cool down like a move of this power.
+const FIXED_DAMAGE_POWER := 80
+## Charge moves wind up longer; recharge moves recover longer.
+const CHARGE_EXTRA := 0.9
+const RECHARGE_EXTRA := 1.0
+
 ## Status-category moves (buffs, debuffs, heals, status): timings and a long base cooldown
 ## so they can't be chained.
 const STATUS_MOVE_WINDUP := 0.4

@@ -39,6 +39,8 @@ var toxic_level := 0
 var confusion_ticks := 0
 ## Paralysis stuns.
 var stun_ticks := 0
+## Multi-hit strikes still to come: {"ticks": int, "move": index, "last": bool}.
+var followups: Array[Dictionary] = []
 
 
 static func create(side_index: int, species_id_value: String, species: Dictionary, battle_moves: Array[BattleMove], radius_metres: float) -> Fighter:

@@ -50,6 +50,8 @@ var _portrait := false
 var _event_index := 0
 ## Tick each side last fired a projectile, to spot ranged moves that hit as they fire.
 var _fired_tick: Array[int] = [-1, -1]
+## Hits landed by each side's current move, for "Hit N times!".
+var _hit_counts: Array[int] = [0, 0]
 ## Presentation position: the tick being shown and frames left before it advances.
 var _tick := 0
 var _hold_frames := 0
@@ -245,12 +247,14 @@ func _play_events() -> void:
 				var move := _move(event.side, event.move)
 				_views[event.side].play_role(ROLE_BY_KIND[move.kind])
 				_move_fx.windup(_views[event.side], move)
+				_hit_counts[event.side] = 0
 				_hud.banner(event.side, move.name, move.type)
 				_sound.windup(move)
 			"hit":
 				var defender := 1 - int(event.side)
 				var move := _move(event.side, event.move)
 				var share := float(event.damage) / battle.fighters[defender].max_hp
+				_hit_counts[event.side] += 1
 				_views[defender].play_role("recoil")
 				var big: bool = event.crit or event.effectiveness > 1.0
 				_views[defender].take_hit(_views[event.side].global_position, share,
@@ -271,6 +275,15 @@ func _play_events() -> void:
 				_sound.miss(move)
 			"fire":
 				_fired_tick[event.side] = int(event.tick)
+			"blast":
+				_move_fx.blast(_views[event.side], _move(event.side, event.move))
+			"multi_hit_end":
+				if _hit_counts[event.side] > 1:
+					_fx.announce(_views[1 - int(event.side)], "Hit %d times!" % _hit_counts[event.side], Color(1, 0.95, 0.6), 56)
+			"recharge":
+				_fx.announce(_views[event.side], "Must recharge!", Color(0.85, 0.85, 0.9), 48)
+			"self_destruct":
+				_views[event.side].take_hit(_views[event.side].global_position, 1.0)
 			"landed":
 				var defender := 1 - int(event.side)
 				var move := _move(event.side, event.move)

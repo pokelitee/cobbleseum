@@ -61,7 +61,9 @@ func test_damage_formula() -> void:
 func test_move_kinds_and_unsupported_moves() -> void:
 	assert_eq(BattleMove.from_showdown("kick", MOVES.kick).move.kind, BattleMove.Kind.MELEE)
 	assert_eq(BattleMove.from_showdown("jet", MOVES.jet).move.kind, BattleMove.Kind.PROJECTILE)
-	assert_true(BattleMove.from_showdown("quake", MOVES.quake).error.contains("area"))
+	assert_eq(BattleMove.from_showdown("quake", MOVES.quake).move.kind, BattleMove.Kind.AREA)
+	var field := {"name": "Rain", "category": "Status", "type": "Water", "basePower": 0, "accuracy": true, "pp": 5, "priority": 0, "flags": {}, "target": "all"}
+	assert_true(BattleMove.from_showdown("rain", field).error.contains("not supported"))
 	assert_true(BattleMove.from_showdown("growl", MOVES.growl).error.contains("status"))
 
 
