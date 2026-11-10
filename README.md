@@ -49,6 +49,12 @@ Preview converted models (opens a window; images go to `cache/previews/`):
 godot --path . --script res://tools/preview_model.gd -- 0009_blastoise --clip=physical
 ```
 
+Preview every move style (opens a window; images go to `cache/previews/move_<style>.png`):
+
+```bash
+godot --path . --script res://tools/preview_moves.gd
+```
+
 Check that no third-party assets are tracked:
 
 ```bash

@@ -33,6 +33,8 @@ var _rig: CameraRig
 var _fx: ImpactFX
 var _portrait := false
 var _event_index := 0
+## Tick each side last fired a projectile, to spot ranged moves that hit as they fire.
+var _fired_tick: Array[int] = [-1, -1]
 ## Presentation position: the tick being shown and frames left before it advances.
 var _tick := 0
 var _hold_frames := 0
@@ -76,6 +78,9 @@ func _ready() -> void:
 	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size)
 	_move_fx = MoveFX.new()
 	add_child(_move_fx)
+	for fighter in battle.fighters:
+		for move in fighter.moves:
+			_move_fx.styles[move.id] = MoveStyle.of(move.id, loaded.data.moves[move.id])
 	_sound = BattleSound.new()
 	add_child(_sound)
 	_sound.setup([spec.fighters[0].species, spec.fighters[1].species])
@@ -227,7 +232,9 @@ func _play_events() -> void:
 					ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
 				_fx.on_hit(event, _views[defender], share, big)
 				if move.kind == BattleMove.Kind.MELEE:
-					_move_fx.swipe(_views[event.side], _views[defender], move)
+					_move_fx.melee(_views[event.side], _views[defender], move)
+				elif _fired_tick[event.side] == int(event.tick):
+					_move_fx.point_blank(_views[event.side], _views[defender], move)
 				_move_fx.hit(_views[defender], move, big)
 				_sound.hit(move, big)
 				if big:
@@ -235,8 +242,10 @@ func _play_events() -> void:
 			"miss":
 				var move := _move(event.side, event.move)
 				if move.kind == BattleMove.Kind.MELEE:
-					_move_fx.swipe(_views[event.side], _views[1 - int(event.side)], move)
+					_move_fx.melee(_views[event.side], _views[1 - int(event.side)], move)
 				_sound.miss(move)
+			"fire":
+				_fired_tick[event.side] = int(event.tick)
 			"faint":
 				_views[event.side].play_role("faint")
 				_sound.faint(event.side)

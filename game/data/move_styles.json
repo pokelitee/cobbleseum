@@ -1,0 +1,65 @@
+{
+  "_comment": "Visual style per move, for moves whose Showdown flags don't already say how they look (see MoveStyle). Moves not listed fall back to their flags, then to strike (contact) or orb.",
+  "beam": [
+    "aurorabeam", "bubblebeam", "chargebeam", "dynamaxcannon", "eternabeam", "ficklebeam", "flashcannon",
+    "fleurcannon", "hydrocannon", "hyperbeam", "icebeam", "lightofruin", "lusterpurge", "meteorbeam",
+    "mirrorshot", "moongeistbeam", "photongeyser", "prismaticlaser", "psybeam", "signalbeam", "solarbeam",
+    "steelbeam", "twinbeam", "armorcannon", "blastburn", "frenzyplant", "freezingglare", "dragonenergy",
+    "coreenforcer", "technoblast", "triattack", "snipeshot", "swift"
+  ],
+  "bolt": [
+    "thunderbolt", "thundershock", "shockwave", "risingvoltage", "thunderclap", "paraboliccharge",
+    "electroshot", "fusionbolt", "discharge", "electroweb", "thundercage", "voltswitch"
+  ],
+  "stream": [
+    "flamethrower", "dragonbreath", "frostbreath", "hydropump", "watergun", "firespin", "incinerate",
+    "inferno", "mysticalfire", "scald", "acid", "sludge", "smog", "clearsmog", "steameruption",
+    "hydrosteam", "belch", "powdersnow", "muddywater", "scorchingsands", "sacredfire", "burnup",
+    "overheat", "fierywrath", "chillingwater", "brine", "surf", "whirlpool", "sandtomb", "mudshot",
+    "mudslap", "absorb", "megadrain", "gigadrain", "strangesteam", "magmastorm", "blueflare",
+    "fusionflare", "searingshot", "lavaplume", "ember", "bubble", "flameburst"
+  ],
+  "skyfall": [
+    "dracometeor", "thunder", "rockslide", "iciclecrash", "thousandarrows", "spacialrend", "roaroftime",
+    "judgment", "diamondstorm", "terastarstorm", "makeitrain", "futuresight", "doomdesire", "glaciate",
+    "lastrespects", "triplearrows", "orderup", "attackorder", "astralbarrage", "hyperspacefury",
+    "hyperspacehole", "skyattack", "smackdown", "rocktomb", "rockthrow", "powergem", "ancientpower",
+    "matchagotcha", "dragondarts", "mountaingale", "chloroblast"
+  ],
+  "erupt": [
+    "eruption", "waterspout", "earthpower", "stoneedge", "precipiceblades", "landswrath", "saltcure",
+    "spikecannon", "iciclespear", "pinmissile", "bonerush", "boneclub", "bonemerang", "shadowbone",
+    "glaciallance", "bloodmoon"
+  ],
+  "quake": [
+    "earthquake", "bulldoze", "magnitude", "thousandwaves", "drumbeating"
+  ],
+  "mind": [
+    "confusion", "psychic", "psyshock", "psystrike", "extrasensory", "expandingforce", "dreameater",
+    "storedpower", "psychoboost", "mysticalpower", "synchronoise", "hex", "poltergeist", "infernalparade",
+    "bittermalice", "nightdaze", "seedflare", "luminacrash", "gigatonhammer", "feint", "esperwing", "hiddenpower",
+    "secretpower", "payday", "ragingfury", "venoshock", "barbbarrage", "malignantchain", "spiritshackle",
+    "freezedry", "iceburn", "freezeshock", "burningjealousy", "ominouswind", "silverwind", "dazzlinggleam",
+    "magicalleaf", "leafage", "leafstorm", "leaftornado", "terablast", "flowertrick", "gravapple",
+    "appleacid", "strugglebug", "scaleshot", "poisonsting", "twineedle", "watershuriken", "shellsidearm",
+    "gunkshot", "sludgewave", "oblivionwing", "vacuumwave", "razorwind"
+  ],
+  "explosion": [
+    "explosion", "selfdestruct", "mindblown", "mistyexplosion", "shelltrap"
+  ],
+  "kick": [
+    "highjumpkick", "jumpkick", "doublekick", "megakick", "blazekick", "lowkick", "lowsweep",
+    "triplekick", "tripleaxel", "rollingkick", "stompingtantrum", "tropkick", "axekick", "thunderouskick", "highhorsepower",
+    "stomp"
+  ],
+  "rush": [
+    "tackle", "takedown", "doubleedge", "flareblitz", "wildcharge", "volttackle", "bravebird", "headsmash",
+    "gigaimpact", "quickattack", "extremespeed", "aquajet", "flamecharge", "headlongrush", "bodyslam",
+    "headbutt", "skullbash", "zenheadbutt", "ironhead", "rapidspin", "rollout", "steelroller", "wavecrash",
+    "collisioncourse", "electrodrift", "accelerock", "jetpunch", "aquastep", "flipturn", "uturn",
+    "dragonrush", "megahorn", "hornattack", "smartstrike", "drillrun", "drillpeck", "aerialace",
+    "facade", "return", "frustration", "lastresort", "outrage", "thrash", "petaldance", "superpower",
+    "closecombat", "heavyslam", "heatcrash", "bodypress", "playrough", "hammerarm",
+    "woodhammer", "struggle", "pursuit", "suckerpunch", "fakeout", "nuzzle", "spark"
+  ]
+}
