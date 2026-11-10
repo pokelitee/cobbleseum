@@ -117,6 +117,9 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 		if fighter.dodge_recharge_ticks >= fighter.dodge_recharge_total:
 			fighter.dodge_charges += 1
 			fighter.dodge_recharge_ticks = 0
+	_tick_conditions(fighter)
+	if fighter.is_fainted() or fighter.is_incapacitated():
+		return
 	var to_foe := foe.position - fighter.position
 	if to_foe.length_squared() > 0.0:
 		fighter.facing = to_foe.normalized()
@@ -151,6 +154,9 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 				_event("dodge", fighter.side, {"direction": [dodge.normalized().x, dodge.normalized().y]})
 			elif fighter.move_ready(use) and _gap(fighter, foe) <= fighter.moves[use].reach():
 				var move := fighter.moves[use]
+				if fighter.confusion_ticks > 0 and _random.chance(Rules.CONFUSION_CHANCE):
+					_hurt_in_confusion(fighter)
+					return
 				fighter.action = Fighter.Action.WINDUP
 				fighter.action_ticks = move.windup_ticks
 				fighter.action_move = use
@@ -168,7 +174,7 @@ static func _gap(fighter: Fighter, foe: Fighter) -> float:
 func _walk(fighter: Fighter, foe: Fighter, direction: Vector2) -> void:
 	if direction.length_squared() > 1.0:
 		direction = direction.normalized()
-	_slide(fighter, foe, direction * (fighter.move_speed / Rules.TICK_RATE))
+	_slide(fighter, foe, direction * (fighter.current_move_speed() / Rules.TICK_RATE))
 
 
 ## Moves a fighter by `delta`, kept inside the arena wall and outside the foe's hitbox
@@ -191,7 +197,12 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 	var move := fighter.moves[fighter.action_move]
 	fighter.action = Fighter.Action.RECOVERY
 	fighter.action_ticks = move.recovery_ticks
-	if move.kind == BattleMove.Kind.MELEE:
+	if move.is_self():
+		if move.kind == BattleMove.Kind.HEAL:
+			_heal(fighter, roundi(fighter.max_hp * move.heal_share), move.id)
+		else:
+			_boost(fighter, move.boosts, move.id)
+	elif move.kind == BattleMove.Kind.MELEE:
 		if _gap(fighter, foe) > Rules.MELEE_REACH:
 			_event("miss", fighter.side, {"move": move.id})
 		elif foe.is_invulnerable():
@@ -221,7 +232,10 @@ func _move_projectiles() -> void:
 		var move := owner.moves[projectile.move]
 		if closest.distance_to(target.position) <= target.radius + Rules.PROJECTILE_RADIUS and not target.is_fainted():
 			if not target.is_invulnerable():
-				_hit(owner, target, move)
+				if move.is_damaging():
+					_hit(owner, target, move)
+				else:
+					_land(owner, target, move)
 				continue
 			if not projectile.get("dodged", false):
 				projectile.dodged = true  # it flies on through the dodging fighter
@@ -237,17 +251,143 @@ func _move_projectiles() -> void:
 
 func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	var outcome := damage(attacker, defender, move, _data, _random)
-	defender.hp = maxi(0, defender.hp - outcome.damage)
+	var dealt := mini(outcome.damage, defender.hp)
+	defender.hp -= dealt
 	_event("hit", attacker.side, {"move": move.id, "damage": outcome.damage, "crit": outcome.crit,
 		"effectiveness": outcome.effectiveness, "hp": defender.hp})
 	if defender.is_fainted():
 		_event("faint", defender.side, {})
+	else:
+		if defender.status == "slp" or (defender.status == "frz" and move.type == "Fire"):
+			_end_status(defender)
+		for effect in move.secondaries:
+			if _random.chance(effect.chance / 100.0):
+				_apply_effect(attacker, defender, effect, move.id)
+	if move.drain_share > 0.0 and not attacker.is_fainted():
+		_heal(attacker, maxi(1, roundi(dealt * move.drain_share)), move.id)
+	if move.recoil_share > 0.0:
+		var recoil := maxi(1, roundi(dealt * move.recoil_share))
+		_hurt(attacker, recoil, "recoil", {"move": move.id})
+	if not move.self_boosts.is_empty() and not attacker.is_fainted():
+		_boost(attacker, move.self_boosts, move.id)
 
 
-## Main-series damage formula with Cobbleseum's compressed type multipliers (§9.4).
+## A debuff or status projectile reaching its target.
+func _land(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
+	_event("landed", attacker.side, {"move": move.id})
+	_apply_effect(attacker, defender, {"boosts": move.boosts, "status": move.status, "confuses": move.confuses}, move.id)
+
+
+func _apply_effect(attacker: Fighter, defender: Fighter, effect: Dictionary, move_id: String) -> void:
+	if not str(effect.get("status", "")).is_empty():
+		_inflict(defender, effect.status)
+	if effect.get("confuses", false) and defender.confusion_ticks == 0:
+		defender.confusion_ticks = Rules.seconds_to_ticks(Rules.CONFUSION_SECONDS)
+		_event("status", defender.side, {"status": "confusion"})
+	if not effect.get("boosts", {}).is_empty():
+		_boost(defender, effect.boosts, move_id)
+	if not effect.get("self_boosts", {}).is_empty():
+		_boost(attacker, effect.self_boosts, move_id)
+
+
+## Gives a major status unless the fighter already has one or its type is immune.
+func _inflict(fighter: Fighter, status: String) -> void:
+	if not fighter.status.is_empty() or fighter.is_fainted():
+		return
+	for type: String in Rules.STATUS_IMMUNITIES.get(status, []):
+		if type in fighter.types:
+			return
+	fighter.status = status
+	fighter.toxic_level = 0
+	match status:
+		"slp":
+			fighter.status_ticks = Rules.seconds_to_ticks(_random.range_float(Rules.SLEEP_MIN_SECONDS, Rules.SLEEP_MAX_SECONDS))
+		"frz":
+			fighter.status_ticks = Rules.seconds_to_ticks(Rules.FREEZE_SECONDS)
+		_:
+			fighter.status_ticks = Rules.seconds_to_ticks(Rules.STATUS_SECONDS)
+	_event("status", fighter.side, {"status": status})
+
+
+func _end_status(fighter: Fighter) -> void:
+	_event("status_end", fighter.side, {"status": fighter.status})
+	fighter.status = ""
+	fighter.status_ticks = 0
+
+
+## Changes stat stages within +-6 and reports the changes that took effect.
+func _boost(fighter: Fighter, changes: Dictionary, move_id: String) -> void:
+	var applied := {}
+	for stat: String in changes:
+		var before: int = fighter.boosts[stat]
+		fighter.boosts[stat] = clampi(before + int(changes[stat]), -Rules.MAX_STAGE, Rules.MAX_STAGE)
+		if fighter.boosts[stat] != before:
+			applied[stat] = fighter.boosts[stat] - before
+	if not applied.is_empty():
+		_event("boost", fighter.side, {"boosts": applied, "move": move_id})
+
+
+func _heal(fighter: Fighter, amount: int, move_id: String) -> void:
+	var healed := mini(amount, fighter.max_hp - fighter.hp)
+	if healed > 0:
+		fighter.hp += healed
+		_event("heal", fighter.side, {"amount": healed, "hp": fighter.hp, "move": move_id})
+
+
+## Takes HP outside a hit (status damage, recoil, confusion), reporting it as `type`.
+func _hurt(fighter: Fighter, amount: int, type: String, details: Dictionary) -> void:
+	if fighter.is_fainted():
+		return
+	fighter.hp = maxi(0, fighter.hp - amount)
+	details.merge({"damage": amount, "hp": fighter.hp})
+	_event(type, fighter.side, details)
+	if fighter.is_fainted():
+		_event("faint", fighter.side, {})
+
+
+## Status timers, damage over time and paralysis stuns, once per tick before acting.
+func _tick_conditions(fighter: Fighter) -> void:
+	if fighter.stun_ticks > 0:
+		fighter.stun_ticks -= 1
+	if fighter.confusion_ticks > 0:
+		fighter.confusion_ticks -= 1
+		if fighter.confusion_ticks == 0:
+			_event("status_end", fighter.side, {"status": "confusion"})
+	if fighter.status.is_empty():
+		return
+	fighter.status_ticks -= 1
+	if fighter.status_ticks % Rules.TICK_RATE == 0:
+		match fighter.status:
+			"brn":
+				_hurt(fighter, maxi(1, roundi(fighter.max_hp * Rules.BURN_DAMAGE)), "status_damage", {"status": "brn"})
+			"psn":
+				_hurt(fighter, maxi(1, roundi(fighter.max_hp * Rules.POISON_DAMAGE)), "status_damage", {"status": "psn"})
+			"tox":
+				fighter.toxic_level += 1
+				_hurt(fighter, maxi(1, roundi(fighter.max_hp * Rules.TOXIC_STEP * fighter.toxic_level)), "status_damage", {"status": "tox"})
+			"par":
+				if _random.chance(Rules.PARALYSIS_STUN_CHANCE):
+					fighter.stun_ticks = Rules.seconds_to_ticks(Rules.PARALYSIS_STUN_SECONDS)
+					_event("stunned", fighter.side, {})
+	if fighter.status_ticks <= 0 and not fighter.is_fainted():
+		_end_status(fighter)
+
+
+## A confused fighter sometimes hits itself instead of using its move (§9.5).
+func _hurt_in_confusion(fighter: Fighter) -> void:
+	var attack := fighter.stat("atk")
+	var defense := fighter.stat("def")
+	var base := floorf(floorf(floorf(2.0 * Rules.LEVEL / 5.0 + 2.0) * Rules.CONFUSION_POWER * attack / defense) / 50.0) + 2.0
+	_hurt(fighter, maxi(1, floori(base * _random.range_float(Rules.ROLL_MIN, Rules.ROLL_MAX))), "confusion_hit", {})
+	fighter.action = Fighter.Action.RECOVERY
+	fighter.action_ticks = Rules.seconds_to_ticks(Rules.CONFUSION_RECOVERY)
+
+
+## Main-series damage formula with Cobbleseum's compressed type multipliers (§9.4), using
+## stats after stat stages and burn.
 static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData, random: SimRandom) -> Dictionary:
-	var attack: int = attacker.stats.atk if move.physical else attacker.stats.spa
-	var defense: int = defender.stats.def if move.physical else defender.stats.spd
+	var attack := attacker.stat("atk" if move.physical else "spa")
+	var defense := defender.stat("def" if move.physical else "spd")
 	var base := floorf(floorf(floorf(2.0 * Rules.LEVEL / 5.0 + 2.0) * move.power * attack / defense) / 50.0) + 2.0
 	var stab := Rules.STAB if move.type in attacker.types else 1.0
 	var effectiveness := Rules.compressed_effectiveness(data.effectiveness(move.type, defender.types))
@@ -275,7 +415,10 @@ func _record_state() -> void:
 	var state := PackedFloat64Array()
 	for fighter in fighters:
 		state.append_array([fighter.position.x, fighter.position.y, fighter.hp, fighter.action, fighter.action_ticks,
-			fighter.dodge_charges])
+			fighter.dodge_charges, fighter.status_ticks, fighter.confusion_ticks, fighter.stun_ticks,
+			Fighter.STATUS_CODES.find(fighter.status)])
+		for stat in BattleMove.STATS:
+			state.append(fighter.boosts[stat])
 	for projectile in projectiles:
 		state.append_array([projectile.position.x, projectile.position.y])
 	_hash.update(state.to_byte_array())

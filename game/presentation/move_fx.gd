@@ -28,6 +28,7 @@ const SKY_HEIGHT := 7.0
 const EMIT_EVERY := 2
 const BOLT_SEGMENTS := 9
 const POWDER_MOTES := 12
+const AURA_FRAMES := 20
 ## Melee effects are at least this big, so small targets still show them.
 const MIN_MELEE_SIZE := 1.4
 ## How far flat effects sit in front of the target, toward the camera, as a share of their size.
@@ -165,6 +166,18 @@ func point_blank(attacker: FighterView, target: FighterView, move: BattleMove) -
 			_cloud(from.lerp(to, 0.5), colour, 0.45)
 
 
+## Rings drifting up a fighter (stat rise, heal) or down it (stat drop).
+func aura(view: FighterView, colour: Color, rising: bool) -> void:
+	for i in 3:
+		var ring := _mesh(_torus(0.85, 1.0), Color.WHITE.lerp(colour, 0.6), 0.8)
+		ring.scale = Vector3.ONE * maxf(view.height, 1.0) * 0.45
+		add_child(ring)
+		var low := view.position + Vector3.UP * view.height * 0.1
+		var high := view.position + Vector3.UP * view.height * 1.0
+		_effects.append({"node": ring, "age": -i * 4, "frames": AURA_FRAMES, "kind": "drift",
+			"from": low if rising else high, "to": high if rising else low})
+
+
 ## A dodge: speed lines streaming behind the fighter and a puff of dust.
 func dodge(view: FighterView, direction: Vector2) -> void:
 	_rush(view, Vector3(direction.x, 0, direction.y), Color(0.85, 0.95, 1.0))
@@ -239,6 +252,10 @@ func next_frame() -> void:
 				_fade_all(node, 1.0 - t)
 			"drop":
 				node.position = effect.origin + Vector3.UP * SKY_HEIGHT * (1.0 - t)
+			"drift":
+				var d := clampf(t, 0.0, 1.0)
+				node.position = (effect.from as Vector3).lerp(effect.to, d)
+				_fade(node, 0.0 if t < 0.0 else 1.0 - d)
 		if effect.age >= effect.frames:
 			node.queue_free()
 			_effects.erase(effect)

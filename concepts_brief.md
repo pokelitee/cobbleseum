@@ -471,18 +471,22 @@ Full ×4 hits would end real-time fights instantly, and immunities would make so
 
 ### 9.5 Stat changes and status conditions
 
-- **Stat stages** use the main-series multipliers. Whether they wear off after a set time is an open question (§19).
+- **Stat stages** use the main-series multipliers, from −6 to +6, and last the whole battle for now. Whether they should wear off after a set time is still an open question (§19).
 - **Status conditions:**
 
   | Status | Effect |
   |---|---|
-  | Burn | Damage over time; halves physical damage dealt |
-  | Poison | Damage over time |
-  | Bad poison | Rising damage over time |
-  | Paralysis | Halves movement speed; occasional brief stuns |
-  | Sleep | Can't act until hit or until it times out |
-  | Freeze | A short stun |
-  | Confusion | Time-limited; occasional self-hits |
+  | Burn | 12 s; 1/80 of max HP per second; halves physical damage dealt |
+  | Poison | 12 s; 1/64 of max HP per second |
+  | Bad poison | 12 s; 1/320 of max HP times a level that rises every second |
+  | Paralysis | 12 s; halves movement speed; a 25% chance each second of a 0.5 s stun |
+  | Sleep | 1.5–3 s, or until hit; can't act |
+  | Freeze | 1.5 s, or until hit by a Fire move; can't act |
+  | Confusion | 6 s; each move has a 1-in-3 chance of becoming a 40-power self-hit |
+
+  A fighter has at most one major status, plus confusion. Fire, Electric, Poison and Steel, and Ice types are immune to burn, paralysis, poison and freeze respectively. All values are starting points for tuning.
+- **Effects from the data:** drain, recoil, the user's own stat changes (Close Combat, Draco Meteor) and secondary effects (a chance of a status, confusion or stat changes on hit) all come from Showdown's move data. Flinching isn't modelled.
+- **Status-category moves:** self-buffs and heals apply on release; debuffs and status moves fly as projectiles. They wind up and recover in 0.4 s and have a 6 s base cooldown, so they can't be chained. Moves whose real effect lives in Showdown's code (Clangorous Soul, Fillet Away, Geomancy, Memento, Captivate) are left out, and four heals that Showdown computes in code (Morning Sun, Synthesis, Moonlight, Shore Up) get their amounts from a small override table. For the 850 standard moves this gives 26 self-buffs, 18 debuffs, 17 status moves and 10 heals.
 
 ### 9.6 Movesets
 
@@ -776,7 +780,7 @@ So far M1 has been tested on Windows only. macOS and Linux get checked before M2
 
 **M2: rules and roster.**
 
-- All supported move kinds, stat changes, status conditions and dodging. Movement, melee dashes and dodging are done; the stand-in AI dodges about half the threats it sees while it can act, keeps a range suited to its ready moves, and circles.
+- All supported move kinds, stat changes, status conditions and dodging. Movement, melee dashes, dodging, stat stages, status conditions, and the self-buff, debuff, heal and status kinds are done; the stand-in AI dodges about half the threats it sees while it can act, keeps a range suited to its ready moves, and circles.
 - The moveset generator.
 - Full roster conversion with per-species caching, a QA report and the roster file. Done; the 73 `bounds_mismatch` species still need a converter QA pass.
 - The procedural animation layer.

@@ -5,6 +5,8 @@ extends RefCounted
 enum Action { READY, WINDUP, RECOVERY, DODGE }
 
 const DEFAULT_RADIUS := 0.5
+## Major statuses, indexed for the battle checksum.
+const STATUS_CODES: Array[String] = ["", "brn", "par", "psn", "tox", "slp", "frz"]
 
 var side: int
 var species_id: String
@@ -27,6 +29,16 @@ var dodge_recharge_ticks := 0
 var dodge_recharge_total := 0
 ## Per-tick dash while dodging.
 var dodge_step := Vector2.ZERO
+## Stat stages, -6 to +6.
+var boosts := {"atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
+## Major status condition ("brn", "par", "psn", "tox", "slp", "frz") or "", with ticks left.
+var status := ""
+var status_ticks := 0
+## Bad poison's rising level.
+var toxic_level := 0
+var confusion_ticks := 0
+## Paralysis stuns.
+var stun_ticks := 0
 
 
 static func create(side_index: int, species_id_value: String, species: Dictionary, battle_moves: Array[BattleMove], radius_metres: float) -> Fighter:
@@ -55,7 +67,26 @@ func is_fainted() -> bool:
 
 
 func can_act() -> bool:
-	return action == Action.READY and not is_fainted()
+	return action == Action.READY and not is_fainted() and not is_incapacitated()
+
+
+## A stat after stat stages (and burn for Attack).
+func stat(name: String) -> float:
+	var value: float = stats[name] * Rules.stage_multiplier(boosts[name])
+	if name == "atk" and status == "brn":
+		value *= Rules.BURN_ATTACK_FACTOR
+	return value
+
+
+## Walking speed after Speed stages and paralysis.
+func current_move_speed() -> float:
+	var speed := move_speed * Rules.stage_multiplier(boosts.spe)
+	return speed * (Rules.PARALYSIS_SPEED_FACTOR if status == "par" else 1.0)
+
+
+## Asleep, frozen or stunned: can't act or move.
+func is_incapacitated() -> bool:
+	return status == "slp" or status == "frz" or stun_ticks > 0
 
 
 ## While dodging a fighter can't be hit.
