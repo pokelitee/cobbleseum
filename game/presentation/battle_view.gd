@@ -89,6 +89,7 @@ func _ready() -> void:
 		if view == null:
 			return _fail("cannot load the model %s; run tools/assets.gd" % entry.model)
 		add_child(view)
+		view.set_hovering("Flying" in battle.fighters[side].types)
 		_views.append(view)
 	_hud = Hud.new()
 	add_child(_hud)

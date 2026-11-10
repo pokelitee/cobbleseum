@@ -1,7 +1,8 @@
 class_name FighterView
 extends Node3D
 ## Shows one fighter: its converted model at the roster's scale, facing and position from
-## the simulation, and clips chosen by role (concepts_brief.md §7.4, §8).
+## the simulation, and clips chosen by role (concepts_brief.md §7.4, §8). Roles the species
+## has no clip for fall back to ProceduralMotion, applied to a node above the model.
 
 const CROSSFADE := 0.15
 ## Hit flash: frames it lasts and its peak strength.
@@ -28,6 +29,11 @@ var _base_role := "idle"
 var _one_off := false
 var _moving := false
 var _asleep := false
+var _time_scale := 1.0
+var _motion: ProceduralMotion
+var _motion_root: Node3D
+## Procedural stand-ins for one-off roles the species has no clip for.
+const PROCEDURAL_ROLES := {"physical": "lunge", "special": "rear", "status": "spin", "recoil": "tilt"}
 
 
 ## Instances a converted species scene from the cache at the roster's scale and height.
@@ -38,7 +44,10 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 		return null
 	var view := FighterView.new()
 	var model: Node3D = scene.instantiate()
-	view.add_child(model)
+	view._motion_root = Node3D.new()
+	view.add_child(view._motion_root)
+	view._motion_root.add_child(model)
+	view._motion = ProceduralMotion.new(model_height, false)
 	view._player = model.get_node("AnimationPlayer")
 	view._clips = model.get_meta("clips", {})
 	var mesh: MeshInstance3D = model.get_node("Skeleton/Mesh")
@@ -52,6 +61,11 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 	view._player.animation_finished.connect(view._on_clip_finished)
 	view.play_idle()
 	return view
+
+
+## Flying types hover above the ground (§9.2).
+func set_hovering(hovering: bool) -> void:
+	_motion.hovers = hovering
 
 
 ## Moves the view to a simulation position (x, z on the floor) facing a direction, plus any
@@ -86,10 +100,13 @@ func next_frame() -> void:
 		_mesh.material_overlay = _flash_material if _flash_frames > 0 else null
 	if _knockback_frames > 0:
 		_knockback_frames -= 1
+	_motion.next_frame(_time_scale)
+	_motion_root.transform = _motion.transform()
 
 
 ## Animation speed relative to normal: 0 freezes (hit-stop), below 1 is slow motion.
 func set_time_scale(scale: float) -> void:
+	_time_scale = scale
 	_player.speed_scale = scale
 
 
@@ -101,12 +118,14 @@ func play_idle() -> void:
 ## Switches the looping clip between walking and idling; one-off clips play out first.
 func set_moving(moving: bool) -> void:
 	_moving = moving
+	_motion.moving = moving and not _clips.has("walk")
 	_update_base()
 
 
 ## Asleep fighters loop their sleep clip, when the species has one.
 func set_asleep(asleep: bool) -> void:
 	_asleep = asleep
+	_motion.asleep = asleep and not _clips.has("sleep")
 	_update_base()
 
 
@@ -123,18 +142,20 @@ func _update_base() -> void:
 		play_idle()
 
 
-## Plays a one-off clip for a role (physical, special, recoil, faint); falls back silently
-## when the species has no clip for it.
+## Plays a one-off clip for a role (physical, special, status, recoil, faint), or its
+## procedural stand-in when the species has no clip for it.
 func play_role(role: String) -> void:
 	if _fainted:
 		return
 	if role == "faint":
 		_fainted = true
 		if not _play("faint", false):
-			_player.stop()
-			create_tween().tween_property(self, "rotation:z", deg_to_rad(80), 0.5)
+			_player.pause()
+			_motion.faint()
 		return
 	_one_off = _play(role, false)
+	if not _one_off and PROCEDURAL_ROLES.has(role):
+		_motion.start(PROCEDURAL_ROLES[role])
 
 
 func _play(role: String, looping: bool) -> bool:

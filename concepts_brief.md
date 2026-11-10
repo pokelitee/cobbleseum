@@ -348,6 +348,16 @@ Animations play in three layers:
 - a tilt and knockback for hits;
 - a tip-over and fade for fainting.
 
+Implemented in `game/presentation/procedural_motion.gd`, as a transform on a node between the fighter and its model, so it stacks with clips, knockback and the hit flash. It fills in only the roles a species has no clip for:
+
+- a hop while walking (408 entries have no walk clip);
+- a lunge for physical moves, a rear-back with squash and stretch for special moves, and a spin for status moves;
+- a backward tilt for hits;
+- slow breathing while asleep;
+- tipping over and sinking for fainting, instead of fading.
+
+Flying types hover and bob throughout. The layer advances per video frame at the clips' speed, so it freezes in hit-stop and slows in slow motion.
+
 ### 7.5 Quality checks
 
 A QA pass over every roster species reports:
@@ -802,7 +812,7 @@ So far M1 has been tested on Windows only. macOS and Linux get checked before M2
 - All supported move kinds, stat changes, status conditions and dodging. Movement, melee dashes, dodging, stat stages, status conditions and every move kind are done; the stand-in AI dodges about half the threats it sees while it can act, keeps a range suited to its ready moves, and circles.
 - The moveset generator. Done.
 - Full roster conversion with per-species caching, a QA report and the roster file. Done; the 73 `bounds_mismatch` species still need a converter QA pass.
-- The procedural animation layer.
+- The procedural animation layer. Done.
 - Batch simulation with a balance report, and a first tuning pass.
 
 **M3: presentation** (everything in §12.2–§12.5):
