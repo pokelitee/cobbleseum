@@ -25,6 +25,16 @@ const STATUSES: Array[String] = ["brn", "par", "psn", "tox", "slp", "frz"]
 ## Status moves whose real behaviour lives in Showdown's code (an HP cost, a charge turn,
 ## fainting the user, a gender check), so their data alone would play wrong.
 const EXCLUDED: Array[String] = ["clangoroussoul", "filletaway", "geomancy", "memento", "captivate"]
+## Damaging moves whose condition or cost lives in Showdown's code, so they'd play as free
+## strong hits: Focus Punch fails if the user is hit, Last Resort needs its other moves used
+## first, Future Sight and Doom Desire land later, Dream Eater needs a sleeping target,
+## Synchronoise a shared type, Belch a berry; Steel Beam and Mind Blown cost half the user's
+## HP; Shell Trap and Beak Blast need the user hit first; Water Spout, Eruption and Dragon
+## Energy lose power as the user's HP falls; Steel Roller needs a terrain and Poltergeist a
+## held item.
+const DAMAGING_EXCLUDED: Array[String] = ["focuspunch", "lastresort", "futuresight", "doomdesire", "dreameater",
+	"synchronoise", "belch", "steelbeam", "mindblown", "shelltrap", "beakblast", "waterspout", "eruption",
+	"dragonenergy", "steelroller", "poltergeist"]
 ## Heal amounts Showdown computes in code, as [numerator, denominator] of max HP.
 const HEAL_OVERRIDES := {"morningsun": [1, 2], "synthesis": [1, 2], "moonlight": [1, 2], "shoreup": [1, 2]}
 
@@ -87,6 +97,8 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		move.projectile_speed = Rules.projectile_speed(data.get("accuracy", 100))
 		return {"move": move}
 
+	if id in DAMAGING_EXCLUDED:
+		return {"error": "%s needs move-specific code, not supported yet" % id}
 	var fixed: Variant = data.get("damage")
 	if fixed is String and fixed == "level":
 		move.fixed_damage = Rules.LEVEL

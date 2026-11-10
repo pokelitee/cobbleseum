@@ -10,13 +10,25 @@ const ROSTER_FILE := "res://cache/build/cobblemon/1.8.4/roster.json"
 var species: Dictionary
 var moves: Dictionary
 var type_chart: Dictionary
+## Showdown ID -> {"learnset": {move id: [sources]}}, for the moveset generator.
+var learnsets: Dictionary
 var roster: Dictionary = {}
 
 
-func _init(species_table: Dictionary, move_table: Dictionary, type_table: Dictionary) -> void:
+func _init(species_table: Dictionary, move_table: Dictionary, type_table: Dictionary, learnset_table: Dictionary = {}) -> void:
 	species = species_table
 	moves = move_table
 	type_chart = type_table
+	learnsets = learnset_table
+
+
+## A Showdown ID from a name: "Mr. Mime" -> "mrmime".
+static func to_id(name: String) -> String:
+	var id := ""
+	for c in name.to_lower():
+		if (c >= "a" and c <= "z") or (c >= "0" and c <= "9"):
+			id += c
+	return id
 
 
 ## Loads the Showdown data and the roster. Returns {"data": BattleData} or {"error": String}.
@@ -35,13 +47,13 @@ static func load_all() -> Dictionary:
 ## Loads the exported Showdown data. Returns {"data": BattleData} or {"error": String}.
 static func load_showdown(dir := SHOWDOWN_DIR) -> Dictionary:
 	var tables := {}
-	for name in ["pokedex", "moves", "typechart"]:
+	for name in ["pokedex", "moves", "typechart", "learnsets"]:
 		var path := ProjectSettings.globalize_path(dir.path_join(name + ".json"))
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path)) if FileAccess.file_exists(path) else null
 		if not parsed is Dictionary:
 			return {"error": "%s is missing or invalid; run the asset pipeline first (tools/assets.gd)" % path}
 		tables[name] = parsed
-	return {"data": BattleData.new(tables.pokedex, tables.moves, tables.typechart)}
+	return {"data": BattleData.new(tables.pokedex, tables.moves, tables.typechart, tables.learnsets)}
 
 
 ## Main-series effectiveness of an attacking type against a defender's types (0 to 4).
