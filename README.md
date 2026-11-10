@@ -52,6 +52,12 @@ Record a battle as video clips (needs a display and ffmpeg; output goes to `reco
 godot --headless --path . --script res://tools/record.gd -- game/data/battles/showcase.json --seconds=10 --format=both
 ```
 
+Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves; gamepad: left stick, A to dodge, X Y B RB for moves). R starts a rematch and Esc quits. Each battle's replay is saved to `recordings/replays/`, and `tools/record.gd` can render one like any spec:
+
+```bash
+godot --path . -- --play=cinderace --vs=blastoise --ai=normal
+```
+
 Watch the showcase battle in a window: `godot --path .` Press F3 to show the AI debug overlay (each side's candidate actions and their scores); `godot --path . -- --ai-debug` starts with it on, and `tools/record.gd -- <spec> --ai-debug` records it.
 
 Run the tests:
