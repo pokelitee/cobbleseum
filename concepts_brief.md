@@ -9,7 +9,7 @@ Cobbleseum is a local-first 3D Pokémon battle game built with Godot 4.
 - **Battles:** two Pokémon fight in real time in a small arena. They are rendered with the models, textures and animations of the Cobblemon mod.
 - **Modes:** player-vs-AI and AI-vs-AI.
 - **Clips:** AI-vs-AI battles can be recorded as video clips: vertical 1080×1920 for short-form posts, or landscape 1920×1080, from the same battle.
-- **Rankings:** later, many battles can be simulated to keep a local ranking of every Pokémon.
+- **Rankings:** many battles are simulated to keep a local ranking of every Pokémon.
 
 Everything runs on the user's machine. The repository contains only original code and data. A pipeline then:
 
@@ -41,7 +41,7 @@ Goals, in priority order:
 1. Watchable real-time 3D battles between two Pokémon, AI-vs-AI and player-vs-AI.
 2. An asset pipeline that fetches, verifies, extracts and converts assets on demand.
 3. Recording AI-vs-AI battles as clips with Godot's Movie Maker mode, so the output doesn't depend on rendering speed: vertical 1080×1920 for short-form posts, and landscape 1920×1080.
-4. Later: simulating many battles and keeping a local ranking per Pokémon.
+4. Simulating many battles and keeping a local ranking per Pokémon.
 
 Non-goals:
 
@@ -771,7 +771,7 @@ The camera director picks from a set of shot types based on battle events:
    - `battle.json`;
    - `credits.txt`.
 
-## 13. Ranking (later)
+## 13. Ranking
 
 - **Storage:** raw battle records go into an append-only JSON Lines store under `results/`, which is git-ignored. Ratings are always derived from the records, never stored on their own.
 - **What a rating means:**
@@ -790,6 +790,21 @@ The camera director picks from a set of shot types based on battle events:
   - If a full round-robin is too slow, pairings are sampled adaptively, with more games where ratings are uncertain.
   - Headless processes run in parallel.
 - **Balance tool:** the same machinery tunes the rules (§9.7).
+
+**Implementation (M5)** in `tools/ranking/ranking.gd` (the maths) and `tools/rank.gd` (the command line).
+
+- **Store:** one JSON Lines file per run and shard in `results/rank/v<rules>/<profile>/`. Each line is one battle: `{a, b, seed, result, ticks, rules, profile}`. Runs resume by skipping battles already stored.
+- **Schedule:** a sampled round robin. Every species meets 20 random others (more in practice, as others pick it too), every pairing from both sides with one seed derived from the pair and the schedule seed.
+- **Fit:**
+  - Bradley–Terry by the MM algorithm, with one virtual draw per species against an average opponent, so an unbeaten species still gets a finite rating.
+  - Ratings use an Elo-like scale: 400 points is 10:1 odds, and the mean is 1500.
+- **Matchup matrix:** a full round robin among the top 24 species, 5 seeds per pairing, each played from both sides (10 games per cell).
+- **Report:** `ranking.json` and `ranking.md` with ratings, games, scores and the matrix.
+- **AI-sensitivity check:** `compare` ranks the species two profiles both played and prints the Spearman rank correlation.
+- **Pilot** (60 species, 10 opponents each, 1,200 battles in 38 s on 11 processes, about 32 battles a second):
+  - The ranked and hard profiles agree closely (Spearman 0.971), so species, not the AI, drive results.
+  - Mirrored pairings don't show a side bias: the same side won both games in 37 of 600.
+  - A full run of every species with 20 opponents is about 40,000 battles, roughly 20 minutes on 11 processes.
 
 ## 14. Licensing and attribution
 
@@ -882,9 +897,8 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 
 **M5: rankings.**
 
-- The results store.
-- The Bradley–Terry fit, matchup matrix and ranking report.
-- The AI-sensitivity check.
+- The results store, the Bradley–Terry fit, the matchup matrix and the ranking report. Done: `tools/rank.gd` (§13).
+- The AI-sensitivity check. Done: `tools/rank.gd -- compare`.
 
 **Later:**
 
