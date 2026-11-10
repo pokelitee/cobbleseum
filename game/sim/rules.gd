@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 5
+const RULES_VERSION := 6
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -75,8 +75,10 @@ const STATUS_MOVE_WINDUP := 0.4
 const STATUS_MOVE_RECOVERY := 0.4
 const STATUS_MOVE_COOLDOWN := 6.0
 
-## Stat stages run from -6 to +6 with the main-series multipliers (§9.5).
+## Stat stages run from -6 to +6 with the main-series multipliers (§9.5). They wear off:
+## every STAGE_DECAY_SECONDS without a change, each stage moves one step back toward 0.
 const MAX_STAGE := 6
+const STAGE_DECAY_SECONDS := 6.0
 
 ## Status conditions (§9.5). Damage over time is a share of max HP each second.
 const STATUS_SECONDS := 12.0

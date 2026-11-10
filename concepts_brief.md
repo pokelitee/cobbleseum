@@ -491,7 +491,7 @@ Full ×4 hits would end real-time fights instantly, and immunities would make so
 
 ### 9.5 Stat changes and status conditions
 
-- **Stat stages** use the main-series multipliers, from −6 to +6, and last the whole battle for now. Whether they should wear off after a set time is still an open question (§19).
+- **Stat stages** use the main-series multipliers, from −6 to +6. They wear off: every 6 seconds without a change, each stage moves one step back toward 0, so a +2 lasts about 12 seconds and a −6 recovers in about 36.
 - **Status conditions:**
 
   | Status | Effect |
@@ -540,20 +540,20 @@ All rules constants live in one committed data file. Batch simulation (§13) rep
 
 Constants are tuned against targets for these numbers. `tools/batch.gd` runs seeded random pairings of every roster species with its standard moveset and writes the report to `results/`.
 
-**First tuning pass** (rules version 5; 500 battles each, two seeds; about 57 ms per battle):
+**First tuning pass** (rules version 6, including stage decay; 500 battles each, two seeds; about 57 ms per battle):
 
 | | Before | After | Target |
 |---|---|---|---|
-| Median length | 14.1 s | 33.6–35.8 s | 30–45 s |
-| 10th–90th percentile | 8.2–28.5 s | 17.6–75.6 s | |
-| Draws | 2.5% | 4.0–4.4% | under 5% |
-| Type-advantaged side wins | 56.6% | 56.8–57.2% | no target yet |
+| Median length | 14.1 s | 36.8–37.5 s | 30–45 s |
+| 10th–90th percentile | 8.2–28.5 s | 17.7–76.6 s | |
+| Draws | 2.5% | 3.8–4.4% | under 5% |
+| Type-advantaged side wins | 56.6% | 56.7–59.1% | no target yet |
 
 - **Changes:** the HP multiplier went from 8 to 22, which put the median in range. That pushed the slowest 10% (resisted matchups and weak unevolved species) into the 90 s cap, so overtime was added to finish them.
-- **Move use:** melee 43–46%, projectile 36–37%, area 12–13%, self-buff 4%, heal 1%, status 1%. Debuffs are almost never in a generated moveset.
+- **Move use:** melee 43–44%, projectile 35%, area 12–13%, self-buff 7%, heal 1%, status 1%. Debuffs are almost never in a generated moveset.
 - **Side bias:** with every pairing run both ways round, side A wins 49.2% of 571 decided battles.
-- **AI fix:** the stand-in AI now weighs its own attacking stat stage, and avoids moves that lower it (Overheat, Draco Meteor) while it has other choices.
-- **Remaining draws:** mostly two all-special attackers who've dropped their own Sp. Atk to −6 (§19, question 4).
+- **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead.
+- **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 
 ## 10. Simulation and determinism
 
@@ -878,8 +878,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 
 1. Will clips be monetised? Cobblemon's assets are non-commercial (§14).
 2. How does Cobblemon hide bones per aspect (hats, form-specific parts)? The converter must reproduce it, or the wrong parts will show.
-3. Starting values for the tuning constants: HP multiplier, cooldown formula, speed band, dodge charges and status durations.
-4. Should stat stages wear off after a set time? The first tuning pass found a reason to: a species whose attacks all use one stat stalls once moves like Overheat or Draco Meteor have dropped that stat to −6 (Charizard vs Noivern draws every time). One option is for stages to drift back toward 0 by one step every few seconds.
-5. Cobblemon's per-model licence files cover models, animations and textures. The jar states no separate licence for its sounds, so the credits assume the same CC BY-NC 3.0 terms. Confirm with the Cobblemon team before any wider release.
+3. Tuning constants beyond the first pass (§9.7), which set the HP multiplier and overtime: the cooldown formula, speed band, dodge charges and status durations are still first guesses.
+4. Cobblemon's per-model licence files cover models, animations and textures. The jar states no separate licence for its sounds, so the credits assume the same CC BY-NC 3.0 terms. Confirm with the Cobblemon team before any wider release.
 
-Resolved in milestone 1: tests use a small in-house runner (`tests/run_tests.gd`) instead of an add-on; recordings use OGV from Movie Maker, encoded to MP4.
+Resolved in milestone 1: tests use a small in-house runner (`tests/run_tests.gd`) instead of an add-on; recordings use OGV from Movie Maker, encoded to MP4. Resolved in milestone 2: stat stages wear off over time (§9.5). Without that, a species whose attacks all use one stat stalled once moves like Overheat had dropped it to −6.

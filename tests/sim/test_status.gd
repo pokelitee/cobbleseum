@@ -239,3 +239,23 @@ func test_ai_discounts_moves_that_lower_its_attacking_stat() -> void:
 	assert_true(SimpleAI.move_score(me, foe, overheat) < 130.0 * 0.6, "pays for the -2 it causes")
 	me.boosts.spa = -2
 	assert_almost_eq(SimpleAI.move_score(me, foe, jet), 80.0 * 0.5, 1e-4, "attacks weigh the current stage")
+	assert_eq(SimpleAI.move_score(me, foe, overheat), 0.0, "waits for -2 to wear off before dropping further")
+
+
+func test_stat_stages_wear_off_one_step_at_a_time() -> void:
+	var battle := _battle(["jet"], ["jet"])
+	var fighter := battle.fighters[0]
+	battle._boost(fighter, {"atk": 2, "spa": -1}, "test")
+	var interval := Rules.seconds_to_ticks(Rules.STAGE_DECAY_SECONDS)
+	for i in interval - 1:
+		battle._decay_stages(fighter)
+	assert_eq(fighter.boosts.atk, 2, "holds for the full interval")
+	battle._decay_stages(fighter)
+	assert_eq([fighter.boosts.atk, fighter.boosts.spa], [1, 0], "one step back toward 0")
+	battle._boost(fighter, {"atk": 1}, "test")
+	for i in interval - 1:
+		battle._decay_stages(fighter)
+	assert_eq(fighter.boosts.atk, 2, "a new change restarts the timer")
+	for i in interval * 3:
+		battle._decay_stages(fighter)
+	assert_eq(fighter.boosts.atk, 0, "and never overshoots 0")

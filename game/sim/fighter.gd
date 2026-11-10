@@ -29,8 +29,9 @@ var dodge_recharge_ticks := 0
 var dodge_recharge_total := 0
 ## Per-tick dash while dodging.
 var dodge_step := Vector2.ZERO
-## Stat stages, -6 to +6.
+## Stat stages, -6 to +6, and ticks since they last changed (for decay).
 var boosts := {"atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
+var stage_ticks := 0
 ## Major status condition ("brn", "par", "psn", "tox", "slp", "frz") or "", with ticks left.
 var status := ""
 var status_ticks := 0
