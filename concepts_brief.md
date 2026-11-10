@@ -642,11 +642,13 @@ The camera director picks from a set of shot types based on battle events:
 
 ### 12.5 Move visuals, sound and HUD
 
-- **Move visuals:** type-themed effects for each move kind. Particles use fixed seeds. Converting Cobblemon's own move particle effects comes later.
-  - Trails for melee.
-  - Orbs and beams for projectiles.
-  - Rings and waves for area moves.
-  - Glows for buffs.
+- **Move visuals:** every damaging move has one of 20 visual styles, drawn in its type colour from simple meshes animated per video frame. Converting Cobblemon's own move particle effects (129 moves in 1.8.4) comes later.
+  - Melee: strike (crescent), punch (shockwave star), kick (low arc), bite (closing fangs), slash (claw marks), rush (speed lines and dust).
+  - Ranged: orb, bullet, beam, bolt (lightning), stream (breath and spray), pulse, sound, wind, powder, skyfall (drops onto the target), erupt (spikes from the ground), quake (ground wave), mind (glow on the target), explosion.
+  - **Choosing a style:** the committed table `game/data/move_styles.json` (274 moves Showdown's flags don't describe, such as beams, breath and meteors), then Showdown's flags (punch, bite, slicing, bullet, pulse, sound, wind, powder), then strike for contact moves and orb for the rest.
+  - Flat effects face the camera, so no shot sees them edge-on. A ranged move that hits as it fires gets a short point-blank version of its style.
+  - `tools/preview_moves.gd` renders every style under a fixed camera for review.
+  - Rings and waves for area moves and glows for buffs come with those kinds.
 - **Sound:**
   - Cobblemon cries, impact sounds and whooshes, synced to events.
   - No music unless it is original or properly licensed.
