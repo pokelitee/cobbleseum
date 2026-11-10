@@ -13,6 +13,9 @@ var type_chart: Dictionary
 ## Showdown ID -> {"learnset": {move id: [sources]}}, for the moveset generator.
 var learnsets: Dictionary
 var roster: Dictionary = {}
+## Converted moves and generated movesets, cached: both depend only on the data.
+var _converted := {}
+var _movesets := {}
 
 
 func _init(species_table: Dictionary, move_table: Dictionary, type_table: Dictionary, learnset_table: Dictionary = {}) -> void:
@@ -20,6 +23,22 @@ func _init(species_table: Dictionary, move_table: Dictionary, type_table: Dictio
 	moves = move_table
 	type_chart = type_table
 	learnsets = learnset_table
+
+
+## The move as the rules use it: {"move": BattleMove} or {"error"}, cached. BattleMove
+## objects are never changed after conversion, so battles share them.
+func convert_move(move_id: String) -> Dictionary:
+	if not _converted.has(move_id):
+		_converted[move_id] = BattleMove.from_showdown(move_id, moves.get(move_id, {})) if moves.has(move_id) \
+			else {"error": "unknown move '%s'" % move_id}
+	return _converted[move_id]
+
+
+## The species' standard moveset (Movesets.generate), cached.
+func standard_moveset(species_id: String) -> Dictionary:
+	if not _movesets.has(species_id):
+		_movesets[species_id] = Movesets.generate(species_id, self)
+	return _movesets[species_id]
 
 
 ## A Showdown ID from a name: "Mr. Mime" -> "mrmime".

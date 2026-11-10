@@ -322,6 +322,8 @@ func _play_events() -> void:
 				_views[event.side].play_role("faint")
 				_sound.faint(event.side)
 				_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
+			"overtime":
+				_hud.flash_title("Overtime!", Color(1.0, 0.55, 0.3))
 			"time_up":
 				_hud.show_winner("Time up: draw")
 

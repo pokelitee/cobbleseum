@@ -104,14 +104,22 @@ func decide(battle: Battle, side: int) -> Dictionary:
 
 ## How much the AI wants a move now; 0 means not at all.
 static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
+	if move.is_damaging():
+		return _damage_score(me, move)
 	match move.kind:
 		BattleMove.Kind.HEAL:
 			var share := float(me.hp) / me.max_hp
 			return HEAL_SCORE * (1.0 - share) if share < HEAL_BELOW else 0.0
 		BattleMove.Kind.SELF_BUFF:
-			return BUFF_SCORE if move.boosts.keys().any(func(s: String) -> bool: return me.boosts[s] < STAGE_TARGET) else 0.0
+			for stat: String in move.boosts:
+				if me.boosts[stat] < STAGE_TARGET:
+					return BUFF_SCORE
+			return 0.0
 		BattleMove.Kind.DEBUFF:
-			return DEBUFF_SCORE if move.boosts.keys().any(func(s: String) -> bool: return foe.boosts[s] > -STAGE_TARGET) else 0.0
+			for stat: String in move.boosts:
+				if foe.boosts[stat] > -STAGE_TARGET:
+					return DEBUFF_SCORE
+			return 0.0
 		BattleMove.Kind.STATUS:
 			if move.confuses:
 				return CONFUSE_SCORE if foe.confusion_ticks == 0 else 0.0
@@ -121,6 +129,10 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 				if type in foe.types:
 					return 0.0
 			return STATUS_SCORE
+	return 0.0
+
+
+static func _damage_score(me: Fighter, move: BattleMove) -> float:
 	if move.self_destructs and float(me.hp) / me.max_hp > SELF_DESTRUCT_BELOW:
 		return 0.0
 	var score := move.power * move.expected_hits()
@@ -130,6 +142,15 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 		score *= CHARGE_FACTOR
 	if move.recharges:
 		score *= RECHARGE_FACTOR
+	if move.fixed_damage == 0:
+		# Weigh the attacking stat's current stage, and charge moves that lower it (Overheat,
+		# Draco Meteor) for the drop too, so they aren't spammed down to -6.
+		var stat := "atk" if move.physical else "spa"
+		var stage: int = me.boosts[stat]
+		score *= Rules.stage_multiplier(stage)
+		var drop: int = move.self_boosts.get(stat, 0)
+		if drop < 0:
+			score *= Rules.stage_multiplier(stage + drop) / Rules.stage_multiplier(stage)
 	return score
 
 

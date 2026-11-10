@@ -213,18 +213,20 @@ static func _share(fraction: Variant) -> float:
 	return float(fraction[0]) / float(fraction[1]) if fraction is Array and fraction.size() == 2 else 0.0
 
 
+# These run every tick, so they compare directly instead of building arrays.
+
 ## True for kinds fired at the opponent as a projectile.
 func is_projectile() -> bool:
-	return kind in [Kind.PROJECTILE, Kind.DEBUFF, Kind.STATUS]
+	return kind == Kind.PROJECTILE or kind == Kind.DEBUFF or kind == Kind.STATUS
 
 
 ## True for kinds applied to the user.
 func is_self() -> bool:
-	return kind in [Kind.SELF_BUFF, Kind.HEAL]
+	return kind == Kind.SELF_BUFF or kind == Kind.HEAL
 
 
 func is_damaging() -> bool:
-	return kind in [Kind.MELEE, Kind.PROJECTILE, Kind.AREA]
+	return kind == Kind.MELEE or kind == Kind.PROJECTILE or kind == Kind.AREA
 
 
 ## Average hits per use.

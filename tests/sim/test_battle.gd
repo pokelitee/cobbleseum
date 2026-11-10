@@ -89,7 +89,14 @@ func test_battle_ends_within_the_time_cap() -> void:
 func test_mirror_match_has_no_side_bias() -> void:
 	var wins := [0, 0]
 	for seed in 20:
-		var battle := _run(_spec(seed, "squirt", "squirt", ["jet", "kick"], ["jet", "kick"]))
+		var spec := _spec(seed, "squirt", "squirt", ["jet", "kick"], ["jet", "kick"])
+		var battle: Battle = Battle.create(spec, _data(), SimpleAI.pair(seed)).battle
+		# Two weak moves can't get through a full HP pool before the time cap; this test is
+		# about which side wins, so give both sides a smaller one.
+		for fighter in battle.fighters:
+			fighter.max_hp = 600
+			fighter.hp = 600
+		battle.run()
 		if battle.result == Battle.Result.WIN_A:
 			wins[0] += 1
 		elif battle.result == Battle.Result.WIN_B:
