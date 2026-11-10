@@ -19,15 +19,6 @@ const MAX_RADIUS := 1.5
 const BOUNDS_MISMATCH := 2.0
 
 
-## "Mr. Mime" -> "mrmime", "Paldea-Combat" -> "paldeacombat".
-static func normalise(text: String) -> String:
-	var out := ""
-	for c in text.to_lower():
-		if (c >= "a" and c <= "z") or (c >= "0" and c <= "9"):
-			out += c
-	return out
-
-
 ## `pokedex`: Showdown ID -> species. `cobblemon`: Cobblemon species id -> species JSON.
 ## `folders`: Cobblemon species id -> model folder ("0038_ninetales"). Returns entries
 ## {"id", "name", "num", "folder", "aspects", "base_scale", "hitbox"}, sorted by dex number
@@ -37,20 +28,20 @@ static func match_species(pokedex: Dictionary, cobblemon: Dictionary, folders: D
 	for cobblemon_id: String in cobblemon:
 		var data: Dictionary = cobblemon[cobblemon_id]
 		if data.get("implemented", false) and folders.has(cobblemon_id):
-			by_name[normalise(str(data.get("name", cobblemon_id)))] = cobblemon_id
+			by_name[BattleData.to_id(str(data.get("name", cobblemon_id)))] = cobblemon_id
 	var entries: Array = []
 	for id: String in pokedex:
 		var dex: Dictionary = pokedex[id]
 		if int(dex.get("num", 0)) <= 0:
 			continue
-		var cobblemon_id: Variant = by_name.get(normalise(str(dex.get("baseSpecies", dex.get("name", "")))))
+		var cobblemon_id: Variant = by_name.get(BattleData.to_id(str(dex.get("baseSpecies", dex.get("name", "")))))
 		if cobblemon_id == null:
 			continue
 		var data: Dictionary = cobblemon[cobblemon_id]
 		var aspects: Array = []
 		var base_scale := float(data.get("baseScale", 1.0))
 		var hitbox: Dictionary = data.get("hitbox", {})
-		var forme := normalise(str(dex.get("forme", "")))
+		var forme := BattleData.to_id(str(dex.get("forme", "")))
 		if not forme.is_empty():
 			var form := _form(data, forme)
 			if form.is_empty():
@@ -109,6 +100,6 @@ static func load_folders(source_root: String) -> Dictionary:
 
 static func _form(data: Dictionary, forme: String) -> Dictionary:
 	for form: Dictionary in data.get("forms", []):
-		if normalise(str(form.get("name", ""))) == forme and not form.get("battleOnly", false):
+		if BattleData.to_id(str(form.get("name", ""))) == forme and not form.get("battleOnly", false):
 			return form
 	return {}

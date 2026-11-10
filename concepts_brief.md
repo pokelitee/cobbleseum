@@ -451,7 +451,7 @@ For the 850 standard moves, 616 are playable: 243 melee, 238 projectile, 64 area
 - **Priority:** shortens the wind-up.
 - **Secondary effects** roll on hit using the battle's random stream.
 - **Data effects:** drain, recoil and stat changes come straight from the data.
-- **Moves with extra code:** Showdown implements extra effects in code for 91 damaging moves. These play as plain hits, plus an effect from a committed override table where we've added one.
+- **Moves with extra code:** Showdown implements extra effects in code for 91 damaging moves. Most play as plain hits. Those whose condition or cost would otherwise make them free strong hits are left out: Focus Punch, Last Resort, Future Sight, Doom Desire, Dream Eater, Synchronoise, Belch, Steel Beam, Mind Blown, Shell Trap, Beak Blast, Water Spout, Eruption, Dragon Energy, Steel Roller and Poltergeist.
 
 ### 9.4 Damage
 
@@ -506,7 +506,16 @@ Every species gets one deterministic standard moveset, generated from its learns
 - one coverage attack;
 - one utility move: a buff, status move, heal or third attack.
 
-Only supported move kinds are eligible.
+Only playable moves are eligible. Details (`game/sim/movesets.gd`, report via `tools/movesets.gd`):
+
+- **Learnable moves:** the species' learnset in every generation, plus its pre-evolutions', plus its base species' for forms with fewer than 25 moves of their own (Rotom's appliances, cosmetic forms).
+- **Attack value:** power × expected hits × accuracy. Using the weaker attacking stat costs 40%; charge, recharge, recoil and self-destruct are discounted; fixed damage counts as 80 power.
+- **Coverage:** an attack of another type gains 25% for each type it hits super effectively that the first two don't.
+- **Utility:** sleep, paralysis, burn, poison, a buff to the species' attacking stat (more for more stages, Speed included), a heal, confusion or a debuff, scaled by accuracy. It's used if it scores at least 80, otherwise a third attack.
+- **Ties** break by move ID, so the same data always gives the same moveset.
+- A battle spec without `moves` uses the species' standard moveset.
+
+Results for 1.8.4 and Showdown 0.11.11: 1,001 of the 1,005 roster entries get a moveset. Ditto, Wobbuffet, Wynaut and Pyukumuku learn no playable attack, and Magikarp and Unown get fewer than four moves. For the 381 species that have random-battle sets, 47% of the generated moves appear in those sets' movepools.
 
 Using one policy for every species keeps rankings comparable. Showdown's Gen 9 random-battle sets cover only 338 of the 905 roster species, so they serve as a sanity check, not the source.
 
@@ -791,7 +800,7 @@ So far M1 has been tested on Windows only. macOS and Linux get checked before M2
 **M2: rules and roster.**
 
 - All supported move kinds, stat changes, status conditions and dodging. Movement, melee dashes, dodging, stat stages, status conditions and every move kind are done; the stand-in AI dodges about half the threats it sees while it can act, keeps a range suited to its ready moves, and circles.
-- The moveset generator.
+- The moveset generator. Done.
 - Full roster conversion with per-species caching, a QA report and the roster file. Done; the 73 `bounds_mismatch` species still need a converter QA pass.
 - The procedural animation layer.
 - Batch simulation with a balance report, and a first tuning pass.

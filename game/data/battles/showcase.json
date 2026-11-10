@@ -1,7 +1,7 @@
 {
   "seed": 1,
   "fighters": [
-    {"species": "blastoise", "moves": ["hydropump", "bite"]},
-    {"species": "cinderace", "moves": ["pyroball", "highjumpkick"]}
+    {"species": "blastoise"},
+    {"species": "cinderace"}
   ]
 }
