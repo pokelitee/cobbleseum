@@ -26,7 +26,8 @@ var _checksum := ""
 var _time_cap_ticks := 0
 
 
-## `spec` = {"seed": int, "fighters": [{"species", "moves": [ids], "radius"?}, x2]}. The
+## `spec` = {"seed": int, "fighters": [{"species", "moves"?: [ids], "radius"?}, x2]}. Without
+## "moves" a fighter gets its species' standard moveset (Movesets). The
 ## hitbox radius comes from the spec, else the roster, else Fighter.DEFAULT_RADIUS; with a
 ## roster loaded, species outside it are rejected.
 ## Controllers are objects with decide(battle, side) -> {"move": Vector2, "use": int,
@@ -51,8 +52,14 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		if not data.roster.is_empty() and not data.roster.has(entry.species):
 			return {"error": "'%s' is not in the roster (no Cobblemon model)" % entry.species}
 		var radius := float(entry.get("radius", data.roster.get(entry.species, {}).get("radius", Fighter.DEFAULT_RADIUS)))
+		var move_ids: Array = entry.get("moves", [])
+		if move_ids.is_empty():
+			var generated := Movesets.generate(entry.species, data)
+			if generated.has("error"):
+				return generated
+			move_ids = generated.moves
 		var battle_moves: Array[BattleMove] = []
-		for move_id: String in entry.get("moves", []):
+		for move_id: String in move_ids:
 			if not data.moves.has(move_id):
 				return {"error": "unknown move '%s'" % move_id}
 			var converted := BattleMove.from_showdown(move_id, data.moves[move_id])

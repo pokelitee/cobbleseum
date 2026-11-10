@@ -37,8 +37,8 @@ func test_matches_species_and_forms() -> void:
 
 
 func test_normalise_drops_punctuation() -> void:
-	assert_eq(CobblemonRoster.normalise("Mr. Mime"), "mrmime")
-	assert_eq(CobblemonRoster.normalise("Paldea-Combat"), "paldeacombat")
+	assert_eq(BattleData.to_id("Mr. Mime"), "mrmime")
+	assert_eq(BattleData.to_id("Paldea-Combat"), "paldeacombat")
 
 
 func test_size_uses_the_hitbox_scaled_into_the_height_band() -> void:
