@@ -18,6 +18,12 @@ const HEALTHY := Color(0.3, 0.9, 0.4)
 const WARNING := Color(1.0, 0.8, 0.2)
 const DANGER := Color(1.0, 0.3, 0.25)
 ## Uses a non-breaking hyphen so the licence name never wraps mid-word.
+## Badge text and colour per status condition.
+const STATUS_BADGES := {
+	"brn": ["BRN", Color("ff7a2e")], "par": ["PAR", Color("e8c21c")], "psn": ["PSN", Color("b45ad6")],
+	"tox": ["TOX", Color("8e3fb0")], "slp": ["SLP", Color("8a8a9a")], "frz": ["FRZ", Color("5cc8e0")],
+	"confusion": ["CNF", Color("ff5f9e")],
+}
 const CREDITS_TEXT := "Models, animations and sounds: Cobblemon (CC BY‑NC 3.0)\nBattle data: Pokémon Showdown\nAn unaffiliated, non-commercial fan project"
 
 var _size := Vector2.ZERO
@@ -33,6 +39,9 @@ var _lag_values: Array[float] = [1.0, 1.0]
 var _lag_waits: Array[int] = [0, 0]
 var _shakes: Array[int] = [0, 0]
 var _banners: Array[Dictionary] = []
+## Per side: status -> badge label, laid out in a row after the name.
+var _badge_rows: Array[HBoxContainer] = []
+var _badges: Array[Dictionary] = [{}, {}]
 var _intro: Control
 var _intro_age := 0
 var _winner: Label
@@ -55,7 +64,13 @@ func setup(names: Array, viewport_size: Vector2) -> void:
 			home = Vector2(margin if side == 0 else viewport_size.x - margin - bar_width, 40 * _scale)
 		panel.position = home
 		add_child(panel)
-		panel.add_child(_label(names[side], 56, Color.WHITE))
+		var name_label := _label(names[side], 56, Color.WHITE)
+		panel.add_child(name_label)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", roundi(10 * _scale))
+		row.position = Vector2(name_label.get_minimum_size().x + 16 * _scale, 12 * _scale)
+		panel.add_child(row)
+		_badge_rows.append(row)
 		var back := _rect(Color(0, 0, 0, 0.6), Vector2(0, 80), Vector2(bar_width / _scale, 36))
 		panel.add_child(back)
 		# Mirror the right-hand landscape bar so it drains toward the centre of the screen.
@@ -96,6 +111,25 @@ func set_hp(side: int, fraction: float, immediate := false) -> void:
 	_hp_values[side] = fraction
 	bar.scale.x = fraction
 	bar.color = HEALTHY if fraction > 0.5 else (WARNING if fraction > 0.2 else DANGER)
+
+
+## Shows or hides a status badge ("brn", ..., or "confusion") beside a fighter's name.
+func set_status(side: int, status: String, active: bool) -> void:
+	if _badges[side].has(status):
+		_badges[side][status].queue_free()
+		_badges[side].erase(status)
+	if not active or not STATUS_BADGES.has(status):
+		return
+	var badge := Label.new()
+	badge.text = " %s " % STATUS_BADGES[status][0]
+	badge.add_theme_font_size_override("font_size", roundi(34 * _scale))
+	badge.add_theme_color_override("font_color", Color.WHITE)
+	var style := StyleBoxFlat.new()
+	style.bg_color = STATUS_BADGES[status][1]
+	style.set_corner_radius_all(roundi(8 * _scale))
+	badge.add_theme_stylebox_override("normal", style)
+	_badge_rows[side].add_child(badge)
+	_badges[side][status] = badge
 
 
 func shake(side: int) -> void:

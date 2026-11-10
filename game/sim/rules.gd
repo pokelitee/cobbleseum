@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 2
+const RULES_VERSION := 3
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -51,6 +51,38 @@ const PROJECTILE_MIN_SPEED := 8.0
 const PROJECTILE_MAX_SPEED := 16.0
 ## Priority moves wind up faster.
 const PRIORITY_WINDUP_FACTOR := 0.5
+## Status-category moves (buffs, debuffs, heals, status): timings and a long base cooldown
+## so they can't be chained.
+const STATUS_MOVE_WINDUP := 0.4
+const STATUS_MOVE_RECOVERY := 0.4
+const STATUS_MOVE_COOLDOWN := 6.0
+
+## Stat stages run from -6 to +6 with the main-series multipliers (§9.5).
+const MAX_STAGE := 6
+
+## Status conditions (§9.5). Damage over time is a share of max HP each second.
+const STATUS_SECONDS := 12.0
+const BURN_DAMAGE := 1.0 / 80.0
+const POISON_DAMAGE := 1.0 / 64.0
+## Bad poison deals this share times its level each second, the level rising every second.
+const TOXIC_STEP := 1.0 / 320.0
+## Burn halves physical damage dealt.
+const BURN_ATTACK_FACTOR := 0.5
+## Paralysis halves movement speed and sometimes stuns, rolled once a second.
+const PARALYSIS_SPEED_FACTOR := 0.5
+const PARALYSIS_STUN_CHANCE := 0.25
+const PARALYSIS_STUN_SECONDS := 0.5
+const SLEEP_MIN_SECONDS := 1.5
+const SLEEP_MAX_SECONDS := 3.0
+const FREEZE_SECONDS := 1.5
+const CONFUSION_SECONDS := 6.0
+const CONFUSION_CHANCE := 1.0 / 3.0
+const CONFUSION_POWER := 40
+const CONFUSION_RECOVERY := 0.5
+## Types that can't get a status.
+const STATUS_IMMUNITIES := {"brn": ["Fire"], "par": ["Electric"], "psn": ["Poison", "Steel"],
+	"tox": ["Poison", "Steel"], "frz": ["Ice"]}
+
 ## Cooldown = base + power / power_divisor + pp_factor / PP: strong, scarce moves recharge slowly.
 const COOLDOWN_BASE := 0.6
 const COOLDOWN_POWER_DIVISOR := 60.0
@@ -77,6 +109,16 @@ static func move_speed(speed_stat: int) -> float:
 ## Seconds to recharge one dodge charge: faster for faster species.
 static func dodge_recharge_seconds(speed_stat: int) -> float:
 	return lerpf(DODGE_RECHARGE_SLOW, DODGE_RECHARGE_FAST, clampf(speed_stat / SPEED_STAT_FOR_MAX, 0.0, 1.0))
+
+
+static func status_move_cooldown_seconds(pp: int) -> float:
+	return STATUS_MOVE_COOLDOWN + COOLDOWN_PP_FACTOR / maxf(pp, 1.0)
+
+
+## Main-series stat stage multiplier: +1 is x1.5, +2 is x2, -1 is x2/3, ...
+static func stage_multiplier(stage: int) -> float:
+	var clamped := clampi(stage, -MAX_STAGE, MAX_STAGE)
+	return (2.0 + clamped) / 2.0 if clamped >= 0 else 2.0 / (2.0 - clamped)
 
 
 static func cooldown_seconds(power: int, pp: int) -> float:

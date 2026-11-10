@@ -15,6 +15,19 @@ const CHECKSUM_OK := "CHECKSUM_OK"
 ## Printed in clip mode with the window's start and end ticks, for the recorder.
 const CLIP_WINDOW := "CLIP_WINDOW"
 const MODELS_DIR := "res://cache/build/cobblemon/1.8.4/models"
+## The clip each move kind plays on wind-up.
+const ROLE_BY_KIND := {
+	BattleMove.Kind.MELEE: "physical", BattleMove.Kind.PROJECTILE: "special", BattleMove.Kind.SELF_BUFF: "status",
+	BattleMove.Kind.DEBUFF: "status", BattleMove.Kind.HEAL: "status", BattleMove.Kind.STATUS: "status",
+}
+const STAT_NAMES := {"atk": "Attack", "def": "Defense", "spa": "Sp. Atk", "spd": "Sp. Def", "spe": "Speed"}
+const STATUS_CALLOUTS := {
+	"brn": "Burned!", "par": "Paralyzed!", "psn": "Poisoned!", "tox": "Badly poisoned!", "slp": "Fell asleep!",
+	"frz": "Frozen solid!", "confusion": "Confused!",
+}
+const RISE_COLOUR := Color(1.0, 0.55, 0.3)
+const DROP_COLOUR := Color(0.4, 0.6, 1.0)
+const HEAL_COLOUR := Color(0.45, 1.0, 0.55)
 ## Metres a fighter must move in a tick to play its walk clip.
 const WALK_THRESHOLD := 0.01
 ## Random stream id for the handheld wobble, after the simulation's own streams.
@@ -110,7 +123,12 @@ func _ready() -> void:
 	_begin_tick()
 	_sync_views()
 	for side in 2:
-		_hud.set_hp(side, float(battle.fighters[side].hp) / battle.fighters[side].max_hp, true)
+		var fighter := battle.fighters[side]
+		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp, true)
+		# A clip can start mid-battle, after conditions were inflicted.
+		_hud.set_status(side, fighter.status, not fighter.status.is_empty())
+		_hud.set_status(side, "confusion", fighter.confusion_ticks > 0)
+		_views[side].set_asleep(fighter.status == "slp")
 
 
 ## Runs a copy of the battle headless and plans its presentation.
@@ -225,7 +243,7 @@ func _play_events() -> void:
 		match event.type:
 			"windup":
 				var move := _move(event.side, event.move)
-				_views[event.side].play_role("physical" if move.kind == BattleMove.Kind.MELEE else "special")
+				_views[event.side].play_role(ROLE_BY_KIND[move.kind])
 				_move_fx.windup(_views[event.side], move)
 				_hud.banner(event.side, move.name, move.type)
 				_sound.windup(move)
@@ -253,6 +271,35 @@ func _play_events() -> void:
 				_sound.miss(move)
 			"fire":
 				_fired_tick[event.side] = int(event.tick)
+			"landed":
+				var defender := 1 - int(event.side)
+				var move := _move(event.side, event.move)
+				if _fired_tick[event.side] == int(event.tick):
+					_move_fx.point_blank(_views[event.side], _views[defender], move)
+				_move_fx.hit(_views[defender], move, false)
+			"boost":
+				_announce_boost(event)
+			"heal":
+				_move_fx.aura(_views[event.side], HEAL_COLOUR, true)
+				_fx.announce(_views[event.side], "+%d" % event.amount, HEAL_COLOUR)
+			"status":
+				_hud.set_status(event.side, event.status, true)
+				_fx.announce(_views[event.side], STATUS_CALLOUTS.get(event.status, ""),
+					Hud.STATUS_BADGES[event.status][1].lightened(0.3), 60)
+				if event.status == "slp":
+					_views[event.side].set_asleep(true)
+			"status_end":
+				_hud.set_status(event.side, event.status, false)
+				if event.status == "slp":
+					_views[event.side].set_asleep(false)
+			"status_damage":
+				_fx.announce(_views[event.side], "-%d" % event.damage, Hud.STATUS_BADGES[event.status][1].lightened(0.3), 44)
+			"recoil", "confusion_hit":
+				_views[event.side].take_hit(_views[event.side].global_position, float(event.damage) / battle.fighters[event.side].max_hp)
+				_fx.announce(_views[event.side], "-%d" % event.damage if event.type == "recoil" else "It hurt itself in confusion!",
+					Color(1, 1, 1) if event.type == "recoil" else Hud.STATUS_BADGES.confusion[1].lightened(0.3), 48)
+			"stunned":
+				_fx.announce(_views[event.side], "Can't move!", Hud.STATUS_BADGES.par[1].lightened(0.3), 48)
 			"dodge":
 				_move_fx.dodge(_views[event.side], Vector2(event.direction[0], event.direction[1]))
 			"dodged":
@@ -263,6 +310,20 @@ func _play_events() -> void:
 				_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
 			"time_up":
 				_hud.show_winner("Time up: draw")
+
+
+## "Attack rose!", "Defense fell sharply!", or "Stats rose!" for several at once.
+func _announce_boost(event: Dictionary) -> void:
+	var changes: Dictionary = event.boosts
+	var total := 0
+	for stat: String in changes:
+		total += int(changes[stat])
+	var rising := total > 0
+	var subject: String = STAT_NAMES[changes.keys()[0]] if changes.size() == 1 else "Stats"
+	var amount := absi(int(changes.values()[0])) if changes.size() == 1 else 1
+	var verb := ("rose" if rising else "fell") + (" sharply" if amount == 2 else (" drastically" if amount >= 3 else ""))
+	_move_fx.aura(_views[event.side], RISE_COLOUR if rising else DROP_COLOUR, rising)
+	_fx.announce(_views[event.side], "%s %s!" % [subject, verb], RISE_COLOUR if rising else DROP_COLOUR, 52)
 
 
 func _move(side: int, move_id: String) -> BattleMove:

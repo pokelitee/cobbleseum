@@ -3,7 +3,8 @@ extends RefCounted
 ## Stand-in controller until the utility AI (concepts_brief.md §11, milestone 4):
 ## - dodges sideways when a projectile is about to hit or a melee strike is about to land,
 ##   deciding once per threat with DODGE_CHANCE;
-## - uses its strongest ready move that's in range;
+## - uses the best-scoring ready move that's in range (move_score): damaging moves by power,
+##   heals when hurt, buffs until +2, status on a foe without one, debuffs until -2;
 ## - otherwise keeps a range suited to its ready moves (close for melee, mid range for
 ##   ranged) and circles the opponent, switching direction now and then.
 ## Every choice draws from the side's own random stream.
@@ -19,6 +20,14 @@ const WAITING_GAP := Vector2(1.5, 3.0)
 const STRAFE_MIN_TICKS := 30
 const STRAFE_MAX_TICKS := 75
 const STRAFE_WEIGHT := 0.8
+## Scores for non-damaging moves, on the same scale as move power.
+const HEAL_SCORE := 140.0
+const HEAL_BELOW := 0.6
+const BUFF_SCORE := 85.0
+const STATUS_SCORE := 95.0
+const CONFUSE_SCORE := 70.0
+const DEBUFF_SCORE := 55.0
+const STAGE_TARGET := 2
 ## Within this distance of the wall, steer back toward the centre.
 const WALL_MARGIN := 1.5
 
@@ -56,21 +65,24 @@ func decide(battle: Battle, side: int) -> Dictionary:
 
 	var gap := Battle._gap(me, foe)
 	var best := -1
-	var best_power := -1
+	var best_score := 0.0
 	var ranged_ready := false
 	var melee_ready := false
 	for i in me.moves.size():
 		if not me.move_ready(i):
 			continue
 		var move := me.moves[i]
+		var score := move_score(me, foe, move)
+		if score <= 0.0:
+			continue
 		if move.kind == BattleMove.Kind.MELEE:
 			melee_ready = true
-		else:
+		elif move.is_projectile():
 			ranged_ready = true
 		# Ties go to a random pick so the order of the moveset never decides.
-		if gap <= move.reach() and (move.power > best_power or (move.power == best_power and random.chance(0.5))):
+		if gap <= move.reach() and (score > best_score or (score == best_score and random.chance(0.5))):
 			best = i
-			best_power = move.power
+			best_score = score
 	if best >= 0:
 		intent.use = best
 		return intent
@@ -82,6 +94,28 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		band = RANGED_GAP
 	intent.move = _steer(me, foe, gap, band)
 	return intent
+
+
+## How much the AI wants a move now; 0 means not at all.
+static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
+	match move.kind:
+		BattleMove.Kind.HEAL:
+			var share := float(me.hp) / me.max_hp
+			return HEAL_SCORE * (1.0 - share) if share < HEAL_BELOW else 0.0
+		BattleMove.Kind.SELF_BUFF:
+			return BUFF_SCORE if move.boosts.keys().any(func(s: String) -> bool: return me.boosts[s] < STAGE_TARGET) else 0.0
+		BattleMove.Kind.DEBUFF:
+			return DEBUFF_SCORE if move.boosts.keys().any(func(s: String) -> bool: return foe.boosts[s] > -STAGE_TARGET) else 0.0
+		BattleMove.Kind.STATUS:
+			if move.confuses:
+				return CONFUSE_SCORE if foe.confusion_ticks == 0 else 0.0
+			if not foe.status.is_empty():
+				return 0.0
+			for type: String in Rules.STATUS_IMMUNITIES.get(move.status, []):
+				if type in foe.types:
+					return 0.0
+			return STATUS_SCORE
+	return float(move.power)
 
 
 ## An attack about to hit `side`: {"direction": Vector2, "projectile": Dictionary} or

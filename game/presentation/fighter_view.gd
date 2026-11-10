@@ -26,6 +26,8 @@ var _fainted := false
 ## The looping clip between one-off clips: "walk" while moving (if the species has one), else "idle".
 var _base_role := "idle"
 var _one_off := false
+var _moving := false
+var _asleep := false
 
 
 ## Instances a converted species scene from the cache at the roster's scale and height.
@@ -98,7 +100,22 @@ func play_idle() -> void:
 
 ## Switches the looping clip between walking and idling; one-off clips play out first.
 func set_moving(moving: bool) -> void:
-	var role := "walk" if moving and _clips.has("walk") else "idle"
+	_moving = moving
+	_update_base()
+
+
+## Asleep fighters loop their sleep clip, when the species has one.
+func set_asleep(asleep: bool) -> void:
+	_asleep = asleep
+	_update_base()
+
+
+func _update_base() -> void:
+	var role := "idle"
+	if _asleep and _clips.has("sleep"):
+		role = "sleep"
+	elif _moving and _clips.has("walk"):
+		role = "walk"
 	if role == _base_role:
 		return
 	_base_role = role
