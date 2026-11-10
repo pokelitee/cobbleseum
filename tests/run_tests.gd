@@ -33,7 +33,8 @@ func _run() -> void:
 	var failed := 0
 	for path in _find_tests(TEST_ROOT):
 		var script: GDScript = load(path)
-		if script == null:
+		# A script with a parse error can still load, with no methods and nothing to run.
+		if script == null or not script.can_instantiate():
 			printerr("FAIL %s: could not load script" % path)
 			failed += 1
 			continue

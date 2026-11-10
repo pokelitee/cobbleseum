@@ -165,6 +165,11 @@ func point_blank(attacker: FighterView, target: FighterView, move: BattleMove) -
 			_cloud(from.lerp(to, 0.5), colour, 0.45)
 
 
+## A dodge: speed lines streaming behind the fighter and a puff of dust.
+func dodge(view: FighterView, direction: Vector2) -> void:
+	_rush(view, Vector3(direction.x, 0, direction.y), Color(0.85, 0.95, 1.0))
+
+
 ## Matches projectile visuals to the simulation's projectiles and moves them.
 func sync_projectiles(battle: Battle) -> void:
 	var alive: Array[Dictionary] = []

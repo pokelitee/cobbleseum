@@ -29,7 +29,8 @@ var _time_cap_ticks := 0
 ## `spec` = {"seed": int, "fighters": [{"species", "moves": [ids], "radius"?}, x2]}. The
 ## hitbox radius comes from the spec, else the roster, else Fighter.DEFAULT_RADIUS; with a
 ## roster loaded, species outside it are rejected.
-## Controllers are objects with decide(battle, side) -> {"move": Vector2, "use": int}; each
+## Controllers are objects with decide(battle, side) -> {"move": Vector2, "use": int,
+## "dodge": Vector2 (zero for none)}; each
 ## owns its random stream (see random_stream()).
 ## Returns {"battle": Battle} or {"error": String}.
 static func create(battle_spec: Dictionary, data: BattleData, controllers: Array) -> Dictionary:
@@ -111,11 +112,27 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 		return
 	for i in fighter.cooldowns.size():
 		fighter.cooldowns[i] = maxi(0, fighter.cooldowns[i] - 1)
+	if fighter.dodge_charges < Rules.DODGE_CHARGES:
+		fighter.dodge_recharge_ticks += 1
+		if fighter.dodge_recharge_ticks >= fighter.dodge_recharge_total:
+			fighter.dodge_charges += 1
+			fighter.dodge_recharge_ticks = 0
 	var to_foe := foe.position - fighter.position
 	if to_foe.length_squared() > 0.0:
 		fighter.facing = to_foe.normalized()
 	match fighter.action:
+		Fighter.Action.DODGE:
+			_slide(fighter, foe, fighter.dodge_step)
+			fighter.action_ticks -= 1
+			if fighter.action_ticks <= 0:
+				fighter.action = Fighter.Action.READY
 		Fighter.Action.WINDUP:
+			var move := fighter.moves[fighter.action_move]
+			if move.kind == BattleMove.Kind.MELEE:
+				# Melee moves dash in during the wind-up, stopping just inside reach.
+				var gap := _gap(fighter, foe) - Rules.MELEE_REACH * 0.5
+				if gap > 0.0:
+					_slide(fighter, foe, fighter.facing * minf(gap, Rules.MELEE_DASH_SPEED / Rules.TICK_RATE))
 			fighter.action_ticks -= 1
 			if fighter.action_ticks <= 0:
 				_release(fighter, foe)
@@ -124,8 +141,15 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			if fighter.action_ticks <= 0:
 				fighter.action = Fighter.Action.READY
 		_:
+			var dodge: Vector2 = intent.get("dodge", Vector2.ZERO)
 			var use: int = intent.get("use", -1)
-			if fighter.move_ready(use):
+			if dodge.length_squared() > 0.0 and fighter.can_dodge():
+				fighter.dodge_charges -= 1
+				fighter.action = Fighter.Action.DODGE
+				fighter.action_ticks = Rules.seconds_to_ticks(Rules.DODGE_SECONDS)
+				fighter.dodge_step = dodge.normalized() * Rules.DODGE_DISTANCE / fighter.action_ticks
+				_event("dodge", fighter.side, {"direction": [dodge.normalized().x, dodge.normalized().y]})
+			elif fighter.move_ready(use) and _gap(fighter, foe) <= fighter.moves[use].reach():
 				var move := fighter.moves[use]
 				fighter.action = Fighter.Action.WINDUP
 				fighter.action_ticks = move.windup_ticks
@@ -136,16 +160,30 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 				_walk(fighter, foe, intent.get("move", Vector2.ZERO))
 
 
+## Gap between two fighters' hitboxes.
+static func _gap(fighter: Fighter, foe: Fighter) -> float:
+	return fighter.position.distance_to(foe.position) - fighter.radius - foe.radius
+
+
 func _walk(fighter: Fighter, foe: Fighter, direction: Vector2) -> void:
 	if direction.length_squared() > 1.0:
 		direction = direction.normalized()
-	var next := fighter.position + direction * (fighter.move_speed / Rules.TICK_RATE)
+	_slide(fighter, foe, direction * (fighter.move_speed / Rules.TICK_RATE))
+
+
+## Moves a fighter by `delta`, kept inside the arena wall and outside the foe's hitbox
+## (it slides around the foe instead of passing through).
+func _slide(fighter: Fighter, foe: Fighter, delta: Vector2) -> void:
+	var next := fighter.position + delta
+	var contact := fighter.radius + foe.radius
+	var away := next - foe.position
+	if away.length() < contact:
+		if away.length_squared() < 1e-8:
+			away = fighter.position - foe.position
+		next = foe.position + away.normalized() * contact
 	var limit := Rules.ARENA_RADIUS - fighter.radius
 	if next.length() > limit:
 		next = next.normalized() * limit
-	var gap := fighter.radius + foe.radius
-	if next.distance_to(foe.position) < gap:
-		return  # fighters don't walk through each other
 	fighter.position = next
 
 
@@ -154,11 +192,13 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 	fighter.action = Fighter.Action.RECOVERY
 	fighter.action_ticks = move.recovery_ticks
 	if move.kind == BattleMove.Kind.MELEE:
-		var gap := fighter.position.distance_to(foe.position) - fighter.radius - foe.radius
-		if gap <= Rules.MELEE_REACH:
-			_hit(fighter, foe, move)
-		else:
+		if _gap(fighter, foe) > Rules.MELEE_REACH:
 			_event("miss", fighter.side, {"move": move.id})
+		elif foe.is_invulnerable():
+			_event("miss", fighter.side, {"move": move.id})
+			_event("dodged", foe.side, {"move": move.id})
+		else:
+			_hit(fighter, foe, move)
 	else:
 		projectiles.append({
 			"owner": fighter.side,
@@ -180,8 +220,12 @@ func _move_projectiles() -> void:
 		var closest := Geometry2D.get_closest_point_to_segment(target.position, start, end)
 		var move := owner.moves[projectile.move]
 		if closest.distance_to(target.position) <= target.radius + Rules.PROJECTILE_RADIUS and not target.is_fainted():
-			_hit(owner, target, move)
-			continue
+			if not target.is_invulnerable():
+				_hit(owner, target, move)
+				continue
+			if not projectile.get("dodged", false):
+				projectile.dodged = true  # it flies on through the dodging fighter
+				_event("dodged", target.side, {"move": move.id})
 		projectile.position = end
 		projectile.travelled += (projectile.velocity as Vector2).length()
 		if projectile.travelled < Rules.PROJECTILE_RANGE * 1.5 and end.length() < Rules.ARENA_RADIUS:
@@ -230,7 +274,8 @@ func _check_end() -> void:
 func _record_state() -> void:
 	var state := PackedFloat64Array()
 	for fighter in fighters:
-		state.append_array([fighter.position.x, fighter.position.y, fighter.hp, fighter.action, fighter.action_ticks])
+		state.append_array([fighter.position.x, fighter.position.y, fighter.hp, fighter.action, fighter.action_ticks,
+			fighter.dodge_charges])
 	for projectile in projectiles:
 		state.append_array([projectile.position.x, projectile.position.y])
 	_hash.update(state.to_byte_array())

@@ -16,6 +16,8 @@ const SUPER_EFFECTIVE_SCORE := 1.0
 const COMEBACK_SCORE := 1.5
 const COMEBACK_HP := 0.3
 const MISS_SCORE := 0.3
+## An attack avoided by dodging through it.
+const DODGED_SCORE := 1.0
 const FAINT_SCORE := 8.0
 const TIME_UP_SCORE := 4.0
 ## Ticks kept after a window's last hit, so the reaction plays out.
@@ -78,6 +80,8 @@ static func event_scores(events: Array, max_hp: Array) -> PackedFloat32Array:
 				hp[defender] = float(event.hp)
 			"miss":
 				scores[i] = MISS_SCORE
+			"dodged":
+				scores[i] = DODGED_SCORE
 			"faint":
 				scores[i] = FAINT_SCORE
 			"time_up":

@@ -23,6 +23,9 @@ var _knockback := Vector3.ZERO
 var _knockback_frames := 0
 var _clips: Dictionary = {}
 var _fainted := false
+## The looping clip between one-off clips: "walk" while moving (if the species has one), else "idle".
+var _base_role := "idle"
+var _one_off := false
 
 
 ## Instances a converted species scene from the cache at the roster's scale and height.
@@ -90,7 +93,17 @@ func set_time_scale(scale: float) -> void:
 
 func play_idle() -> void:
 	if not _fainted:
-		_play("idle", true)
+		_play(_base_role, true)
+
+
+## Switches the looping clip between walking and idling; one-off clips play out first.
+func set_moving(moving: bool) -> void:
+	var role := "walk" if moving and _clips.has("walk") else "idle"
+	if role == _base_role:
+		return
+	_base_role = role
+	if not _one_off:
+		play_idle()
 
 
 ## Plays a one-off clip for a role (physical, special, recoil, faint); falls back silently
@@ -104,7 +117,7 @@ func play_role(role: String) -> void:
 			_player.stop()
 			create_tween().tween_property(self, "rotation:z", deg_to_rad(80), 0.5)
 		return
-	_play(role, false)
+	_one_off = _play(role, false)
 
 
 func _play(role: String, looping: bool) -> bool:
@@ -118,4 +131,5 @@ func _play(role: String, looping: bool) -> bool:
 
 
 func _on_clip_finished(_clip: StringName) -> void:
+	_one_off = false
 	play_idle()

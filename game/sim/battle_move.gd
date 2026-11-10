@@ -1,7 +1,10 @@
 class_name BattleMove
 extends RefCounted
 ## A move as the real-time rules use it, derived from Showdown's move data (concepts_brief.md §9.3).
-## Milestone 1 supports the melee and projectile kinds only.
+## Supports the melee and projectile kinds so far.
+
+## Showdown targets that mean "one opponent" in a one-on-one battle.
+const SINGLE_TARGETS: Array[String] = ["normal", "any", "adjacentFoe", "randomNormal"]
 
 enum Kind { MELEE, PROJECTILE }
 
@@ -23,7 +26,7 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		return {"error": "%s is a status or fixed-damage move, not supported yet" % id}
 	if data.has("multihit") or data.get("flags", {}).has("charge") or data.get("flags", {}).has("recharge"):
 		return {"error": "%s is a multi-hit, charge or recharge move, not supported yet" % id}
-	if data.get("target", "normal") != "normal":
+	if not data.get("target", "normal") in SINGLE_TARGETS:
 		return {"error": "%s targets an area, not supported yet" % id}
 	var move := BattleMove.new()
 	move.id = id
@@ -43,5 +46,6 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 	return {"move": move}
 
 
+## The largest gap between hitboxes this move can be started from.
 func reach() -> float:
-	return Rules.MELEE_REACH if kind == Kind.MELEE else Rules.PROJECTILE_RANGE
+	return Rules.MELEE_DASH_RANGE if kind == Kind.MELEE else Rules.PROJECTILE_RANGE

@@ -403,7 +403,8 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - **Stats:** level 50, all IVs 31, no EVs and a neutral nature, so stats come from the species alone.
 - **HP:** the HP stat times a global HP multiplier. Tuning the multiplier sets battle length.
 - **Speed:** the Speed stat maps into a band of movement speeds. It also sets how quickly dodges recharge.
-- **Dodges:** each fighter has a few dodge charges. A dodge gives a short window of invulnerability.
+- **Dodges:** each fighter has 2 dodge charges, each recharging in 3 s (slowest) to 1.5 s (fastest, by Speed). A dodge is a 2.5 m dash over 0.2 s, invulnerable throughout: projectiles fly on through and melee strikes whiff. A fighter can't dodge while winding up or recovering, so attacking commits it.
+- **Movement:** fighters walk at their speed, can't pass through each other (they slide around) and stay inside the wall.
 - **Flying:** Flying-type species hover above the ground.
 
 All constants in this section are starting points for tuning (§9.7).
@@ -435,7 +436,7 @@ Counts are for the 685 standard Gen 9 moves, excluding Z-moves and Max moves:
 **Properties:**
 
 - **Cooldown:** set from PP and power, so strong, scarce moves recharge slowly.
-- **Range:** set by the move kind.
+- **Range:** set by the move kind. Melee moves start from up to 3 m between hitboxes and dash in at 10 m/s during the wind-up; projectiles start from up to 7 m. Showdown targets that mean "one opponent" in a one-on-one battle (`normal`, `any`, `adjacentFoe`, `randomNormal`) all count as single-target.
 - **Accuracy:** sets hit size or projectile speed instead of rolling for a miss. Misses come from dodging and positioning.
 - **Priority:** shortens the wind-up.
 - **Secondary effects** roll on hit using the battle's random stream.
@@ -775,7 +776,7 @@ So far M1 has been tested on Windows only. macOS and Linux get checked before M2
 
 **M2: rules and roster.**
 
-- All supported move kinds, stat changes, status conditions and dodging.
+- All supported move kinds, stat changes, status conditions and dodging. Movement, melee dashes and dodging are done; the stand-in AI dodges about half the threats it sees while it can act, keeps a range suited to its ready moves, and circles.
 - The moveset generator.
 - Full roster conversion with per-species caching, a QA report and the roster file. Done; the 73 `bounds_mismatch` species still need a converter QA pass.
 - The procedural animation layer.
