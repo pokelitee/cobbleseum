@@ -70,6 +70,10 @@ func on_hit(event: Dictionary, defender: FighterView, damage_share: float, big: 
 		_callout("Not very effective...", anchor, Color(0.75, 0.8, 0.9), 56, 70.0)
 
 
+func on_dodge(dodger: FighterView) -> void:
+	_callout("Dodged!", dodger.global_position + Vector3.UP * dodger.height * 0.9, Color(0.6, 0.9, 1.0), 60, 0.0)
+
+
 ## Speed lines fade in while `active` (strong wind-ups in close-up) and out otherwise.
 func set_speed_lines(active: bool) -> void:
 	var current: float = _speed_lines.material.get_shader_parameter("intensity")

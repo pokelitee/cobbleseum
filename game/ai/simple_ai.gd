@@ -1,9 +1,34 @@
 class_name SimpleAI
 extends RefCounted
-## Milestone 1 controller: walks into range of its ready moves and uses the strongest one.
-## The utility AI (concepts_brief.md §11) replaces it in milestone 3.
+## Stand-in controller until the utility AI (concepts_brief.md §11, milestone 4):
+## - dodges sideways when a projectile is about to hit or a melee strike is about to land,
+##   deciding once per threat with DODGE_CHANCE;
+## - uses its strongest ready move that's in range;
+## - otherwise keeps a range suited to its ready moves (close for melee, mid range for
+##   ranged) and circles the opponent, switching direction now and then.
+## Every choice draws from the side's own random stream.
+
+## A projectile counts as a threat when it will reach us within this many ticks.
+const THREAT_TICKS := 8
+## A melee wind-up counts as a threat when it lands within this many ticks.
+const MELEE_THREAT_TICKS := 4
+const DODGE_CHANCE := 0.45
+## Gap kept while ranged moves are ready, and while waiting on cooldowns.
+const RANGED_GAP := Vector2(3.0, 5.5)
+const WAITING_GAP := Vector2(1.5, 3.0)
+const STRAFE_MIN_TICKS := 30
+const STRAFE_MAX_TICKS := 75
+const STRAFE_WEIGHT := 0.8
+## Within this distance of the wall, steer back toward the centre.
+const WALL_MARGIN := 1.5
 
 var random: SimRandom
+## Threats already decided on, so each one gets a single dodge roll: projectiles by
+## identity, melee wind-ups by the tick they started.
+var _judged_projectiles: Array = []
+var _judged_windup := -1
+var _strafe := 1.0
+var _strafe_ticks := 0
 
 
 func _init(stream: SimRandom) -> void:
@@ -21,22 +46,104 @@ static func pair(seed: int) -> Array:
 func decide(battle: Battle, side: int) -> Dictionary:
 	var me := battle.fighters[side]
 	var foe := battle.fighters[1 - side]
-	var gap := me.position.distance_to(foe.position) - me.radius - foe.radius
+	var intent := {"use": -1, "move": Vector2.ZERO, "dodge": Vector2.ZERO}
+	if not me.can_act():
+		return intent
+	var threat := incoming_threat(battle, side)
+	if not threat.is_empty() and me.can_dodge() and _first_look(battle, threat) and random.chance(DODGE_CHANCE):
+		intent.dodge = _dodge_direction(me, threat.direction)
+		return intent
+
+	var gap := Battle._gap(me, foe)
 	var best := -1
 	var best_power := -1
-	var desired_gap := INF
+	var ranged_ready := false
+	var melee_ready := false
 	for i in me.moves.size():
 		if not me.move_ready(i):
 			continue
 		var move := me.moves[i]
-		desired_gap = minf(desired_gap, move.reach() * 0.8)
+		if move.kind == BattleMove.Kind.MELEE:
+			melee_ready = true
+		else:
+			ranged_ready = true
 		# Ties go to a random pick so the order of the moveset never decides.
 		if gap <= move.reach() and (move.power > best_power or (move.power == best_power and random.chance(0.5))):
 			best = i
 			best_power = move.power
 	if best >= 0:
-		return {"use": best, "move": Vector2.ZERO}
-	if desired_gap == INF:
-		desired_gap = Rules.MELEE_REACH  # everything on cooldown: stay close
+		intent.use = best
+		return intent
+
+	var band := WAITING_GAP
+	if melee_ready:
+		band = Vector2(0.0, Rules.MELEE_DASH_RANGE * 0.8)
+	elif ranged_ready:
+		band = RANGED_GAP
+	intent.move = _steer(me, foe, gap, band)
+	return intent
+
+
+## An attack about to hit `side`: {"direction": Vector2, "projectile": Dictionary} or
+## {"direction", "windup_tick": int}; {} when there's none.
+static func incoming_threat(battle: Battle, side: int) -> Dictionary:
+	var me := battle.fighters[side]
+	var foe := battle.fighters[1 - side]
+	for projectile in battle.projectiles:
+		if int(projectile.owner) == side or projectile.get("dodged", false):
+			continue
+		var velocity: Vector2 = projectile.velocity
+		var start: Vector2 = projectile.position
+		var end := start + velocity * THREAT_TICKS
+		var closest := Geometry2D.get_closest_point_to_segment(me.position, start, end)
+		if closest.distance_to(me.position) <= me.radius + Rules.PROJECTILE_RADIUS:
+			return {"direction": velocity.normalized(), "projectile": projectile}
+	if foe.action == Fighter.Action.WINDUP and foe.action_ticks <= MELEE_THREAT_TICKS:
+		var move := foe.moves[foe.action_move]
+		if move.kind == BattleMove.Kind.MELEE and Battle._gap(me, foe) <= Rules.MELEE_DASH_RANGE:
+			return {"direction": (me.position - foe.position).normalized(),
+				"windup_tick": battle.tick - (move.windup_ticks - foe.action_ticks)}
+	return {}
+
+
+## True the first time a threat is seen; records it so it isn't rolled for again.
+func _first_look(battle: Battle, threat: Dictionary) -> bool:
+	if threat.has("windup_tick"):
+		if threat.windup_tick == _judged_windup:
+			return false
+		_judged_windup = threat.windup_tick
+		return true
+	_judged_projectiles = _judged_projectiles.filter(func(p: Dictionary) -> bool:
+		return battle.projectiles.any(func(q: Dictionary) -> bool: return is_same(p, q)))
+	if _judged_projectiles.any(func(p: Dictionary) -> bool: return is_same(p, threat.projectile)):
+		return false
+	_judged_projectiles.append(threat.projectile)
+	return true
+
+
+## Sideways to the threat, toward the arena centre when near the wall, else a random side.
+func _dodge_direction(me: Fighter, threat: Vector2) -> Vector2:
+	var side := Vector2(-threat.y, threat.x)
+	var inward := -me.position
+	if me.position.length() > Rules.ARENA_RADIUS - WALL_MARGIN - Rules.DODGE_DISTANCE:
+		return side if side.dot(inward) >= 0.0 else -side
+	return side if random.chance(0.5) else -side
+
+
+## Closes or opens the gap toward `band` (min, max) while circling the foe.
+func _steer(me: Fighter, foe: Fighter, gap: float, band: Vector2) -> Vector2:
+	_strafe_ticks -= 1
+	if _strafe_ticks <= 0:
+		_strafe = 1.0 if random.chance(0.5) else -1.0
+		_strafe_ticks = STRAFE_MIN_TICKS + int(random.next_u32() % (STRAFE_MAX_TICKS - STRAFE_MIN_TICKS + 1))
 	var toward := (foe.position - me.position).normalized()
-	return {"use": -1, "move": toward if gap > desired_gap else Vector2.ZERO}
+	var radial := 0.0
+	if gap > band.y:
+		radial = 1.0
+	elif gap < band.x:
+		radial = -1.0
+	var direction := toward * radial + Vector2(-toward.y, toward.x) * _strafe * STRAFE_WEIGHT
+	if me.position.length() > Rules.ARENA_RADIUS - me.radius - WALL_MARGIN:
+		direction += -me.position.normalized()
+		_strafe = -_strafe if (Vector2(-toward.y, toward.x) * _strafe).dot(-me.position) < 0.0 else _strafe
+	return direction.normalized() if direction.length_squared() > 0.0 else Vector2.ZERO

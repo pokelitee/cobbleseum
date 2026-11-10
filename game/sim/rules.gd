@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 1
+const RULES_VERSION := 2
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -26,8 +26,19 @@ const ROLL_MAX := 1.0
 ## Main-series effectiveness -> Cobbleseum effectiveness (compressed so fights stay winnable).
 const TYPE_MULTIPLIERS := {4.0: 1.6, 2.0: 1.3, 1.0: 1.0, 0.5: 0.8, 0.25: 0.6, 0.0: 0.25}
 
+## Dodging (§9.2): a short dash with invulnerability, from a few charges that recharge
+## faster with Speed.
+const DODGE_CHARGES := 2
+const DODGE_DISTANCE := 2.5
+const DODGE_SECONDS := 0.2
+const DODGE_RECHARGE_SLOW := 3.0
+const DODGE_RECHARGE_FAST := 1.5
+
 ## Move timings in seconds, per move kind.
 const MELEE_REACH := 1.2
+## Melee moves can start from this gap; the attacker dashes in during the wind-up.
+const MELEE_DASH_RANGE := 3.0
+const MELEE_DASH_SPEED := 10.0
 const MELEE_WINDUP := 0.25
 const MELEE_RECOVERY := 0.35
 const PROJECTILE_RANGE := 7.0
@@ -61,6 +72,11 @@ static func hp_stat(base: int) -> int:
 
 static func move_speed(speed_stat: int) -> float:
 	return lerpf(MIN_MOVE_SPEED, MAX_MOVE_SPEED, clampf(speed_stat / SPEED_STAT_FOR_MAX, 0.0, 1.0))
+
+
+## Seconds to recharge one dodge charge: faster for faster species.
+static func dodge_recharge_seconds(speed_stat: int) -> float:
+	return lerpf(DODGE_RECHARGE_SLOW, DODGE_RECHARGE_FAST, clampf(speed_stat / SPEED_STAT_FOR_MAX, 0.0, 1.0))
 
 
 static func cooldown_seconds(power: int, pp: int) -> float:

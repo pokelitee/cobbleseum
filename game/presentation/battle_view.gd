@@ -15,6 +15,8 @@ const CHECKSUM_OK := "CHECKSUM_OK"
 ## Printed in clip mode with the window's start and end ticks, for the recorder.
 const CLIP_WINDOW := "CLIP_WINDOW"
 const MODELS_DIR := "res://cache/build/cobblemon/1.8.4/models"
+## Metres a fighter must move in a tick to play its walk clip.
+const WALK_THRESHOLD := 0.01
 ## Random stream id for the handheld wobble, after the simulation's own streams.
 const CAMERA_WOBBLE_STREAM := 100
 
@@ -157,7 +159,12 @@ func _next_frame() -> void:
 		_hold_frames -= 1
 	else:
 		if not battle.is_over():
+			var before: Array[Vector2] = [battle.fighters[0].position, battle.fighters[1].position]
 			battle.step()
+			for side in 2:
+				var fighter := battle.fighters[side]
+				_views[side].set_moving(fighter.action == Fighter.Action.READY
+					and fighter.position.distance_to(before[side]) > WALK_THRESHOLD)
 			_play_events()
 		_tick += 1
 		if _tick >= _end_tick:
@@ -246,6 +253,10 @@ func _play_events() -> void:
 				_sound.miss(move)
 			"fire":
 				_fired_tick[event.side] = int(event.tick)
+			"dodge":
+				_move_fx.dodge(_views[event.side], Vector2(event.direction[0], event.direction[1]))
+			"dodged":
+				_fx.on_dodge(_views[event.side])
 			"faint":
 				_views[event.side].play_role("faint")
 				_sound.faint(event.side)

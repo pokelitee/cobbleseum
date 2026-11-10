@@ -2,7 +2,7 @@ class_name Fighter
 extends RefCounted
 ## One side's state in the simulation. Positions are on the arena floor (x, z) in metres.
 
-enum Action { READY, WINDUP, RECOVERY }
+enum Action { READY, WINDUP, RECOVERY, DODGE }
 
 const DEFAULT_RADIUS := 0.5
 
@@ -22,6 +22,11 @@ var facing := Vector2.UP
 var action := Action.READY
 var action_ticks := 0
 var action_move := -1
+var dodge_charges := Rules.DODGE_CHARGES
+var dodge_recharge_ticks := 0
+var dodge_recharge_total := 0
+## Per-tick dash while dodging.
+var dodge_step := Vector2.ZERO
 
 
 static func create(side_index: int, species_id_value: String, species: Dictionary, battle_moves: Array[BattleMove], radius_metres: float) -> Fighter:
@@ -39,6 +44,7 @@ static func create(side_index: int, species_id_value: String, species: Dictionar
 	fighter.hp = fighter.max_hp
 	fighter.radius = radius_metres
 	fighter.move_speed = Rules.move_speed(fighter.stats.spe)
+	fighter.dodge_recharge_total = Rules.seconds_to_ticks(Rules.dodge_recharge_seconds(fighter.stats.spe))
 	fighter.moves = battle_moves
 	fighter.cooldowns.resize(battle_moves.size())
 	return fighter
@@ -50,6 +56,15 @@ func is_fainted() -> bool:
 
 func can_act() -> bool:
 	return action == Action.READY and not is_fainted()
+
+
+## While dodging a fighter can't be hit.
+func is_invulnerable() -> bool:
+	return action == Action.DODGE
+
+
+func can_dodge() -> bool:
+	return can_act() and dodge_charges > 0
 
 
 func move_ready(index: int) -> bool:
