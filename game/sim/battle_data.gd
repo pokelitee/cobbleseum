@@ -16,6 +16,7 @@ var roster: Dictionary = {}
 ## Converted moves and generated movesets, cached: both depend only on the data.
 var _converted := {}
 var _movesets := {}
+var _effectiveness := {}
 
 
 func _init(species_table: Dictionary, move_table: Dictionary, type_table: Dictionary, learnset_table: Dictionary = {}) -> void:
@@ -77,6 +78,11 @@ static func load_showdown(dir := SHOWDOWN_DIR) -> Dictionary:
 
 ## Main-series effectiveness of an attacking type against a defender's types (0 to 4).
 func effectiveness(attack_type: String, defender_types: Array) -> float:
+	# Asked every hit and by the AI every decision, so results are cached per type pairing.
+	var key := attack_type + ">" + ",".join(defender_types)
+	var cached: Variant = _effectiveness.get(key)
+	if cached != null:
+		return cached
 	var total := 1.0
 	for defender: String in defender_types:
 		var taken: Dictionary = type_chart.get(defender.to_lower(), {}).get("damageTaken", {})
@@ -84,4 +90,5 @@ func effectiveness(attack_type: String, defender_types: Array) -> float:
 			1: total *= 2.0
 			2: total *= 0.5
 			3: total *= 0.0
+	_effectiveness[key] = total
 	return total

@@ -581,7 +581,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 **Battle spec** (input):
 - rules version and data versions (manifest hashes);
 - the two roster entries and their movesets;
-- the AI profile for each side;
+- the AI profile for each side (`"ai"` per fighter; default `ranked`);
 - the seed.
 
 Battles with a player also record the intents on every tick.
@@ -631,6 +631,34 @@ The AI is a utility AI. At each decision step it scores every candidate action a
 - **Tests:**
   - unit tests per consideration;
   - scenario tests, such as "dodges a telegraphed projectile" and "doesn't use a melee move out of range".
+
+**Implementation (M4)** in `game/ai/utility_ai.gd`. A battle spec names each fighter's AI (`"ai": "hard"`); the default is `ranked`, and `simple` selects the stand-in AI.
+
+- **Profiles** (`game/ai/profiles/*.tres`):
+
+  | Profile | Reaction delay | Decision interval | Mistake chance | Dodge chance |
+  |---|---|---|---|---|
+  | easy | 12 ticks (0.4 s) | 6 | 25% | 30% |
+  | normal | 8 | 4 | 10% | 50% |
+  | hard | 4 | 2 | 2% | 80% |
+  | ranked | 6 | 3 | 5% | 60% |
+
+  The dodge chance is rolled once per threat.
+- **Perception:** the AI sees the opponent's position and wind-ups one reaction delay late, and notices a projectile only once it has flown that long. After noticing an attack, it judges the time left correctly.
+- **Considerations:**
+  - moves: in range (a veto), expected damage as a share of the foe's max HP (power, STAB, stats, stages and type at once), finishing potential, and whether it's safe to commit while an attack it could dodge is incoming; non-damaging moves use the stand-in AI's situational value;
+  - dodges: urgency, charges left and danger;
+  - movement: distance outside the range its ready moves want.
+
+  Scores are products with the compensation factor. Movement scores sit below any usable attack's. The commitment bonus and minimum hold time apply only between ways of moving.
+- **Not modelled:** aim error. The sim aims projectiles itself.
+- **First results** (300 random pairings each, corrected for side order):
+  - hard beats easy about 55% of the time;
+  - the ranked utility AI is about level with the stand-in AI.
+
+  AI skill moves results only a little, because species and movesets dominate. That suits rankings (§13).
+- **Balance with ranked on both sides** (rules version 6): median 31.9–34.5 s, draws 3.8–4.0%.
+- **Speed:** about 95–105 ms per battle, against about 57 with the stand-in AI.
 
 ## 12. Presentation and recording
 
@@ -849,7 +877,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 
 **M4: AI and play.**
 
-- The utility AI, with profiles and a debug overlay.
+- The utility AI, with profiles and a debug overlay. The AI and profiles are done; the overlay is next.
 - Player-vs-AI controls (keyboard and gamepad) and a player camera.
 
 **M5: rankings.**

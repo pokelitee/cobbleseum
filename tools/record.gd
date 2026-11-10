@@ -56,7 +56,10 @@ func _initialize() -> void:
 	if OS.execute("ffmpeg", ["-version"], [], true) != 0:
 		return _fail("ffmpeg is needed to encode the clip; install it and put it on PATH")
 
-	var created := Battle.create(spec, loaded.data, SimpleAI.pair(int(spec.seed)))
+	var controllers := Controllers.for_spec(spec)
+	if controllers.has("error"):
+		return _fail(controllers.error)
+	var created := Battle.create(spec, loaded.data, controllers.controllers)
 	if created.has("error"):
 		return _fail(created.error)
 	var battle: Battle = created.battle

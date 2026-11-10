@@ -28,7 +28,7 @@ Print species' standard movesets, or generate them all into `cache/build/moveset
 godot --headless --path . --script res://tools/movesets.gd -- garchomp breloom
 ```
 
-Run a battle headless (prints the result, length and a checksum per seed). In a battle spec, a fighter without `moves` uses its species' standard moveset:
+Run a battle headless (prints the result, length and a checksum per seed). In a battle spec, a fighter without `moves` uses its species' standard moveset, and `"ai"` picks its controller (`easy`, `normal`, `hard`, `ranked` (the default) or `simple`):
 
 ```bash
 godot --headless --path . --script res://tools/battle.gd -- game/data/battles/showcase.json --seeds=10
@@ -38,6 +38,12 @@ Run a balance report: seeded random pairings of the whole roster with standard m
 
 ```bash
 godot --headless --path . --script res://tools/batch.gd -- --battles=500 --seed=1
+```
+
+Pit two AIs against each other over random pairings (side A's win rate shows which is stronger):
+
+```bash
+godot --headless --path . --script res://tools/batch.gd -- --battles=300 --ai-a=hard --ai-b=easy
 ```
 
 Record a battle as video clips (needs a display and ffmpeg; output goes to `recordings/`). The clip is the most exciting stretch of about `--seconds` (usually ending on the knockout), with hit-stop, slow motion and camera shots planned from the battle's events. `--format` is `vertical` (1080×1920, the default), `landscape` (1920×1080) or `both`; every format shows the same battle:

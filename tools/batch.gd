@@ -1,6 +1,9 @@
 extends SceneTree
 ## Batch simulation and balance report (concepts_brief.md §9.7).
 ## Usage: godot --headless --path . --script res://tools/batch.gd -- [--battles=500] [--seed=1]
+##        [--ai-a=ranked] [--ai-b=ranked]
+## The AI options name each side's controller (Controllers): pitting two AIs against each
+## other over random pairings, side A's win rate shows which is stronger.
 ##
 ## Runs random pairings of roster species with their standard movesets and the stand-in AI,
 ## then prints the numbers the rules are tuned against and writes them, with every battle's
@@ -20,11 +23,14 @@ const TARGET_DRAW_RATE := 0.05
 func _initialize() -> void:
 	var battles := DEFAULT_BATTLES
 	var seed := 1
+	var ai := [Controllers.DEFAULT_AI, Controllers.DEFAULT_AI]
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--battles="):
 			battles = maxi(1, arg.get_slice("=", 1).to_int())
 		elif arg.begins_with("--seed="):
 			seed = arg.get_slice("=", 1).to_int()
+		elif arg.begins_with("--ai-a=") or arg.begins_with("--ai-b="):
+			ai[0 if arg.begins_with("--ai-a=") else 1] = arg.get_slice("=", 1)
 		else:
 			printerr("error: unknown option %s" % arg)
 			return quit(1)
@@ -45,12 +51,13 @@ func _initialize() -> void:
 	for i in battles:
 		var a := pool[random.next_u32() % pool.size()]
 		var b := pool[random.next_u32() % pool.size()]
-		var spec := {"seed": int(random.next_u32() % 1000000), "fighters": [{"species": a}, {"species": b}]}
+		var spec := {"seed": int(random.next_u32() % 1000000), "fighters": [{"species": a, "ai": ai[0]}, {"species": b, "ai": ai[1]}]}
 		rows.append(run(spec, data))
 	var elapsed := (Time.get_ticks_msec() - started) / 1000.0
 	var report := summarise(rows)
 	report.rules_version = Rules.RULES_VERSION
 	report.seed = seed
+	report.ai = ai
 	report.ms_per_battle = elapsed * 1000.0 / battles
 	print_report(report, pool.size())
 	_save(report, rows, seed)
@@ -59,7 +66,7 @@ func _initialize() -> void:
 
 ## One battle's summary: result, length, advantage and event counts.
 static func run(spec: Dictionary, data: BattleData) -> Dictionary:
-	var battle: Battle = Battle.create(spec, data, SimpleAI.pair(int(spec.seed))).battle
+	var battle: Battle = Battle.create(spec, data, Controllers.for_spec(spec).controllers).battle
 	battle.run()
 	var kinds := {}
 	var counts := {}
@@ -139,8 +146,8 @@ static func summarise(rows: Array[Dictionary]) -> Dictionary:
 
 
 static func print_report(report: Dictionary, pool_size: int) -> void:
-	print("%d battles from %d species (rules v%d, seed %d), %.1f ms per battle" % [
-		report.battles, pool_size, report.rules_version, report.seed, report.ms_per_battle])
+	print("%d battles from %d species (rules v%d, seed %d, AI %s vs %s), %.1f ms per battle" % [
+		report.battles, pool_size, report.rules_version, report.seed, report.ai[0], report.ai[1], report.ms_per_battle])
 	print("length: median %.1f s (target %d-%d), p10 %.1f s, p90 %.1f s" % [
 		report.median_seconds, TARGET_SECONDS.x, TARGET_SECONDS.y, report.p10_seconds, report.p90_seconds])
 	print("draws: %.1f%% (target under %d%%)" % [report.draw_rate * 100.0, TARGET_DRAW_RATE * 100.0])
