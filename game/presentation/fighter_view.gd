@@ -1,10 +1,8 @@
 class_name FighterView
 extends Node3D
-## Shows one fighter: its converted model scaled into the agreed height band, facing and
-## position from the simulation, and clips chosen by role (concepts_brief.md §7.4, §8).
+## Shows one fighter: its converted model at the roster's scale, facing and position from
+## the simulation, and clips chosen by role (concepts_brief.md §7.4, §8).
 
-const MIN_HEIGHT := 0.5
-const MAX_HEIGHT := 3.0
 const CROSSFADE := 0.15
 ## Hit flash: frames it lasts and its peak strength.
 const FLASH_FRAMES := 6
@@ -14,7 +12,7 @@ const KNOCKBACK_PER_SHARE := 3.0
 const KNOCKBACK_MAX := 0.6
 const KNOCKBACK_FRAMES := 10
 
-## Rendered height in metres after scaling into the height band.
+## Rendered height in metres, from the roster.
 var height := 1.0
 var _player: AnimationPlayer
 var _mesh: MeshInstance3D
@@ -27,8 +25,9 @@ var _clips: Dictionary = {}
 var _fainted := false
 
 
-## Instances a converted species scene from the cache. Returns null if it can't be loaded.
-static func from_model(path: String) -> FighterView:
+## Instances a converted species scene from the cache at the roster's scale and height.
+## Returns null if it can't be loaded.
+static func from_model(path: String, scale: float, model_height: float) -> FighterView:
 	var scene: PackedScene = load(path) if ResourceLoader.exists(path) else null
 	if scene == null:
 		return null
@@ -43,9 +42,8 @@ static func from_model(path: String) -> FighterView:
 	view._flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	view._flash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	view._flash_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var model_height := mesh.get_aabb().size.y if mesh.mesh != null else 1.0
-	view.height = clampf(model_height, MIN_HEIGHT, MAX_HEIGHT)
-	model.scale = Vector3.ONE * (view.height / model_height)
+	view.height = model_height
+	model.scale = Vector3.ONE * scale
 	view._player.animation_finished.connect(view._on_clip_finished)
 	view.play_idle()
 	return view

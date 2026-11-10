@@ -50,7 +50,7 @@ func _ready() -> void:
 	var spec: Variant = JSON.parse_string(FileAccess.get_file_as_string(options.spec))
 	if not spec is Dictionary:
 		return _fail("cannot read battle spec %s" % options.spec)
-	var loaded := BattleData.load_showdown()
+	var loaded := BattleData.load_all()
 	if loaded.has("error"):
 		return _fail(loaded.error)
 	var created := Battle.create(spec, loaded.data, SimpleAI.pair(int(spec.seed)))
@@ -65,10 +65,10 @@ func _ready() -> void:
 	_portrait = VideoFormat.is_portrait(size)
 	_build_stage()
 	for side in 2:
-		var entry: Dictionary = spec.fighters[side]
-		var view := FighterView.from_model(MODELS_DIR.path_join(str(entry.get("model", "")) + ".scn"))
+		var entry: Dictionary = loaded.data.roster[battle.fighters[side].species_id]
+		var view := FighterView.from_model(MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
 		if view == null:
-			return _fail("no converted model for '%s'; set \"model\" in the spec and run tools/assets.gd" % entry.get("model", ""))
+			return _fail("cannot load the model %s; run tools/assets.gd" % entry.model)
 		add_child(view)
 		_views.append(view)
 	_hud = Hud.new()

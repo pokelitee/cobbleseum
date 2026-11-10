@@ -26,7 +26,9 @@ var _checksum := ""
 var _time_cap_ticks := 0
 
 
-## `spec` = {"seed": int, "fighters": [{"species", "moves": [ids], "radius"?}, x2]}.
+## `spec` = {"seed": int, "fighters": [{"species", "moves": [ids], "radius"?}, x2]}. The
+## hitbox radius comes from the spec, else the roster, else Fighter.DEFAULT_RADIUS; with a
+## roster loaded, species outside it are rejected.
 ## Controllers are objects with decide(battle, side) -> {"move": Vector2, "use": int}; each
 ## owns its random stream (see random_stream()).
 ## Returns {"battle": Battle} or {"error": String}.
@@ -45,6 +47,9 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		var species: Variant = data.species.get(entry.get("species", ""))
 		if not species is Dictionary:
 			return {"error": "unknown species '%s'" % entry.get("species", "")}
+		if not data.roster.is_empty() and not data.roster.has(entry.species):
+			return {"error": "'%s' is not in the roster (no Cobblemon model)" % entry.species}
+		var radius := float(entry.get("radius", data.roster.get(entry.species, {}).get("radius", Fighter.DEFAULT_RADIUS)))
 		var battle_moves: Array[BattleMove] = []
 		for move_id: String in entry.get("moves", []):
 			if not data.moves.has(move_id):
@@ -55,7 +60,7 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 			battle_moves.append(converted.move)
 		if battle_moves.is_empty():
 			return {"error": "%s has no moves" % entry.species}
-		var fighter := Fighter.create(side, entry.species, species, battle_moves, float(entry.get("radius", Fighter.DEFAULT_RADIUS)))
+		var fighter := Fighter.create(side, entry.species, species, battle_moves, radius)
 		fighter.position = Vector2(0, (-0.5 if side == 0 else 0.5) * Rules.START_DISTANCE)
 		fighter.facing = Vector2(0, 1 if side == 0 else -1)
 		battle.fighters.append(fighter)

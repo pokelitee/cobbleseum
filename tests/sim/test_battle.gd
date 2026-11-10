@@ -100,3 +100,21 @@ func test_bad_specs_are_reported() -> void:
 	assert_true(Battle.create(_spec(1, "nobody"), _data(), controllers).error.contains("unknown species"))
 	assert_true(Battle.create(_spec(1, "squirt", "blaze", ["nothing"]), _data(), controllers).error.contains("unknown move"))
 	assert_true(Battle.create({"seed": 1, "fighters": []}, _data(), controllers).error.contains("two fighters"))
+
+
+func test_hitbox_radius_comes_from_the_roster() -> void:
+	var data := _data()
+	data.roster = {"squirt": {"radius": 0.7}, "blaze": {"radius": 1.1}}
+	var created := Battle.create(_spec(1), data, SimpleAI.pair(1))
+	assert_eq(created.battle.fighters[0].radius, 0.7)
+	assert_eq(created.battle.fighters[1].radius, 1.1)
+	var spec := _spec(1)
+	spec.fighters[0].radius = 0.4
+	assert_eq(Battle.create(spec, data, SimpleAI.pair(1)).battle.fighters[0].radius, 0.4, "the spec overrides the roster")
+
+
+func test_species_outside_the_roster_are_rejected() -> void:
+	var data := _data()
+	data.roster = {"squirt": {"radius": 0.7}}
+	var created := Battle.create(_spec(1), data, SimpleAI.pair(1))
+	assert_true(str(created.get("error", "")).contains("not in the roster"), str(created))
