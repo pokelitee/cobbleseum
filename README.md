@@ -52,7 +52,7 @@ Record a battle as video clips (needs a display and ffmpeg; output goes to `reco
 godot --headless --path . --script res://tools/record.gd -- game/data/battles/showcase.json --seconds=10 --format=both
 ```
 
-Watch the showcase battle in a window: `godot --path .`
+Watch the showcase battle in a window: `godot --path .` Press F3 to show the AI debug overlay (each side's candidate actions and their scores); `godot --path . -- --ai-debug` starts with it on, and `tools/record.gd -- <spec> --ai-debug` records it.
 
 Run the tests:
 

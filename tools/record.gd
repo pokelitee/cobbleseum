@@ -1,7 +1,8 @@
 extends SceneTree
 ## Records a battle as video clips (concepts_brief.md §12).
 ## Usage: godot --headless --path . --script res://tools/record.gd -- <spec.json>
-##        [--seconds=10] [--format=vertical|landscape|both]
+##        [--seconds=10] [--format=vertical|landscape|both] [--ai-debug]
+## --ai-debug records the AI debug overlay on top (for reviewing AI behaviour, not posting).
 ##
 ## 1. Runs the battle headless to find where it ends and its checksum.
 ## 2. For each format, launches a second Godot with Movie Maker on the battle view. The view
@@ -20,6 +21,8 @@ const OVERRIDE_FILE := "res://override.cfg"
 
 ## The clip window the view reported: {"start": tick, "end": tick}.
 var _window := {}
+## Extra arguments passed through to the battle view.
+var _view_args: PackedStringArray = []
 const CREDITS := """Pokémon models, textures, animations and sounds: Cobblemon (https://cobblemon.com),
 licensed CC BY-NC 3.0. Non-commercial use only.
 Battle data: Pokémon Showdown (MIT).
@@ -37,10 +40,12 @@ func _initialize() -> void:
 			seconds = maxf(1.0, arg.get_slice("=", 1).to_float())
 		elif arg.begins_with("--format="):
 			format = arg.get_slice("=", 1)
+		elif arg == "--ai-debug":
+			_view_args.append(arg)
 		else:
 			spec_path = arg
 	if spec_path.is_empty():
-		return _fail("usage: -- <spec.json> [--seconds=10] [--format=vertical|landscape|both]")
+		return _fail("usage: -- <spec.json> [--seconds=10] [--format=vertical|landscape|both] [--ai-debug]")
 	var formats: Array = VideoFormat.SIZES.keys() if format == "both" else [format]
 	if not VideoFormat.SIZES.has(formats[0]):
 		return _fail("unknown format '%s' (use vertical, landscape or both)" % format)
@@ -104,7 +109,7 @@ func _render(spec_path: String, format: String, out_dir: String, seconds: float,
 		VIEW_SCENE, "--",
 		spec_path, "--clip-seconds=%s" % seconds,
 		"--expect-checksum=%s" % checksum,
-	], output, true)
+	] + Array(_view_args), output, true)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(OVERRIDE_FILE))
 	var log := "".join(output)
 	if status != 0 or not log.contains("%s %s" % [BattleView.CHECKSUM_OK, checksum]):
