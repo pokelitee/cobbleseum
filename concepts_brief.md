@@ -512,7 +512,8 @@ Full ×4 hits would end real-time fights instantly, and immunities would make so
 
   A fighter has at most one major status, plus confusion. Fire, Electric, Poison and Steel, and Ice types are immune to burn, paralysis, poison and freeze respectively. All values are starting points for tuning.
 - **Effects from the data:** drain, recoil, the user's own stat changes (Close Combat, Draco Meteor) and secondary effects (a chance of a status, confusion or stat changes on hit) all come from Showdown's move data. Flinching isn't modelled.
-- **Status-category moves:** self-buffs and heals apply on release; debuffs and status moves fly as projectiles. They wind up and recover in 0.4 s and have a 6 s base cooldown, so they can't be chained. Moves whose real effect lives in Showdown's code (Clangorous Soul, Fillet Away, Geomancy, Memento, Captivate) are left out, and four heals that Showdown computes in code (Morning Sun, Synthesis, Moonlight, Shore Up) get their amounts from a small override table. For the 850 standard moves this gives 26 self-buffs, 18 debuffs, 17 status moves and 10 heals.
+- **Status-category moves:** self-buffs and heals apply on release; debuffs and status moves fly as projectiles. They wind up and recover in 0.4 s and have a 6 s base cooldown, so they can't be chained.
+- **Heals are a channel** (rules version 7): a 1.2 s wind-up that any hit cancels (the cooldown is still spent), restoring half the main-series amount (Roost and Recover heal 25% of max HP). In the main series a heal costs a turn in which the opponent hits freely; in real time an uninterruptible 0.4 s heal of 50% cost almost nothing, so species with one won about 34 points more often than without it, and the first ranking was topped by Flying types carrying Roost. Under version 7 the edge is about 10 points (77% vs 67% for 12 healers against 41 opponents), and the utility AI heals only when the opponent can't land a hit before the channel ends (its `cover` consideration). Movesets still value heals at the main-series amount, so they pick the same moves. Moves whose real effect lives in Showdown's code (Clangorous Soul, Fillet Away, Geomancy, Memento, Captivate) are left out, and four heals that Showdown computes in code (Morning Sun, Synthesis, Moonlight, Shore Up) get their amounts from a small override table. For the 850 standard moves this gives 26 self-buffs, 18 debuffs, 17 status moves and 10 heals.
 
 ### 9.6 Movesets
 
@@ -560,6 +561,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **Side bias:** with every pairing run both ways round, side A wins 49.2% of 571 decided battles.
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
+- **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
 
 ## 10. Simulation and determinism
 

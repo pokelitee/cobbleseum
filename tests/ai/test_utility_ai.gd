@@ -75,7 +75,25 @@ func test_heals_when_low() -> void:
 	battle = _battle(low, ["jet", "recover"])
 	_place(battle, 4.0)
 	battle.fighters[0].hp = battle.fighters[0].max_hp / 5
-	assert_eq(low.decide(battle, 0).get("use", -1), 1, "recovers at 20% HP")
+	battle.fighters[1].cooldowns[0] = 90
+	assert_eq(low.decide(battle, 0).get("use", -1), 1, "recovers at 20% HP while the foe can't hit back")
+
+
+func test_does_not_heal_when_the_foe_could_cancel_it() -> void:
+	var ai := _ai()
+	var battle := _battle(ai, ["recover"])
+	_place(battle, 4.0)
+	var me := battle.fighters[0]
+	var foe := battle.fighters[1]
+	var channel := Rules.seconds_to_ticks(Rules.HEAL_WINDUP)
+	var seen := {"position": foe.position, "action": Fighter.Action.READY, "action_ticks": 0}
+	assert_eq(UtilityAI.heal_cover(me, foe, seen, {}, channel), UtilityAI.EXPOSED, "the foe's Jet would land first")
+	foe.cooldowns[0] = 90
+	assert_eq(UtilityAI.heal_cover(me, foe, seen, {}, channel), 1.0, "safe while its only attack recharges")
+	assert_eq(UtilityAI.heal_cover(me, foe, seen, {"ticks": 5}, channel), UtilityAI.EXPOSED, "an attack already incoming")
+	foe.cooldowns[0] = 0
+	seen = {"position": foe.position, "action": Fighter.Action.RECOVERY, "action_ticks": 60}
+	assert_eq(UtilityAI.heal_cover(me, foe, seen, {}, channel), 1.0, "safe while the foe recovers")
 
 
 func test_prefers_a_super_effective_move() -> void:

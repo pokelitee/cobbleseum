@@ -135,7 +135,8 @@ static func utility_value(move: BattleMove, physical: bool) -> float:
 		BattleMove.Kind.STATUS:
 			return CONFUSION_VALUE if move.confuses else STATUS_VALUES.get(move.status, 0.0)
 		BattleMove.Kind.HEAL:
-			return HEAL_VALUE * move.heal_share * 2.0
+			# Valued at the main-series amount, so the rules' heal scaling doesn't change movesets.
+			return HEAL_VALUE * move.heal_share / Rules.HEAL_FACTOR * 2.0
 		BattleMove.Kind.SELF_BUFF:
 			var stat := "atk" if physical else "spa"
 			if not move.boosts.has(stat):

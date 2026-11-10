@@ -7,7 +7,8 @@ extends RefCounted
 ##   recoil, self stat changes and secondary effects (status, confusion, stat changes) from
 ##   the data. Any of them can also hit several times, charge (a longer wind-up) or need to
 ##   recharge (a longer recovery); fixed-damage moves deal a set amount;
-## - SELF_BUFF and HEAL: status moves the user aims at itself, applied on release;
+## - SELF_BUFF and HEAL: status moves the user aims at itself, applied on release (a heal is a
+##   long channel that any hit cancels);
 ## - DEBUFF and STATUS: status moves fired at the opponent as projectiles, lowering its stats
 ##   or inflicting a status condition or confusion.
 
@@ -91,6 +92,9 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		if not classified.is_empty():
 			return {"error": classified}
 		var windup := Rules.STATUS_MOVE_WINDUP * (Rules.PRIORITY_WINDUP_FACTOR if priority > 0 else 1.0)
+		if move.kind == Kind.HEAL:
+			windup = Rules.HEAL_WINDUP
+			move.heal_share *= Rules.HEAL_FACTOR
 		move.windup_ticks = Rules.seconds_to_ticks(windup)
 		move.recovery_ticks = Rules.seconds_to_ticks(Rules.STATUS_MOVE_RECOVERY)
 		move.cooldown_ticks = Rules.seconds_to_ticks(Rules.status_move_cooldown_seconds(pp))

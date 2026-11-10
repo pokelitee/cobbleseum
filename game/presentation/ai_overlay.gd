@@ -10,7 +10,7 @@ const REFERENCE_SIZE := 1080.0
 ## Short names for considerations, so a row fits on one line.
 const SHORT_NAMES := {
 	"in_range": "range", "damage": "dmg", "finisher": "fin", "safe_to_commit": "safe", "value": "val",
-	"urgency": "urg", "charges": "chg", "danger": "dgr", "too_far": "far", "too_close": "close", "base": "base",
+	"urgency": "urg", "charges": "chg", "danger": "dgr", "too_far": "far", "too_close": "close", "base": "base", "cover": "cover",
 }
 const CHOSEN := Color(1.0, 0.85, 0.3)
 const OTHER := Color(0.85, 0.9, 1.0)

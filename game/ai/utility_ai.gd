@@ -36,6 +36,8 @@ const STRAFE_MAX_TICKS := 75
 const STRAFE_WEIGHT := 0.8
 const WALL_MARGIN := 1.5
 const HISTORY := 32
+## A heal's "cover" when the opponent could land a hit before the channel ends (and cancel it).
+const EXPOSED := 0.15
 
 var profile: AIProfile
 var random: SimRandom
@@ -121,6 +123,8 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			considerations.finisher = _sample("finisher", expected / maxf(foe.hp, 1.0))
 		else:
 			considerations.value = _sample("value", SimpleAI.move_score(me, foe, move) / VALUE_SCALE)
+			if move.kind == BattleMove.Kind.HEAL:
+				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		candidates.append(_scored("move:" + move.id, Action.USE_MOVE, considerations, i))
 	if can_avoid:
 		candidates.append(_scored("dodge", Action.DODGE, {
@@ -182,6 +186,28 @@ static func combine(values: Array) -> float:
 		var lifted := value + (1.0 - value) * modification * value
 		score *= clampf(lifted, 0.0, 1.0)
 	return score
+
+
+## 1 if the opponent (as seen) can't land a hit within `channel` ticks, else EXPOSED: an
+## incoming attack, or a damaging move it could ready, wind up and land in time.
+static func heal_cover(me: Fighter, foe: Fighter, seen: Dictionary, threat: Dictionary, channel: int) -> float:
+	if not threat.is_empty() and int(threat.ticks) <= channel:
+		return EXPOSED
+	if foe.is_incapacitated():
+		return 1.0
+	var busy := int(seen.action_ticks) if seen.action != Fighter.Action.READY else 0
+	var gap := me.position.distance_to(seen.position) - me.radius - foe.radius
+	var step := maxf(foe.current_move_speed() / Rules.TICK_RATE, 1e-6)
+	for i in foe.moves.size():
+		var move := foe.moves[i]
+		if not move.is_damaging():
+			continue
+		var ticks := maxi(busy, foe.cooldowns[i]) + move.windup_ticks + maxf(gap - move.reach(), 0.0) / step
+		if move.kind == BattleMove.Kind.PROJECTILE:
+			ticks += gap / maxf(move.projectile_speed / Rules.TICK_RATE, 1e-6)
+		if ticks < channel:
+			return EXPOSED
+	return 1.0
 
 
 ## Damage `move` would do on average (no crit, mean roll), for scoring.

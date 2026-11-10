@@ -341,6 +341,10 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	if defender.is_fainted():
 		_event("faint", defender.side, {})
 	else:
+		if defender.action == Fighter.Action.WINDUP and defender.moves[defender.action_move].kind == BattleMove.Kind.HEAL:
+			defender.action = Fighter.Action.READY
+			defender.action_ticks = 0
+			_event("interrupt", defender.side, {"move": defender.moves[defender.action_move].id})
 		if defender.status == "slp" or (defender.status == "frz" and move.type == "Fire"):
 			_end_status(defender)
 		for effect in move.secondaries:
