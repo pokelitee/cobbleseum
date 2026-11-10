@@ -125,3 +125,24 @@ func test_reports_bad_hierarchies() -> void:
 	assert_true(BedrockGeometry.build(_geo([{"name": "a"}, {"name": "a"}]), null, "T").error.contains("duplicate"))
 	assert_true(BedrockGeometry.build(_geo([{"name": "a", "parent": "b"}, {"name": "b", "parent": "a"}]), null, "T").error.contains("cycle"))
 	assert_true(BedrockGeometry.build({}, null, "T").error.contains("no minecraft:geometry"))
+
+
+func test_posed_bounds_follow_the_animated_bones() -> void:
+	# A body with a 1 m tall pole on top; the clip folds the pole down flat.
+	var scene := _build([
+		{"name": "body", "pivot": [0, 0, 0], "cubes": [{"origin": [-4, 0, -4], "size": [8, 8, 8], "uv": [0, 0]}]},
+		{"name": "pole", "parent": "body", "pivot": [0, 8, 0], "cubes": [{"origin": [-1, 8, -1], "size": [2, 16, 2], "uv": [0, 0]}]},
+	])
+	var skeleton: Skeleton3D = scene.get_node("Skeleton")
+	var fold := Animation.new()
+	fold.length = 1.0
+	var track := fold.add_track(Animation.TYPE_ROTATION_3D)
+	fold.track_set_path(track, "Skeleton:pole")
+	fold.rotation_track_insert_key(track, 0.0, Quaternion(Vector3.RIGHT, PI / 2))
+	var rest := _bounds(_vertices(scene))
+	assert_almost_eq(rest.size.y, 1.5, 1e-5, "standing pole: 0.5 m body + 1 m pole")
+	var posed := CobblemonModel.posed_bounds(skeleton, fold, 0.0)
+	assert_almost_eq(posed.size.y, 0.5, 0.07, "folded flat, only the body's height is left: %s" % posed)
+	assert_eq(skeleton.get_bone_pose_rotation(skeleton.find_bone("pole")), skeleton.get_bone_rest(skeleton.find_bone("pole")).basis.get_rotation_quaternion(),
+		"the skeleton goes back to rest")
+	scene.free()

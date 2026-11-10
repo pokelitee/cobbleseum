@@ -71,7 +71,8 @@ func test_form_files_layer_over_the_base_variation() -> void:
 			{"aspects": ["shiny"], "texture": "cobblemon:textures/pokemon/0038_ninetales/ninetales_shiny.png"}]}))
 	TestFiles.write_text(bedrock.path_join("resolvers/0038_ninetales/1_ninetales_alolan.json"), JSON.stringify({"order": 1,
 		"variations": [{"aspects": ["alolan"], "model": "cobblemon:ninetales_alolan.geo",
-			"texture": "cobblemon:textures/pokemon/0038_ninetales/ninetales_alolan.png"}]}))
+			"texture": "cobblemon:textures/pokemon/0038_ninetales/ninetales_alolan.png",
+			"layers": [{"name": "glow", "emissive": true, "texture": "cobblemon:textures/pokemon/0038_ninetales/glow.png"}]}]}))
 	for model in ["ninetales.geo.json", "ninetales_alolan.geo.json"]:
 		TestFiles.write_text(bedrock.path_join("models/0038_ninetales").path_join(model), "{}")
 	var base := CobblemonSpecies.files(root, "0038_ninetales")
@@ -81,6 +82,9 @@ func test_form_files_layer_over_the_base_variation() -> void:
 	assert_eq(alola.geo.get_file(), "ninetales_alolan.geo.json")
 	assert_eq(alola.texture.get_file(), "ninetales_alolan.png")
 	assert_eq(alola.poser, "ninetales", "fields the form doesn't set come from the base")
+	assert_eq(alola.layers.size(), 1)
+	assert_true(alola.layers[0].emissive and alola.layers[0].texture.ends_with("glow.png"), str(alola.layers))
+	assert_eq(base.layers, [], "the base variation has none")
 	assert_true(CobblemonSpecies.files(root, "0038_ninetales", ["galarian"]).geo.ends_with("ninetales.geo.json"),
 		"unknown aspects fall back to the base")
 
@@ -97,3 +101,15 @@ func test_cached_models_are_reused_only_with_a_matching_key() -> void:
 	assert_eq(build._cached("blastoise", "abc", models, previous).key, "abc")
 	assert_true(FileAccess.file_exists(models.path_join("blastoise.scn")), "the reused model moves into the new build")
 	assert_eq(build._cached("blastoise", "abc", models, previous).key, "abc", "found again in staging, e.g. after an interrupted build")
+
+
+func test_layer_emissive_flag_may_be_a_string() -> void:
+	var root := TestFiles.fresh_dir("cobblemon_layers")
+	var bedrock := root.path_join(CobblemonSpecies.BEDROCK)
+	TestFiles.write_text(bedrock.path_join("resolvers/0001_mon/0_mon_base.json"), JSON.stringify({"order": 0,
+		"variations": [{"aspects": [], "model": "cobblemon:mon.geo", "texture": "cobblemon:textures/pokemon/mon.png",
+			"layers": [{"name": "glow", "emissive": "true", "texture": "cobblemon:textures/pokemon/glow.png"},
+				{"name": "wings", "texture": "cobblemon:textures/pokemon/wings.png"}]}]}))
+	TestFiles.write_text(bedrock.path_join("models/0001_mon/mon.geo.json"), "{}")
+	var files := CobblemonSpecies.files(root, "0001_mon")
+	assert_eq(files.layers.map(func(l: Dictionary) -> bool: return l.emissive), [true, false])

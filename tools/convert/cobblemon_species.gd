@@ -8,8 +8,9 @@ const BEDROCK := "assets/cobblemon/bedrock/pokemon"
 ## Files for a species folder such as "0009_blastoise" with the given aspects, such as
 ## ["alolan"]. Resolver variations apply in order: each one whose aspects are all in
 ## `aspects` overrides the model, texture and poser before it, so ["alolan"] starts from the
-## base variation and swaps in the Alolan files. Returns {"geo", "texture", "poser"} paths
-## or {"error"}.
+## base variation and swaps in the Alolan files. Returns {"geo", "texture", "poser",
+## "layers"} or {"error"}; "layers" lists texture overlays drawn over the model
+## ({"texture": path, "emissive": bool}), such as glowing eyes or Vivillon's wing patterns.
 static func files(root: String, folder: String, aspects: Array = []) -> Dictionary:
 	var resolver_dir := root.path_join(BEDROCK).path_join("resolvers").path_join(folder)
 	var resolvers: Array = []
@@ -24,7 +25,7 @@ static func files(root: String, folder: String, aspects: Array = []) -> Dictiona
 	for data: Dictionary in resolvers:
 		for variation: Dictionary in data.get("variations", []):
 			if (variation.get("aspects", []) as Array).all(func(a: Variant) -> bool: return aspects.has(a)):
-				for field in ["model", "texture", "poser"]:
+				for field in ["model", "texture", "poser", "layers"]:
 					if variation.has(field):
 						chosen[field] = variation[field]
 	if not chosen.has("model"):
@@ -33,10 +34,19 @@ static func files(root: String, folder: String, aspects: Array = []) -> Dictiona
 		(chosen.model as String).get_slice(":", 1) + ".json")
 	if not FileAccess.file_exists(geo):
 		return {"error": "%s: model %s not found at %s" % [folder, chosen.model, geo]}
+	var layers: Array[Dictionary] = []
+	for layer: Variant in chosen.get("layers", []):
+		if layer is Dictionary:
+			var path := resource_path(root, layer.get("texture", ""))
+			if not path.is_empty():
+				# Some resolvers write the flag as a string; only true (or "true") means emissive.
+				var emissive: Variant = layer.get("emissive", false)
+				layers.append({"texture": path, "emissive": str(emissive) == "true"})
 	return {
 		"geo": geo,
 		"texture": resource_path(root, chosen.get("texture", "")),
 		"poser": (chosen.get("poser", "") as String).get_slice(":", 1),
+		"layers": layers,
 	}
 
 

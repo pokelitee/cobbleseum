@@ -370,6 +370,12 @@ A QA pass over every roster species reports:
 
 The report feeds the roster flags (§8). The QA runs locally, and its reports stay in the cache.
 
+**Visual review.** `tools/preview_roster.gd` renders roster species as they appear in battle: at roster scale, partway into the idle clip, beside their hitbox capsule. It writes a contact sheet, either for named species or for every species with a QA flag. The first pass, in M2, covered every flagged species and all 100 forms, and found:
+
+- **Rest poses aren't real faults.** Comparing rest-pose height with the hitbox flagged 73 species, but rest poses are often stretched out (Seviper's is 10.6 m tall), and every one looked right in its idle pose. The QA now samples the idle clip instead (`pose_mismatch`, 33 species). These are models that are genuinely bigger than their hitbox because of wings, flames, claws or tails, and they also look right.
+- **Missing texture layers.** Resolver variations can add texture layers over the model: emissive eyes, flames and markings, Vivillon's wing patterns, manes and translucent parts. 186 roster entries use them. The converter now draws them as extra material passes: emissive layers unshaded, the rest shaded with alpha.
+- **Clips in the wrong animation group.** Forms with a poser of their own (Gourgeist's sizes) still use the species' animations, and some species' idle clips are named `air_idle`, `water_idle` or `idle`. Clip lookup now searches the poser's group, then the species', then any other group in the files. It accepts those names, and uses a non-battle standing pose when there's no battle one. Species without an idle clip went from 58 to 7.
+
 ## 8. Roster and species identity
 
 - **Roster:** every species that has both a Cobblemon model and Showdown data. For Cobblemon 1.8.4 that's 1,005 entries: all 905 species, each matching a Showdown species by normalised name, plus 100 forms that Showdown lists as separate species (regional forms, Rotom's appliances, female forms and others).
@@ -391,7 +397,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
   - QA flags and licence.
 
   Headless simulation reads only this file and never loads models.
-- **QA report:** `report.json` counts species per flag: missing clip roles (`no_idle`, `no_faint`, …), `no_poser`, `no_hitbox`, `no_licence_file` (410 entries whose model folder has no licence file), Molang and bone problems, and `bounds_mismatch` (73 entries whose rest-pose height disagrees with their hitbox by more than 2×, often a sign the converter poses the model wrong).
+- **QA report:** `report.json` counts species per flag: missing clip roles (`no_idle`, `no_faint`, …), `no_poser`, `no_hitbox`, `no_licence_file` (410 entries whose model folder has no licence file), Molang and bone problems, and `pose_mismatch` (33 entries whose height in their idle pose differs from their hitbox by more than 2×; reviewed in M2 and all correct, see §7.5).
 - **Caching:** each converted model has a key over its input files and the converter scripts. Rebuilds reuse models whose key still matches, from the previous build or an interrupted one.
 
 ## 9. Battle rules
@@ -826,7 +832,7 @@ So far M1 has been tested on Windows only. macOS and Linux get checked before M2
 
 - All supported move kinds, stat changes, status conditions and dodging. Movement, melee dashes, dodging, stat stages, status conditions and every move kind are done; the stand-in AI dodges about half the threats it sees while it can act, keeps a range suited to its ready moves, and circles.
 - The moveset generator. Done.
-- Full roster conversion with per-species caching, a QA report and the roster file. Done; the 73 `bounds_mismatch` species still need a converter QA pass.
+- Full roster conversion with per-species caching, a QA report and the roster file. Done, with a converter QA pass (§7.5).
 - The procedural animation layer. Done.
 - Batch simulation with a balance report, and a first tuning pass. Done.
 
@@ -867,7 +873,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 | Licence and IP: Cobblemon assets are non-commercial, and Pokémon designs belong to their owners | No assets in git; attribution on every clip; monetisation decided explicitly |
 | Conversion rules (axes, rotation order, UVs) are wrong in some cases | Golden tests on original fixtures; `.glb` debug export; QA pass over the whole roster |
 | Most species lack attack, hit or faint clips | Procedural animation layer from M2 |
-| Per-aspect bone visibility (hats, form-specific parts) handled wrong | Investigate with full roster conversion in M2 (§19) |
+| Forms or species rendered wrong (parts, layers, poses) | M2 review of every flagged species and all 100 forms with `tools/preview_roster.gd` (§7.5); rerun it after converter or source updates |
 | GDScript simulation too slow for full round-robins | After M2, about 57 ms per battle with the full rules and 30–45 s battles (a full round robin of about 500,000 pairings is roughly 8 hours, or 1 hour on 8 processes); profiled and optimised once in M2; sample pairings before considering other options |
 | Replays differ across platforms | Guarantee replays per platform only; checksums fail loudly |
 | Real-time balance is our own design | Rankings are framed as "under Cobbleseum's rules"; batch-simulation tuning; AI-sensitivity check |
@@ -877,8 +883,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 ## 19. Open questions
 
 1. Will clips be monetised? Cobblemon's assets are non-commercial (§14).
-2. How does Cobblemon hide bones per aspect (hats, form-specific parts)? The converter must reproduce it, or the wrong parts will show.
-3. Tuning constants beyond the first pass (§9.7), which set the HP multiplier and overtime: the cooldown formula, speed band, dodge charges and status durations are still first guesses.
-4. Cobblemon's per-model licence files cover models, animations and textures. The jar states no separate licence for its sounds, so the credits assume the same CC BY-NC 3.0 terms. Confirm with the Cobblemon team before any wider release.
+2. Tuning constants beyond the first pass (§9.7), which set the HP multiplier and overtime: the cooldown formula, speed band, dodge charges and status durations are still first guesses.
+3. Cobblemon's per-model licence files cover models, animations and textures. The jar states no separate licence for its sounds, so the credits assume the same CC BY-NC 3.0 terms. Confirm with the Cobblemon team before any wider release.
 
-Resolved in milestone 1: tests use a small in-house runner (`tests/run_tests.gd`) instead of an add-on; recordings use OGV from Movie Maker, encoded to MP4. Resolved in milestone 2: stat stages wear off over time (§9.5). Without that, a species whose attacks all use one stat stalled once moves like Overheat had dropped it to −6.
+Resolved in milestone 1: tests use a small in-house runner (`tests/run_tests.gd`) instead of an add-on; recordings use OGV from Movie Maker, encoded to MP4. Resolved in milestone 2: stat stages wear off over time (§9.5). Reviewing all 100 forms found no wrongly shown parts; forms differ through their own models, textures and layers (§7.5), not hidden bones. Without that, a species whose attacks all use one stat stalled once moves like Overheat had dropped it to −6.

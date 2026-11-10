@@ -97,10 +97,11 @@ static func _roster_entry(entry: Dictionary, report: Dictionary, source_dir: Str
 		flags.append("no_poser")
 	if entry.hitbox.is_empty():
 		flags.append("no_hitbox")
-	var model_height := bounds.y * float(entry.base_scale)
+	var posed: Array = report.get("posed_bounds", report.bounds)
+	var model_height := float(posed[1]) * float(entry.base_scale)
 	var hitbox_height := float(entry.hitbox.get("height", bounds.y)) * float(entry.base_scale)
-	if model_height > 0.0 and maxf(model_height, hitbox_height) / minf(model_height, hitbox_height) > CobblemonRoster.BOUNDS_MISMATCH:
-		flags.append("bounds_mismatch")
+	if model_height > 0.0 and maxf(model_height, hitbox_height) / minf(model_height, hitbox_height) > CobblemonRoster.POSE_MISMATCH:
+		flags.append("pose_mismatch")
 	var licensed := FileAccess.file_exists(source_dir.path_join(CobblemonSpecies.BEDROCK).path_join("models").path_join(entry.folder).path_join("license"))
 	if not licensed:
 		flags.append("no_licence_file")
@@ -134,6 +135,8 @@ static func summary(roster: Dictionary, qa: Dictionary) -> Dictionary:
 static func _input_key(source_dir: String, folder: String, files: Dictionary, converter_key: String) -> String:
 	var parts: PackedStringArray = [converter_key, files.geo.get_file(), FileAccess.get_sha256(files.geo)]
 	parts.append(FileAccess.get_sha256(files.texture) if FileAccess.file_exists(files.texture) else "no-texture")
+	for layer: Dictionary in files.layers:
+		parts.append("layer:%s:%s" % [layer.emissive, FileAccess.get_sha256(layer.texture) if FileAccess.file_exists(layer.texture) else "missing"])
 	var bedrock := source_dir.path_join(CobblemonSpecies.BEDROCK)
 	var poser: String = bedrock.path_join("posers").path_join(folder).path_join(files.poser + ".json")
 	parts.append(FileAccess.get_sha256(poser) if not files.poser.is_empty() and FileAccess.file_exists(poser) else "no-poser")

@@ -3,6 +3,8 @@ extends RefCounted
 ## Base class for tests. Test scripts extend it and define methods named test_*.
 
 var failures: PackedStringArray = []
+## Logged errors this test causes on purpose; the runner ignores that many.
+var expected_errors := 0
 
 
 func assert_true(condition: bool, message := "") -> void:
