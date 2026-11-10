@@ -1,6 +1,6 @@
 # Cobbleseum
 
-A local-first 3D Pokémon battle game built with Godot 4. Two Pokémon fight in real time in a small arena, rendered with Cobblemon's models and animations and driven by Pokémon Showdown's data. Battles can be player-vs-AI or AI-vs-AI, AI-vs-AI battles can be recorded as vertical 1080×1920 clips, and many simulated battles will feed a local ranking.
+A local-first 3D Pokémon battle game built with Godot 4. Two Pokémon fight in real time in a small arena, rendered with Cobblemon's models and animations and driven by Pokémon Showdown's data. Battles can be player-vs-AI or AI-vs-AI, AI-vs-AI battles can be recorded as vertical 1080×1920 clips, and many simulated battles feed a local ranking of every species.
 
 The repository contains only original code and data. Third-party assets are downloaded into a local, git-ignored cache and never committed.
 
@@ -44,6 +44,16 @@ Pit two AIs against each other over random pairings (side A's win rate shows whi
 
 ```bash
 godot --headless --path . --script res://tools/batch.gd -- --battles=300 --ai-a=hard --ai-b=easy
+```
+
+Rank the species: play a sampled round robin (every species meets 20 random others, from both sides) over parallel processes, then fit Bradley–Terry ratings. `report` writes `results/rank/v<rules>/<profile>/ranking.md`. `matrix` plays the top 24 against each other (5 seeds per pairing) for the matchup matrix, and `compare` checks how much the ranking depends on the AI profile (after a `run --profile=hard`). `--limit=60` runs a small pilot:
+
+```bash
+godot --headless --path . --script res://tools/rank.gd -- run --jobs=8
+godot --headless --path . --script res://tools/rank.gd -- report
+godot --headless --path . --script res://tools/rank.gd -- matrix --jobs=8
+godot --headless --path . --script res://tools/rank.gd -- run --jobs=8 --profile=hard
+godot --headless --path . --script res://tools/rank.gd -- compare --against=hard
 ```
 
 Record a battle as video clips (needs a display and ffmpeg; output goes to `recordings/`). The clip is the most exciting stretch of about `--seconds` (usually ending on the knockout), with hit-stop, slow motion and camera shots planned from the battle's events. `--format` is `vertical` (1080×1920, the default), `landscape` (1920×1080) or `both`; every format shows the same battle:
