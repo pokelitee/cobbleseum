@@ -3,13 +3,17 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 4
+const RULES_VERSION := 5
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
 const TIME_CAP_SECONDS := 90.0
+## Overtime: from this point hits deal more damage, rising by OVERTIME_RAMP per second
+## (x4 by the time cap), so slow matchups finish instead of timing out.
+const OVERTIME_SECONDS := 60.0
+const OVERTIME_RAMP := 0.1
 ## Multiplies the HP stat to set how long battles last (target 30-45 s).
-const HP_MULTIPLIER := 8.0
+const HP_MULTIPLIER := 22.0
 
 const ARENA_RADIUS := 8.0
 const START_DISTANCE := 8.0
@@ -101,6 +105,11 @@ const STATUS_IMMUNITIES := {"brn": ["Fire"], "par": ["Electric"], "psn": ["Poiso
 const COOLDOWN_BASE := 0.6
 const COOLDOWN_POWER_DIVISOR := 60.0
 const COOLDOWN_PP_FACTOR := 12.0
+
+
+## Damage multiplier at a tick: 1 until overtime, then rising.
+static func overtime_factor(tick: int) -> float:
+	return 1.0 + OVERTIME_RAMP * maxf(0.0, tick / float(TICK_RATE) - OVERTIME_SECONDS)
 
 
 static func seconds_to_ticks(seconds: float) -> int:

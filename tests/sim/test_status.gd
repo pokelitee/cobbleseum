@@ -227,3 +227,15 @@ func test_ai_scores_support_moves_by_situation() -> void:
 	assert_eq(SimpleAI.move_score(me, foe, _move("willowisp")), 0.0, "no status on a foe that has one")
 	me.boosts.atk = 2
 	assert_eq(SimpleAI.move_score(me, foe, _move("swordsdance")), 0.0, "stops buffing at +2")
+
+
+func test_ai_discounts_moves_that_lower_its_attacking_stat() -> void:
+	var overheat: BattleMove = BattleMove.from_showdown("overheat", {"name": "Overheat", "category": "Special", "type": "Fire", "basePower": 130,
+		"accuracy": 90, "pp": 5, "flags": {}, "target": "normal", "self": {"boosts": {"spa": -2}}}).move
+	var battle := _battle(["jet"], ["jet"])
+	var me := battle.fighters[0]
+	var foe := battle.fighters[1]
+	var jet := _move("jet")
+	assert_true(SimpleAI.move_score(me, foe, overheat) < 130.0 * 0.6, "pays for the -2 it causes")
+	me.boosts.spa = -2
+	assert_almost_eq(SimpleAI.move_score(me, foe, jet), 80.0 * 0.5, 1e-4, "attacks weigh the current stage")

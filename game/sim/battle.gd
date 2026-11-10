@@ -24,6 +24,9 @@ var _controllers: Array = []
 var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
+## Values hashed per fighter each tick, and the reused buffer they go in.
+const FIGHTER_STATE_SIZE := 16
+var _state := PackedFloat64Array()
 
 
 ## `spec` = {"seed": int, "fighters": [{"species", "moves"?: [ids], "radius"?}, x2]}. Without
@@ -54,15 +57,13 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		var radius := float(entry.get("radius", data.roster.get(entry.species, {}).get("radius", Fighter.DEFAULT_RADIUS)))
 		var move_ids: Array = entry.get("moves", [])
 		if move_ids.is_empty():
-			var generated := Movesets.generate(entry.species, data)
+			var generated := data.standard_moveset(entry.species)
 			if generated.has("error"):
 				return generated
 			move_ids = generated.moves
 		var battle_moves: Array[BattleMove] = []
 		for move_id: String in move_ids:
-			if not data.moves.has(move_id):
-				return {"error": "unknown move '%s'" % move_id}
-			var converted := BattleMove.from_showdown(move_id, data.moves[move_id])
+			var converted := data.convert_move(move_id)
 			if converted.has("error"):
 				return converted
 			battle_moves.append(converted.move)
@@ -94,6 +95,8 @@ func step() -> void:
 	for side: int in order:
 		_act(fighters[side], fighters[1 - side], intents[side])
 	_move_projectiles()
+	if tick == Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS):
+		_event("overtime", -1, {})
 	_record_state()
 	tick += 1
 	_check_end()
@@ -298,6 +301,7 @@ func _move_projectiles() -> void:
 
 func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	var outcome := damage(attacker, defender, move, _data, _random)
+	outcome.damage = maxi(1, floori(outcome.damage * Rules.overtime_factor(tick)))
 	var dealt := mini(outcome.damage, defender.hp)
 	defender.hp -= dealt
 	_event("hit", attacker.side, {"move": move.id, "damage": outcome.damage, "crit": outcome.crit,
@@ -462,17 +466,33 @@ func _check_end() -> void:
 		_event("time_up", -1, {})
 
 
+## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
 func _record_state() -> void:
-	var state := PackedFloat64Array()
+	_state.resize(FIGHTER_STATE_SIZE * 2 + projectiles.size() * 2)
+	var i := 0
 	for fighter in fighters:
-		state.append_array([fighter.position.x, fighter.position.y, fighter.hp, fighter.action, fighter.action_ticks,
-			fighter.dodge_charges, fighter.status_ticks, fighter.confusion_ticks, fighter.stun_ticks, fighter.followups.size(),
-			Fighter.STATUS_CODES.find(fighter.status)])
-		for stat in BattleMove.STATS:
-			state.append(fighter.boosts[stat])
+		_state[i] = fighter.position.x
+		_state[i + 1] = fighter.position.y
+		_state[i + 2] = fighter.hp
+		_state[i + 3] = fighter.action
+		_state[i + 4] = fighter.action_ticks
+		_state[i + 5] = fighter.dodge_charges
+		_state[i + 6] = fighter.status_ticks
+		_state[i + 7] = fighter.confusion_ticks
+		_state[i + 8] = fighter.stun_ticks
+		_state[i + 9] = fighter.followups.size()
+		_state[i + 10] = Fighter.STATUS_CODES.find(fighter.status)
+		_state[i + 11] = fighter.boosts.atk
+		_state[i + 12] = fighter.boosts.def
+		_state[i + 13] = fighter.boosts.spa
+		_state[i + 14] = fighter.boosts.spd
+		_state[i + 15] = fighter.boosts.spe
+		i += FIGHTER_STATE_SIZE
 	for projectile in projectiles:
-		state.append_array([projectile.position.x, projectile.position.y])
-	_hash.update(state.to_byte_array())
+		_state[i] = projectile.position.x
+		_state[i + 1] = projectile.position.y
+		i += 2
+	_hash.update(_state.to_byte_array())
 
 
 func _event(type: String, side: int, details: Dictionary) -> void:

@@ -46,6 +46,9 @@ var _intro: Control
 var _intro_age := 0
 var _winner: Label
 var _credits: Control
+## Flashed titles: {"label": Label, "age": frames}.
+var _titles: Array[Dictionary] = []
+const TITLE_FRAMES := 45
 var _frame := 0
 
 
@@ -170,6 +173,15 @@ func show_winner(text: String) -> void:
 	_winner.scale = Vector2.ONE * 1.6
 
 
+## A title flashed in the middle of the screen, e.g. "Overtime!".
+func flash_title(text: String, colour: Color) -> void:
+	var title := _label(text, 96, colour)
+	title.size = title.get_minimum_size()
+	title.position = (_size - title.size) * Vector2(0.5, 0.35)
+	add_child(title)
+	_titles.append({"label": title, "age": 0})
+
+
 func show_credits() -> void:
 	_credits.visible = true
 	_credits.modulate.a = 0.0
@@ -205,6 +217,13 @@ func next_frame() -> void:
 		_winner.scale = _winner.scale.lerp(Vector2.ONE, 0.25)
 	if _credits.visible:
 		_credits.modulate.a = minf(1.0, _credits.modulate.a + 0.1)
+	for title in _titles.duplicate():
+		title.age += 1
+		var label: Label = title.label
+		label.modulate.a = clampf((TITLE_FRAMES - title.age) / 10.0, 0.0, 1.0)
+		if title.age >= TITLE_FRAMES:
+			label.queue_free()
+			_titles.erase(title)
 
 
 func _card(text: String, font_size: int, dim: float) -> Control:

@@ -34,6 +34,12 @@ Run a battle headless (prints the result, length and a checksum per seed). In a 
 godot --headless --path . --script res://tools/battle.gd -- game/data/battles/showcase.json --seeds=10
 ```
 
+Run a balance report: seeded random pairings of the whole roster with standard movesets. It prints battle length, draw rate, how often type advantage wins, move-kind use and side bias, and writes everything to `results/`:
+
+```bash
+godot --headless --path . --script res://tools/batch.gd -- --battles=500 --seed=1
+```
+
 Record a battle as video clips (needs a display and ffmpeg; output goes to `recordings/`). The clip is the most exciting stretch of about `--seconds` (usually ending on the knockout), with hit-stop, slow motion and camera shots planned from the battle's events. `--format` is `vertical` (1080×1920, the default), `landscape` (1920×1080) or `both`; every format shows the same battle:
 
 ```bash

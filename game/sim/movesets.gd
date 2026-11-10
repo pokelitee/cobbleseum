@@ -46,7 +46,7 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 	var attacks: Array[Dictionary] = []
 	var utilities: Array[Dictionary] = []
 	for move_id in learnable(species_id, data):
-		var converted := BattleMove.from_showdown(move_id, data.moves.get(move_id, {}))
+		var converted := data.convert_move(move_id)
 		if converted.has("error"):
 			continue
 		var move: BattleMove = converted.move

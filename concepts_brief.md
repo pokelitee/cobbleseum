@@ -400,7 +400,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 
 - One-on-one, in a round arena with walls (no ring-outs).
 - The simulation runs at a fixed 30 ticks per second.
-- **Length:** battles should last 30–45 seconds. At 90 seconds the battle ends in a draw.
+- **Length:** battles should last 30–45 seconds. From 60 seconds, **overtime** raises hit damage by 10% per second (×4 by the cap), so slow matchups finish. At 90 seconds the battle ends in a draw.
 - **Controls:** both fighters are controlled through the same intents:
   - a movement direction;
   - dodge;
@@ -411,7 +411,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 ### 9.2 Fighters
 
 - **Stats:** level 50, all IVs 31, no EVs and a neutral nature, so stats come from the species alone.
-- **HP:** the HP stat times a global HP multiplier. Tuning the multiplier sets battle length.
+- **HP:** the HP stat times a global HP multiplier (22 after the first tuning pass, §9.7). Tuning the multiplier sets battle length.
 - **Speed:** the Speed stat maps into a band of movement speeds. It also sets how quickly dodges recharge.
 - **Dodges:** each fighter has 2 dodge charges, each recharging in 3 s (slowest) to 1.5 s (fastest, by Speed). A dodge is a 2.5 m dash over 0.2 s, invulnerable throughout: projectiles fly on through and melee strikes whiff. A fighter can't dodge while winding up or recovering, so attacking commits it.
 - **Movement:** fighters walk at their speed, can't pass through each other (they slide around) and stay inside the wall.
@@ -538,7 +538,22 @@ All rules constants live in one committed data file. Batch simulation (§13) rep
 - win rate for the side with type advantage;
 - how often each move kind is used.
 
-Constants are tuned against targets for these numbers.
+Constants are tuned against targets for these numbers. `tools/batch.gd` runs seeded random pairings of every roster species with its standard moveset and writes the report to `results/`.
+
+**First tuning pass** (rules version 5; 500 battles each, two seeds; about 57 ms per battle):
+
+| | Before | After | Target |
+|---|---|---|---|
+| Median length | 14.1 s | 33.6–35.8 s | 30–45 s |
+| 10th–90th percentile | 8.2–28.5 s | 17.6–75.6 s | |
+| Draws | 2.5% | 4.0–4.4% | under 5% |
+| Type-advantaged side wins | 56.6% | 56.8–57.2% | no target yet |
+
+- **Changes:** the HP multiplier went from 8 to 22, which put the median in range. That pushed the slowest 10% (resisted matchups and weak unevolved species) into the 90 s cap, so overtime was added to finish them.
+- **Move use:** melee 43–46%, projectile 36–37%, area 12–13%, self-buff 4%, heal 1%, status 1%. Debuffs are almost never in a generated moveset.
+- **Side bias:** with every pairing run both ways round, side A wins 49.2% of 571 decided battles.
+- **AI fix:** the stand-in AI now weighs its own attacking stat stage, and avoids moves that lower it (Overheat, Draco Meteor) while it has other choices.
+- **Remaining draws:** mostly two all-special attackers who've dropped their own Sp. Atk to −6 (§19, question 4).
 
 ## 10. Simulation and determinism
 
@@ -813,7 +828,7 @@ So far M1 has been tested on Windows only. macOS and Linux get checked before M2
 - The moveset generator. Done.
 - Full roster conversion with per-species caching, a QA report and the roster file. Done; the 73 `bounds_mismatch` species still need a converter QA pass.
 - The procedural animation layer. Done.
-- Batch simulation with a balance report, and a first tuning pass.
+- Batch simulation with a balance report, and a first tuning pass. Done.
 
 **M3: presentation** (everything in §12.2–§12.5):
 
@@ -853,7 +868,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 | Conversion rules (axes, rotation order, UVs) are wrong in some cases | Golden tests on original fixtures; `.glb` debug export; QA pass over the whole roster |
 | Most species lack attack, hit or faint clips | Procedural animation layer from M2 |
 | Per-aspect bone visibility (hats, form-specific parts) handled wrong | Investigate with full roster conversion in M2 (§19) |
-| GDScript simulation too slow for full round-robins | M1 measured about 37 ms per battle (roughly 1 hour for a full round robin on 8 processes); re-measure as rules grow; sample pairings before considering other options |
+| GDScript simulation too slow for full round-robins | After M2, about 57 ms per battle with the full rules and 30–45 s battles (a full round robin of about 500,000 pairings is roughly 8 hours, or 1 hour on 8 processes); profiled and optimised once in M2; sample pairings before considering other options |
 | Replays differ across platforms | Guarantee replays per platform only; checksums fail loudly |
 | Real-time balance is our own design | Rankings are framed as "under Cobbleseum's rules"; batch-simulation tuning; AI-sensitivity check |
 | A new Cobblemon release changes the layout | The pinned version never changes silently; layout checks give clear errors |
@@ -864,7 +879,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 1. Will clips be monetised? Cobblemon's assets are non-commercial (§14).
 2. How does Cobblemon hide bones per aspect (hats, form-specific parts)? The converter must reproduce it, or the wrong parts will show.
 3. Starting values for the tuning constants: HP multiplier, cooldown formula, speed band, dodge charges and status durations.
-4. Should stat stages wear off after a set time?
+4. Should stat stages wear off after a set time? The first tuning pass found a reason to: a species whose attacks all use one stat stalls once moves like Overheat or Draco Meteor have dropped that stat to −6 (Charizard vs Noivern draws every time). One option is for stages to drift back toward 0 by one step every few seconds.
 5. Cobblemon's per-model licence files cover models, animations and textures. The jar states no separate licence for its sounds, so the credits assume the same CC BY-NC 3.0 terms. Confirm with the Cobblemon team before any wider release.
 
 Resolved in milestone 1: tests use a small in-house runner (`tests/run_tests.gd`) instead of an add-on; recordings use OGV from Movie Maker, encoded to MP4.
