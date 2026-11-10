@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 6
+const RULES_VERSION := 7
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -74,6 +74,12 @@ const RECHARGE_EXTRA := 1.0
 const STATUS_MOVE_WINDUP := 0.4
 const STATUS_MOVE_RECOVERY := 0.4
 const STATUS_MOVE_COOLDOWN := 6.0
+## Heals are a channel: a long wind-up that any hit cancels (the cooldown is still spent), and
+## they restore this share of the main-series amount. In real time a heal costs a fraction of
+## a second rather than a turn, so a full-strength, uninterruptible Roost was worth close to
+## an extra bar of HP.
+const HEAL_WINDUP := 1.2
+const HEAL_FACTOR := 0.5
 
 ## Stat stages run from -6 to +6 with the main-series multipliers (§9.5). They wear off:
 ## every STAGE_DECAY_SECONDS without a change, each stage moves one step back toward 0.

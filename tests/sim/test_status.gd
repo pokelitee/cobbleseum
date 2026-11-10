@@ -69,8 +69,9 @@ func test_status_moves_are_classified() -> void:
 	assert_eq(_move("willowisp").status, "brn")
 	assert_eq(_move("growl").kind, BattleMove.Kind.DEBUFF, "every adjacent foe is just the one opponent")
 	assert_eq(_move("recover").kind, BattleMove.Kind.HEAL)
-	assert_eq(_move("recover").heal_share, 0.5)
-	assert_eq(_move("synthesis").heal_share, 0.5, "heal amount from the override table")
+	assert_eq(_move("recover").heal_share, 0.5 * Rules.HEAL_FACTOR)
+	assert_eq(_move("synthesis").heal_share, 0.5 * Rules.HEAL_FACTOR, "heal amount from the override table")
+	assert_eq(_move("recover").windup_ticks, Rules.seconds_to_ticks(Rules.HEAL_WINDUP), "heals channel longer")
 	assert_true(_move("confuseray").confuses)
 	assert_true(BattleMove.from_showdown("clangoroussoul", MOVES.clangoroussoul).has("error"), "needs code Showdown's data lacks")
 
@@ -177,8 +178,8 @@ func test_heal_drain_and_recoil() -> void:
 	var battle := _battle(["recover"], ["jet"], [{"use": 0}])
 	var fighter := battle.fighters[0]
 	fighter.hp = fighter.max_hp / 4
-	_run_ticks(battle, 20)
-	assert_eq(fighter.hp, fighter.max_hp / 4 + roundi(fighter.max_hp * 0.5))
+	_run_ticks(battle, 50)
+	assert_eq(fighter.hp, fighter.max_hp / 4 + roundi(fighter.max_hp * 0.5 * Rules.HEAL_FACTOR))
 	fighter.hp = fighter.max_hp - 5
 	battle._heal(fighter, 100, "recover")
 	assert_eq(fighter.hp, fighter.max_hp, "never above max")
@@ -193,6 +194,22 @@ func test_heal_drain_and_recoil() -> void:
 	battle._hit(battle.fighters[0], battle.fighters[1], _move("bravebird"))
 	dealt = _events(battle, "hit")[0].damage
 	assert_eq(battle.fighters[0].hp, battle.fighters[0].max_hp - roundi(dealt * 0.33), "recoil costs a third")
+
+
+func test_a_hit_cancels_a_heal() -> void:
+	var battle := _battle(["recover"], ["jet"], [{"use": 0}])
+	var fighter := battle.fighters[0]
+	fighter.hp = fighter.max_hp / 2
+	_run_ticks(battle, 10)
+	assert_eq(fighter.action, Fighter.Action.WINDUP)
+	battle._hit(battle.fighters[1], fighter, _move("jet"))
+	var hp := fighter.hp
+	assert_eq(fighter.action, Fighter.Action.READY, "back to ready, the heal lost")
+	assert_eq(_events(battle, "interrupt").size(), 1)
+	assert_true(fighter.cooldowns[0] > 0, "the cooldown is still spent")
+	_run_ticks(battle, 50)
+	assert_eq(fighter.hp, hp, "no heal later either")
+	assert_eq(_events(battle, "heal").size(), 0)
 
 
 func test_secondary_and_self_stat_changes_apply_on_hit() -> void:
