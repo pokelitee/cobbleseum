@@ -133,3 +133,30 @@ func test_layout_checks_format_versions() -> void:
 	var pipeline := _cached_pipeline("format", bytes, source)
 	var err := pipeline.extract("test", source)
 	assert_true(err.contains("data/b.json has format_version \"2.0\", expected \"1.0\""), err)
+
+
+func test_a_build_script_that_errors_is_never_stamped() -> void:
+	# A script error makes the build call return null; the pipeline must not read that as success.
+	var dir := TestFiles.fresh_dir("broken_build")
+	var script_path := dir.path_join("broken_build.gd")
+	TestFiles.write_text(script_path, "extends RefCounted\n\n\nfunc build(_source: String, _out: String) -> Variant:\n\treturn null\n")
+	var source := _source(PackedByteArray([1]))
+	source.build = script_path
+	var pipeline := AssetPipeline.new(dir.path_join("cache"))
+	var err := pipeline.build("test", source)
+	assert_true(err.contains("build script failed"), err)
+	assert_false(FileAccess.file_exists(pipeline.build_dir("test", source).path_join(AssetPipeline.STAMP_FILE)))
+
+
+func test_a_build_that_logs_script_errors_is_never_stamped() -> void:
+	var dir := TestFiles.fresh_dir("erroring_build")
+	var script_path := dir.path_join("erroring_build.gd")
+	# push_error stands in for a runtime error deep in the build: logged, but the call returns "".
+	TestFiles.write_text(script_path, "extends RefCounted\n\n\nfunc build(_source: String, _out: String) -> String:\n\tpush_error(\"converter broke\")\n\treturn \"\"\n")
+	expected_errors = 1
+	var source := _source(PackedByteArray([2]))
+	source.build = script_path
+	var pipeline := AssetPipeline.new(dir.path_join("cache"))
+	var err := pipeline.build("test", source)
+	assert_true(err.contains("converter broke"), err)
+	assert_false(FileAccess.file_exists(pipeline.build_dir("test", source).path_join(AssetPipeline.STAMP_FILE)))

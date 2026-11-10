@@ -197,7 +197,15 @@ func build(id: String, source: Dictionary) -> String:
 		_remove_tree(staging)
 	DirAccess.make_dir_recursive_absolute(staging)
 	var builder: Object = script.new()
-	var err: String = builder.build(source_dir(id, source), staging, out) if incremental else builder.build(source_dir(id, source), staging)
+	# Script errors inside the build don't stop it, so watch the log and never stamp a
+	# build that hit one.
+	var counter := ErrorCounter.new()
+	OS.add_logger(counter)
+	var result: Variant = builder.build(source_dir(id, source), staging, out) if incremental else builder.build(source_dir(id, source), staging)
+	OS.remove_logger(counter)
+	var err: String = result if result is String else "the build script failed; see the script errors above"
+	if err.is_empty() and not counter.errors.is_empty():
+		err = "the build script hit %d script errors; the first: %s" % [counter.errors.size(), counter.errors[0]]
 	if not err.is_empty():
 		if not incremental:
 			_remove_tree(staging)

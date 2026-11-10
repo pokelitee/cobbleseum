@@ -14,9 +14,9 @@ const MAX_HEIGHT := 3.0
 ## Hitbox capsule radius bounds in metres.
 const MIN_RADIUS := 0.25
 const MAX_RADIUS := 1.5
-## Flagged in the QA report when the model's rest-pose height and its hitbox height differ
-## by more than this factor (stretched-out rest poses, stray bones).
-const BOUNDS_MISMATCH := 2.0
+## Flagged in the QA report when the model's height in its idle pose and its hitbox height
+## differ by more than this factor (a mis-posed model, or one far bigger than its hitbox).
+const POSE_MISMATCH := 2.0
 
 
 ## `pokedex`: Showdown ID -> species. `cobblemon`: Cobblemon species id -> species JSON.

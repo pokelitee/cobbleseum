@@ -61,6 +61,12 @@ Preview converted models (opens a window; images go to `cache/previews/`):
 godot --path . --script res://tools/preview_model.gd -- 0009_blastoise --clip=physical
 ```
 
+Preview roster species as they appear in battle, for converter QA (opens a window; writes a contact sheet to `cache/previews/`). Name species, or pass a QA flag from `report.json`:
+
+```bash
+godot --path . --script res://tools/preview_roster.gd -- --flag=pose_mismatch
+```
+
 Preview every move style (opens a window; images go to `cache/previews/move_<style>.png`):
 
 ```bash

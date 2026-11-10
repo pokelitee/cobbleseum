@@ -6,20 +6,6 @@ extends SceneTree
 const TEST_ROOT := "res://tests"
 
 
-class ErrorCounter extends Logger:
-	# GDScript runtime errors don't propagate to the caller, so a test that hits one
-	# would otherwise look like a pass. Count logged errors per test instead.
-	var errors: PackedStringArray = []
-
-	func _log_error(function: String, file: String, line: int, code: String,
-			rationale: String, _editor_notify: bool, _error_type: int,
-			_script_backtrace: Array[ScriptBacktrace]) -> void:
-		errors.append("%s (%s:%d in %s)" % [rationale if not rationale.is_empty() else code, file, line, function])
-
-	func _log_message(_message: String, _error: bool) -> void:
-		pass
-
-
 func _initialize() -> void:
 	_run.call_deferred()
 
@@ -27,6 +13,7 @@ func _initialize() -> void:
 ## Runs after the first frame starts, so tests can add nodes to a live scene tree.
 func _run() -> void:
 	await process_frame
+	# A test that hits a runtime error would otherwise look like a pass; count logged errors.
 	var counter := ErrorCounter.new()
 	OS.add_logger(counter)
 	var total := 0
@@ -44,7 +31,8 @@ func _run() -> void:
 			var test_case: TestCase = script.new()
 			test_case.call(test_name)
 			var problems := test_case.failures.duplicate()
-			problems.append_array(counter.errors)
+			# Errors a test deliberately causes (expected_errors) aren't failures.
+			problems.append_array(counter.errors.slice(test_case.expected_errors))
 			if problems.is_empty():
 				print("PASS %s:%s" % [path, test_name])
 			else:

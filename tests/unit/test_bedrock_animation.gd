@@ -88,7 +88,7 @@ func test_choose_clips_prefers_poser_then_names() -> void:
 		"animations": {"physical": "q.bedrock_primary('mon', 'punch', q.curve('one'))", "special": "q.bedrock('mon', 'missing')"},
 	}
 	var available := ["mon.fight_idle", "mon.battle_cry", "mon.punch", "mon.special", "mon.ground_walk", "mon.battle_idle"]
-	var roles := CobblemonModel.choose_clips(poser, available, "mon")
+	var roles := CobblemonModel.choose_clips(poser, available, ["mon"] as Array[String])
 	assert_eq(roles.idle, "mon.fight_idle")
 	assert_eq(roles.cry, "mon.battle_cry")
 	assert_eq(roles.physical, "mon.punch")
@@ -98,5 +98,15 @@ func test_choose_clips_prefers_poser_then_names() -> void:
 
 
 func test_choose_clips_without_poser_uses_names() -> void:
-	var roles := CobblemonModel.choose_clips({}, ["mon.ground_idle", "mon.hurt"], "mon")
+	var roles := CobblemonModel.choose_clips({}, ["mon.ground_idle", "mon.hurt"], ["mon"] as Array[String])
 	assert_eq(roles, {"idle": "mon.ground_idle", "recoil": "mon.hurt"})
+
+
+func test_choose_clips_falls_back_across_animation_groups() -> void:
+	# A form's poser (mon_large) whose clips live in the species' group (mon).
+	var standing := {"poses": {"standing": {"poseTypes": ["STAND"], "animations": ["q.bedrock('mon', 'ground_idle')"]}}}
+	var roles := CobblemonModel.choose_clips(standing, ["mon.ground_idle", "mon.cry"], ["mon_large", "mon"] as Array[String])
+	assert_eq(roles.idle, "mon.ground_idle", "a non-battle standing pose counts when there's no battle pose")
+	assert_eq(roles.cry, "mon.cry", "fallback names are searched in the species' group too")
+	var floating := CobblemonModel.choose_clips({}, ["bug.air_idle", "bug.blink"], ["other"] as Array[String])
+	assert_eq(floating.idle, "bug.air_idle", "air idles count, in any group the files hold")

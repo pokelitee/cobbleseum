@@ -13,13 +13,19 @@ const VIEWS: Array[float] = [0.0, 90.0, 180.0, 35.0]
 const CLIP_VIEW := 35.0
 const CLIP_MOMENTS: Array[float] = [0.0, 0.33, 0.5, 0.75]
 
+## The project's stretch settings fix the root viewport's size, so views render here.
+var _viewport: SubViewport
+
 
 func _initialize() -> void:
 	_run.call_deferred()
 
 
 func _run() -> void:
-	root.size = Vector2i(VIEW_SIZE, VIEW_SIZE)
+	_viewport = SubViewport.new()
+	_viewport.size = Vector2i(VIEW_SIZE, VIEW_SIZE)
+	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(_viewport)
 	var source := ProjectSettings.globalize_path(SOURCE)
 	var out_dir := ProjectSettings.globalize_path("res://cache/previews")
 	DirAccess.make_dir_recursive_absolute(out_dir)
@@ -52,7 +58,7 @@ func _render(source: String, folder: String, role: String, path: String) -> Stri
 		return "%s has no '%s' clip (has %s)" % [folder, role, ", ".join(clips.keys())]
 	var stage := _stage()
 	stage.add_child(model)
-	root.add_child(stage)
+	_viewport.add_child(stage)
 	var bounds := _bounds(model)
 	var camera: Camera3D = stage.get_node("Camera")
 	var shots := VIEWS.size() if role.is_empty() else CLIP_MOMENTS.size()
@@ -69,7 +75,7 @@ func _render(source: String, folder: String, role: String, path: String) -> Stri
 		camera.look_at(target)
 		await process_frame
 		await process_frame
-		var image := root.get_texture().get_image()
+		var image := _viewport.get_texture().get_image()
 		image.convert(Image.FORMAT_RGBA8)
 		sheet.blit_rect(image, Rect2i(0, 0, VIEW_SIZE, VIEW_SIZE), Vector2i(i * VIEW_SIZE, 0))
 	stage.queue_free()
