@@ -8,6 +8,7 @@ extends Node3D
 ## - ranged: orb, bullet, beam, bolt (lightning), stream (breath and spray), pulse, sound,
 ##   wind, powder, skyfall (drops onto the target), erupt (spikes from the ground),
 ##   quake (ground wave), mind (glow on the target), explosion
+## - area moves: a ring and dome sweeping out from the user, plus an accent for some styles
 ## - hits: a flash, a ring and shards, plus an accent for some styles
 ## Flat effects (crescents, claw marks, rings) face the camera when they spawn, so no shot
 ## sees them edge-on. A ranged move that hits on the tick it fires never shows a
@@ -54,13 +55,14 @@ func windup(attacker: FighterView, move: BattleMove) -> void:
 	ring.position = attacker.position + Vector3.UP * 0.05
 	ring.scale = Vector3.ONE * attacker.height * 0.5
 	add_child(ring)
-	_effects.append({"node": ring, "age": 0, "frames": WINDUP_FRAMES, "kind": "grow", "base": ring.scale, "growth": 0.6})
+	var frames := maxi(WINDUP_FRAMES, move.windup_ticks)
+	_effects.append({"node": ring, "age": 0, "frames": frames, "kind": "grow", "base": ring.scale, "growth": 0.6})
 	var style := style_of(move)
-	if style in CHARGING:
+	if style in CHARGING or move.charges:
 		var glow := _mesh(_sphere(1.0), Color.WHITE.lerp(colour, 0.5), 0.7)
 		glow.position = _front(attacker, 0.6)
 		add_child(glow)
-		_effects.append({"node": glow, "age": 0, "frames": WINDUP_FRAMES, "kind": "charge",
+		_effects.append({"node": glow, "age": 0, "frames": frames, "kind": "charge",
 			"size": 0.18 + 0.12 * attacker.height})
 	elif style == "rush":
 		_dust(attacker.position, colour, attacker.height * 0.6)
@@ -166,6 +168,45 @@ func point_blank(attacker: FighterView, target: FighterView, move: BattleMove) -
 			_cloud(from.lerp(to, 0.5), colour, 0.45)
 
 
+## An area move going off around `view`: a ground ring and a dome sweeping out to the
+## move's reach, plus an accent for some styles.
+func blast(view: FighterView, move: BattleMove) -> void:
+	var colour := TypeColors.of(move.type)
+	var reach := Rules.AREA_RADIUS + view.height * 0.4
+	var ground := Vector3(view.position.x, 0.05, view.position.z)
+	var ring := _mesh(_torus(0.9, 1.0), Color.WHITE.lerp(colour, 0.6), 0.9)
+	ring.position = ground
+	ring.scale = Vector3.ONE * 0.5
+	add_child(ring)
+	_effects.append({"node": ring, "age": 0, "frames": BURST_FRAMES, "kind": "grow", "base": ring.scale, "growth": reach * 2.0 - 1.0})
+	var dome := _mesh(_sphere(1.0), colour, 0.3)
+	dome.position = ground
+	dome.scale = Vector3(1, 0.45, 1) * 0.5
+	add_child(dome)
+	_effects.append({"node": dome, "age": 0, "frames": BURST_FRAMES, "kind": "grow", "base": dome.scale, "growth": reach * 2.0 - 1.0})
+	match style_of(move):
+		"skyfall":
+			for i in 4:
+				var angle := TAU * i / 4.0 + 0.4
+				var rock := _mesh(_sphere(Rules.PROJECTILE_RADIUS * 1.6), Color.WHITE.lerp(colour, 0.6), 1.0)
+				add_child(rock)
+				_effects.append({"node": rock, "age": -i * 2, "frames": FADE_FRAMES, "kind": "drop",
+					"origin": ground + Vector3(cos(angle), 0.35, sin(angle)) * reach * 0.6})
+		"erupt":
+			for i in 8:
+				var angle := TAU * i / 8.0
+				_spike(ground + Vector3(cos(angle), 0, sin(angle)) * reach * 0.55, colour)
+		"bolt":
+			for i in 6:
+				var angle := TAU * i / 6.0
+				var from := view.position + Vector3.UP * view.height * 0.5
+				_line(from, from + Vector3(cos(angle), -0.3, sin(angle)) * reach * 0.8, colour, true)
+		"explosion":
+			_cloud(view.position + Vector3.UP * view.height * 0.5, colour, reach * 0.8)
+		"quake":
+			_dust(view.position, colour, reach * 0.5)
+
+
 ## Rings drifting up a fighter (stat rise, heal) or down it (stat drop).
 func aura(view: FighterView, colour: Color, rising: bool) -> void:
 	for i in 3:
@@ -251,7 +292,7 @@ func next_frame() -> void:
 			"fade":
 				_fade_all(node, 1.0 - t)
 			"drop":
-				node.position = effect.origin + Vector3.UP * SKY_HEIGHT * (1.0 - t)
+				node.position = effect.origin + Vector3.UP * SKY_HEIGHT * (1.0 - clampf(t, 0.0, 1.0))
 			"drift":
 				var d := clampf(t, 0.0, 1.0)
 				node.position = (effect.from as Vector3).lerp(effect.to, d)

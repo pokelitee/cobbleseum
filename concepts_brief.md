@@ -427,6 +427,16 @@ Counts are for the 685 standard Gen 9 moves, excluding Z-moves and Max moves:
 | Heal | Restores the user's HP | 17 |
 | Status | Projectile that inflicts a status condition | 13 |
 
+In the code, multi-hit, charge and recharge are properties of the melee, projectile and area kinds rather than kinds of their own, so a multi-hit kick and a multi-hit projectile share one implementation:
+
+- **Area:** hits the opponent if it's within 3 m of the user when the move releases (0.45 s wind-up). Dodging through it still works.
+- **Multi-hit:** strikes 0.12 s apart. Moves that hit 2–5 times use the main-series weights (2 and 3 hits 35% each, 4 and 5 hits 15% each). Cooldowns use the move's total expected power.
+- **Charge:** 0.9 s longer wind-up. **Recharge:** 1 s longer recovery. Fly and Dig's semi-invulnerable charge turn isn't modelled.
+- **Fixed damage** (Seismic Toss, Night Shade, Dragon Rage, Sonic Boom) deals its main-series amount, unscaled, like every other move's damage, so it keeps its balance against them.
+- **Self-destructing moves** (Explosion, Self-Destruct, Misty Explosion) faint the user.
+
+For the 850 standard moves, 616 are playable: 243 melee, 238 projectile, 64 area, 26 self-buff, 18 debuff, 17 status and 10 heal. The rest are field moves, special cases and moves whose power is computed in code.
+
 **Not in the first version:**
 - 30 field moves: weather, terrain, hazards and screens.
 - 106 special-case moves, such as Protect, Substitute, Counter and Transform.
@@ -780,7 +790,7 @@ So far M1 has been tested on Windows only. macOS and Linux get checked before M2
 
 **M2: rules and roster.**
 
-- All supported move kinds, stat changes, status conditions and dodging. Movement, melee dashes, dodging, stat stages, status conditions, and the self-buff, debuff, heal and status kinds are done; the stand-in AI dodges about half the threats it sees while it can act, keeps a range suited to its ready moves, and circles.
+- All supported move kinds, stat changes, status conditions and dodging. Movement, melee dashes, dodging, stat stages, status conditions and every move kind are done; the stand-in AI dodges about half the threats it sees while it can act, keeps a range suited to its ready moves, and circles.
 - The moveset generator.
 - Full roster conversion with per-species caching, a QA report and the roster file. Done; the 73 `bounds_mismatch` species still need a converter QA pass.
 - The procedural animation layer.

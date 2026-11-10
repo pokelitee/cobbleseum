@@ -28,6 +28,12 @@ const STATUS_SCORE := 95.0
 const CONFUSE_SCORE := 70.0
 const DEBUFF_SCORE := 55.0
 const STAGE_TARGET := 2
+## Damaging moves: charge and recharge moves are worth a little less, fixed damage a little
+## more (it ignores defences), and self-destructing only when nearly fainted.
+const CHARGE_FACTOR := 0.75
+const RECHARGE_FACTOR := 0.8
+const FIXED_DAMAGE_FACTOR := 1.8
+const SELF_DESTRUCT_BELOW := 0.25
 ## Within this distance of the wall, steer back toward the centre.
 const WALL_MARGIN := 1.5
 
@@ -75,7 +81,7 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		var score := move_score(me, foe, move)
 		if score <= 0.0:
 			continue
-		if move.kind == BattleMove.Kind.MELEE:
+		if move.kind == BattleMove.Kind.MELEE or move.kind == BattleMove.Kind.AREA:
 			melee_ready = true
 		elif move.is_projectile():
 			ranged_ready = true
@@ -115,7 +121,16 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 				if type in foe.types:
 					return 0.0
 			return STATUS_SCORE
-	return float(move.power)
+	if move.self_destructs and float(me.hp) / me.max_hp > SELF_DESTRUCT_BELOW:
+		return 0.0
+	var score := move.power * move.expected_hits()
+	if move.fixed_damage > 0:
+		score = move.fixed_damage * FIXED_DAMAGE_FACTOR
+	if move.charges:
+		score *= CHARGE_FACTOR
+	if move.recharges:
+		score *= RECHARGE_FACTOR
+	return score
 
 
 ## An attack about to hit `side`: {"direction": Vector2, "projectile": Dictionary} or
@@ -134,7 +149,8 @@ static func incoming_threat(battle: Battle, side: int) -> Dictionary:
 			return {"direction": velocity.normalized(), "projectile": projectile}
 	if foe.action == Fighter.Action.WINDUP and foe.action_ticks <= MELEE_THREAT_TICKS:
 		var move := foe.moves[foe.action_move]
-		if move.kind == BattleMove.Kind.MELEE and Battle._gap(me, foe) <= Rules.MELEE_DASH_RANGE:
+		var reach := Rules.MELEE_DASH_RANGE if move.kind == BattleMove.Kind.MELEE else Rules.AREA_RADIUS
+		if (move.kind == BattleMove.Kind.MELEE or move.kind == BattleMove.Kind.AREA) and Battle._gap(me, foe) <= reach:
 			return {"direction": (me.position - foe.position).normalized(),
 				"windup_tick": battle.tick - (move.windup_ticks - foe.action_ticks)}
 	return {}

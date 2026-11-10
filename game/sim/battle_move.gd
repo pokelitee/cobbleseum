@@ -3,16 +3,20 @@ extends RefCounted
 ## A move as the real-time rules use it, derived from Showdown's move data (concepts_brief.md §9.3).
 ##
 ## Kinds so far:
-## - MELEE and PROJECTILE: damaging moves, with any drain, recoil, self stat changes and
-##   secondary effects (status, confusion, stat changes) from the data;
+## - MELEE, PROJECTILE and AREA (a blast around the user): damaging moves, with any drain,
+##   recoil, self stat changes and secondary effects (status, confusion, stat changes) from
+##   the data. Any of them can also hit several times, charge (a longer wind-up) or need to
+##   recharge (a longer recovery); fixed-damage moves deal a set amount;
 ## - SELF_BUFF and HEAL: status moves the user aims at itself, applied on release;
 ## - DEBUFF and STATUS: status moves fired at the opponent as projectiles, lowering its stats
 ##   or inflicting a status condition or confusion.
 
-enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS }
+enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA }
 
 ## Showdown targets that mean "one opponent" in a one-on-one battle.
 const SINGLE_TARGETS: Array[String] = ["normal", "any", "adjacentFoe", "randomNormal"]
+## Damaging moves that hit everything around the user.
+const AREA_TARGETS: Array[String] = ["allAdjacent", "allAdjacentFoes"]
 ## Status moves may also target every adjacent foe, which is just the one opponent.
 const FOE_TARGETS: Array[String] = ["normal", "any", "adjacentFoe", "randomNormal", "allAdjacentFoes"]
 const SELF_TARGETS: Array[String] = ["self", "adjacentAllyOrSelf"]
@@ -45,6 +49,17 @@ var confuses := false
 var heal_share := 0.0
 var drain_share := 0.0
 var recoil_share := 0.0
+## Hits per use: a fixed count, or 2-5 rolled with Rules.MULTI_HIT_WEIGHTS.
+var hits_min := 1
+var hits_max := 1
+var charges := false
+var recharges := false
+## Damage that ignores stats and type (Seismic Toss); 0 for none. Not scaled by
+## Rules.HP_MULTIPLIER, like every other move's damage, so it keeps its main-series balance
+## against them.
+var fixed_damage := 0
+## The user faints after using it (Explosion).
+var self_destructs := false
 ## Secondary effects rolled on hit: {"chance": 0-100, "status"?, "confuses"?, "boosts"?, "self_boosts"?}.
 var secondaries: Array[Dictionary] = []
 
@@ -72,13 +87,29 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		move.projectile_speed = Rules.projectile_speed(data.get("accuracy", 100))
 		return {"move": move}
 
-	if move.power <= 0:
-		return {"error": "%s is a fixed-damage move, not supported yet" % id}
-	if data.has("multihit") or flags.has("charge") or flags.has("recharge"):
-		return {"error": "%s is a multi-hit, charge or recharge move, not supported yet" % id}
-	if not target in SINGLE_TARGETS:
-		return {"error": "%s targets an area, not supported yet" % id}
-	move.kind = Kind.MELEE if flags.has("contact") else Kind.PROJECTILE
+	var fixed: Variant = data.get("damage")
+	if fixed is String and fixed == "level":
+		move.fixed_damage = Rules.LEVEL
+	elif fixed is float or fixed is int:
+		move.fixed_damage = int(fixed)
+	if move.power <= 0 and move.fixed_damage == 0:
+		return {"error": "%s computes its power in code, not supported yet" % id}
+	if target in AREA_TARGETS:
+		move.kind = Kind.AREA
+	elif target in SINGLE_TARGETS:
+		move.kind = Kind.MELEE if flags.has("contact") else Kind.PROJECTILE
+	else:
+		return {"error": "%s has target '%s', not supported yet" % [id, target]}
+	var multihit: Variant = data.get("multihit")
+	if multihit is Array and multihit.size() == 2:
+		move.hits_min = int(multihit[0])
+		move.hits_max = int(multihit[1])
+	elif multihit != null:
+		move.hits_min = int(multihit)
+		move.hits_max = int(multihit)
+	move.charges = flags.has("charge")
+	move.recharges = flags.has("recharge")
+	move.self_destructs = data.get("selfdestruct") == "always"
 	move.drain_share = _share(data.get("drain"))
 	move.recoil_share = _share(data.get("recoil"))
 	move.self_boosts = _stat_changes(data.get("self", {}).get("boosts", data.get("selfBoost", {}).get("boosts", {})))
@@ -101,13 +132,21 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 			effect.self_boosts = user_boosts
 		if effect.size() > 1:
 			move.secondaries.append(effect)
-	var melee := move.kind == Kind.MELEE
-	var windup := Rules.MELEE_WINDUP if melee else Rules.PROJECTILE_WINDUP
+	var windup: float = {Kind.MELEE: Rules.MELEE_WINDUP, Kind.PROJECTILE: Rules.PROJECTILE_WINDUP, Kind.AREA: Rules.AREA_WINDUP}[move.kind]
+	var recovery: float = {Kind.MELEE: Rules.MELEE_RECOVERY, Kind.PROJECTILE: Rules.PROJECTILE_RECOVERY, Kind.AREA: Rules.AREA_RECOVERY}[move.kind]
 	if priority > 0:
 		windup *= Rules.PRIORITY_WINDUP_FACTOR
+	if move.charges:
+		windup += Rules.CHARGE_EXTRA
+	if move.recharges:
+		recovery += Rules.RECHARGE_EXTRA
+	# Follow-up hits land during the recovery.
+	recovery += (move.hits_max - 1) * Rules.MULTI_HIT_INTERVAL
 	move.windup_ticks = Rules.seconds_to_ticks(windup)
-	move.recovery_ticks = Rules.seconds_to_ticks(Rules.MELEE_RECOVERY if melee else Rules.PROJECTILE_RECOVERY)
-	move.cooldown_ticks = Rules.seconds_to_ticks(Rules.cooldown_seconds(move.power, pp))
+	move.recovery_ticks = Rules.seconds_to_ticks(recovery)
+	# Multi-hit moves cool down by their total power, fixed damage like a typical attack.
+	var power_for_cooldown := roundi(move.power * move.expected_hits()) if move.fixed_damage == 0 else Rules.FIXED_DAMAGE_POWER
+	move.cooldown_ticks = Rules.seconds_to_ticks(Rules.cooldown_seconds(power_for_cooldown, pp))
 	move.projectile_speed = Rules.projectile_speed(data.get("accuracy", 100))
 	return {"move": move}
 
@@ -173,13 +212,25 @@ func is_self() -> bool:
 
 
 func is_damaging() -> bool:
-	return kind in [Kind.MELEE, Kind.PROJECTILE]
+	return kind in [Kind.MELEE, Kind.PROJECTILE, Kind.AREA]
+
+
+## Average hits per use.
+func expected_hits() -> float:
+	if hits_min == 2 and hits_max == 5:
+		var total := 0.0
+		for i in Rules.MULTI_HIT_WEIGHTS.size():
+			total += (2 + i) * Rules.MULTI_HIT_WEIGHTS[i]
+		return total
+	return (hits_min + hits_max) / 2.0
 
 
 ## The largest gap between hitboxes this move can be started from.
 func reach() -> float:
 	if kind == Kind.MELEE:
 		return Rules.MELEE_DASH_RANGE
+	if kind == Kind.AREA:
+		return Rules.AREA_RADIUS
 	if is_self():
 		return INF
 	return Rules.PROJECTILE_RANGE
