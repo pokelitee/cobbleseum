@@ -50,7 +50,7 @@ func _initialize() -> void:
 	var spec: Variant = JSON.parse_string(FileAccess.get_file_as_string(spec_path))
 	if not spec is Dictionary:
 		return _fail("cannot read battle spec %s" % spec_path)
-	var loaded := BattleData.load_showdown()
+	var loaded := BattleData.load_all()
 	if loaded.has("error"):
 		return _fail(loaded.error)
 	if OS.execute("ffmpeg", ["-version"], [], true) != 0:

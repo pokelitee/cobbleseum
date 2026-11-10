@@ -20,7 +20,7 @@ Fetch and prepare the assets (about 157 MB to download the first time):
 godot --headless --path . --script res://tools/assets.gd
 ```
 
-This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout, exports Showdown's data to JSON, converts the showcase Pokémon to Godot scenes and writes a conversion report for every Cobblemon species (`cache/build/cobblemon/<version>/report.json`). Extracting Cobblemon's roughly 12,000 files can take a few minutes. Re-running skips finished steps. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
+This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout, exports Showdown's data to JSON, and converts every Pokémon with a Cobblemon model (1,005 species and forms) to a Godot scene. It also writes the roster (`cache/build/cobblemon/<version>/roster.json`: model, scale, height, hitbox, clips, QA flags and licence per species) and a QA report (`report.json`). Extracting Cobblemon's roughly 12,000 files and the first conversion take a few minutes each (about 7 minutes to convert on a desktop PC). Re-running skips finished steps; models are cached per species, so a rebuild converts only species whose inputs changed, and an interrupted build picks up where it stopped. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
 
 Run a battle headless (prints the result, length and a checksum per seed):
 

@@ -3,7 +3,7 @@ extends RefCounted
 ## Converts one Cobblemon species folder into a packed Godot scene: the model from
 ## BedrockGeometry plus an AnimationPlayer holding the clips the game needs
 ## (concepts_brief.md §7). Clip choices are stored in the root's "clips" metadata as
-## role -> animation name.
+## role -> animation name. Forms are converted by passing their aspects (["alolan"]).
 
 ## Roles the game uses, with clip names to try when the poser doesn't name one.
 const FALLBACK_CLIPS := {
@@ -21,9 +21,11 @@ const FALLBACK_CLIPS := {
 const POSER_CALL := "q\\.bedrock\\w*\\(\\s*'([^']+)'\\s*,\\s*'([^']+)'"
 
 
-## Returns {"scene": PackedScene, "report": Dictionary} or {"error": String}.
-static func convert(source_root: String, folder: String) -> Dictionary:
-	var files := CobblemonSpecies.base_files(source_root, folder)
+## Returns {"scene": PackedScene, "report": Dictionary} or {"error": String}. The report
+## holds "bounds" (the rest pose's size in metres, before any scaling), "clips", "poser",
+## "missing_roles" and any problems found while baking clips.
+static func convert(source_root: String, folder: String, aspects: Array = []) -> Dictionary:
+	var files := CobblemonSpecies.files(source_root, folder, aspects)
 	if files.has("error"):
 		return files
 	var geo: Variant = JSON.parse_string(FileAccess.get_file_as_string(files.geo))
@@ -35,13 +37,17 @@ static func convert(source_root: String, folder: String) -> Dictionary:
 	var root: Node3D = built.scene
 	var skeleton: Skeleton3D = root.get_node("Skeleton")
 	var report := {}
+	var mesh: MeshInstance3D = skeleton.get_node("Mesh")
+	var bounds := mesh.get_aabb().size if mesh.mesh != null else Vector3.ZERO
+	report.bounds = [bounds.x, bounds.y, bounds.z]
 	if files.texture.is_empty() or not FileAccess.file_exists(files.texture):
 		report.missing_texture = files.texture
 
 	var clips := _load_clips(source_root, folder)
 	var poser := _load_poser(source_root, folder, files.poser)
 	report.poser = not poser.is_empty()
-	var roles := choose_clips(poser, clips.keys(), folder.get_slice("_", 1))
+	var group: String = files.poser if not files.poser.is_empty() else folder.get_slice("_", 1)
+	var roles := choose_clips(poser, clips.keys(), group)
 
 	var library := AnimationLibrary.new()
 	for role: String in roles:
@@ -55,6 +61,7 @@ static func convert(source_root: String, folder: String) -> Dictionary:
 	root.add_child(player)
 	player.owner = root
 	root.set_meta("clips", roles)
+	report.clips = roles
 	report.missing_roles = FALLBACK_CLIPS.keys().filter(func(role: String) -> bool: return not roles.has(role))
 
 	var scene := PackedScene.new()
@@ -63,39 +70,6 @@ static func convert(source_root: String, folder: String) -> Dictionary:
 	if err != OK:
 		return {"error": "%s: cannot pack scene (%s)" % [folder, error_string(err)]}
 	return {"scene": scene, "report": report}
-
-
-## Checks a species without baking clips: geometry, clip choice and Molang compilation.
-## Returns a JSON-ready report, with "error" set when the species can't be converted.
-static func dry_run(source_root: String, folder: String) -> Dictionary:
-	var files := CobblemonSpecies.base_files(source_root, folder)
-	if files.has("error"):
-		return {"error": files.error}
-	var geo: Variant = JSON.parse_string(FileAccess.get_file_as_string(files.geo))
-	if not geo is Dictionary:
-		return {"error": "cannot parse %s" % files.geo.get_file()}
-	var built := BedrockGeometry.build(geo, null, folder)
-	if built.has("error"):
-		return {"error": built.error}
-	var root: Node3D = built.scene
-	var report := {}
-	var clips := _load_clips(source_root, folder)
-	var poser := _load_poser(source_root, folder, files.poser)
-	var roles := choose_clips(poser, clips.keys(), folder.get_slice("_", 1))
-	for clip_name: String in roles.values():
-		BedrockAnimation.check(clips[clip_name], root.get_node("Skeleton"), report)
-	root.free()
-	var entry := {
-		"clips": roles,
-		"missing_roles": FALLBACK_CLIPS.keys().filter(func(role: String) -> bool: return not roles.has(role)),
-		"poser": not poser.is_empty(),
-		"texture_found": FileAccess.file_exists(files.texture),
-	}
-	for key: String in report:
-		var names: Array = report[key].keys()
-		names.sort()
-		entry[key] = names
-	return entry
 
 
 ## Picks a clip for each role: the poser's battle pose and named animations first,

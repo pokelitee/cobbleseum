@@ -5,29 +5,39 @@ extends RefCounted
 const BEDROCK := "assets/cobblemon/bedrock/pokemon"
 
 
-## Files for a species folder such as "0009_blastoise", using its base resolver variation
-## (the one with no aspects). Returns {"geo", "texture", "poser"} paths or {"error"}.
-static func base_files(root: String, folder: String) -> Dictionary:
+## Files for a species folder such as "0009_blastoise" with the given aspects, such as
+## ["alolan"]. Resolver variations apply in order: each one whose aspects are all in
+## `aspects` overrides the model, texture and poser before it, so ["alolan"] starts from the
+## base variation and swaps in the Alolan files. Returns {"geo", "texture", "poser"} paths
+## or {"error"}.
+static func files(root: String, folder: String, aspects: Array = []) -> Dictionary:
 	var resolver_dir := root.path_join(BEDROCK).path_join("resolvers").path_join(folder)
-	var resolvers := DirAccess.get_files_at(resolver_dir)
+	var resolvers: Array = []
+	for resolver_file in DirAccess.get_files_at(resolver_dir) if DirAccess.dir_exists_absolute(resolver_dir) else PackedStringArray():
+		var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(resolver_dir.path_join(resolver_file)))
+		if data is Dictionary:
+			resolvers.append(data)
 	if resolvers.is_empty():
 		return {"error": "no resolver for %s" % folder}
-	for resolver_file in resolvers:
-		var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(resolver_dir.path_join(resolver_file)))
-		if not data is Dictionary:
-			continue
+	resolvers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("order", 0)) < int(b.get("order", 0)))
+	var chosen := {}
+	for data: Dictionary in resolvers:
 		for variation: Dictionary in data.get("variations", []):
-			if variation.get("aspects", []).is_empty() and variation.has("model"):
-				var geo := root.path_join(BEDROCK).path_join("models").path_join(folder).path_join(
-					(variation.model as String).get_slice(":", 1) + ".json")
-				if not FileAccess.file_exists(geo):
-					return {"error": "%s: model %s not found at %s" % [folder, variation.model, geo]}
-				return {
-					"geo": geo,
-					"texture": resource_path(root, variation.get("texture", "")),
-					"poser": (variation.get("poser", "") as String).get_slice(":", 1),
-				}
-	return {"error": "%s: no base variation with a model" % folder}
+			if (variation.get("aspects", []) as Array).all(func(a: Variant) -> bool: return aspects.has(a)):
+				for field in ["model", "texture", "poser"]:
+					if variation.has(field):
+						chosen[field] = variation[field]
+	if not chosen.has("model"):
+		return {"error": "%s: no variation with a model for aspects %s" % [folder, aspects]}
+	var geo := root.path_join(BEDROCK).path_join("models").path_join(folder).path_join(
+		(chosen.model as String).get_slice(":", 1) + ".json")
+	if not FileAccess.file_exists(geo):
+		return {"error": "%s: model %s not found at %s" % [folder, chosen.model, geo]}
+	return {
+		"geo": geo,
+		"texture": resource_path(root, chosen.get("texture", "")),
+		"poser": (chosen.get("poser", "") as String).get_slice(":", 1),
+	}
 
 
 ## "cobblemon:textures/x.png" -> <root>/assets/cobblemon/textures/x.png.

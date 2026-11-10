@@ -62,19 +62,6 @@ static func build(clip: Dictionary, clip_name: String, skeleton: Skeleton3D, res
 	return animation
 
 
-## Compiles a clip without baking it, recording the same problems build() would report.
-static func check(clip: Dictionary, skeleton: Skeleton3D, report: Dictionary) -> void:
-	for bone_name: String in clip.get("bones", {}):
-		if skeleton.find_bone(bone_name) < 0:
-			report.get_or_add("unknown_bones", {})[bone_name] = true
-			continue
-		for channel_name in CHANNELS:
-			if clip.bones[bone_name].has(channel_name):
-				_compile_channel(clip.bones[bone_name][channel_name], report)
-
-
-## A channel is a constant or a map of time -> keyframe. Returns keyframes sorted by time,
-## each {"time", "pre", "post", "smooth"} where pre/post hold three float-or-Molang parts.
 static func _compile_channel(raw: Variant, report: Dictionary) -> Array:
 	var keys: Array = []
 	if raw is Dictionary and not (raw.has("pre") or raw.has("post") or raw.has("vector")):

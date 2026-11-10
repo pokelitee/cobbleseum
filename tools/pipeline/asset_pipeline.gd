@@ -190,11 +190,17 @@ func build(id: String, source: Dictionary) -> String:
 		return ""
 	print("%s %s: building" % [id, source.version])
 	var staging := out + ".tmp"
-	_remove_tree(staging)
-	DirAccess.make_dir_recursive_absolute(staging)
-	var err: String = script.new().build(source_dir(id, source), staging)
-	if not err.is_empty():
+	# An incremental build script reuses work: it keeps what an interrupted build left in
+	# staging, and is passed the previous output to take unchanged results from.
+	var incremental: bool = script.get_script_constant_map().get("INCREMENTAL", false)
+	if not incremental:
 		_remove_tree(staging)
+	DirAccess.make_dir_recursive_absolute(staging)
+	var builder: Object = script.new()
+	var err: String = builder.build(source_dir(id, source), staging, out) if incremental else builder.build(source_dir(id, source), staging)
+	if not err.is_empty():
+		if not incremental:
+			_remove_tree(staging)
 		return "%s %s: %s" % [id, source.version, err]
 	return _commit(staging, out, key)
 
