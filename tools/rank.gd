@@ -88,8 +88,7 @@ func _run(data: BattleData, options: Dictionary, pool: Array, opponents: int, ta
 	var dir := _dir(options.profile)
 	var done := _stored_keys(dir)
 	var path := dir.path_join("%s_shard%d.jsonl" % [tag, options.shard])
-	var file := FileAccess.open(path, FileAccess.READ_WRITE) if FileAccess.file_exists(path) else FileAccess.open(path, FileAccess.WRITE)
-	file.seek_end()
+	var file := open_for_append(path)
 	var played := 0
 	var started := Time.get_ticks_msec()
 	for index in pairings.size():
@@ -248,6 +247,24 @@ static func _records(dir: String) -> Array:
 			if record is Dictionary:
 				records.append(record)
 	return records
+
+
+## Opens a JSON Lines file at its end. A run killed mid-write leaves a partial last line; it's
+## ended here so the next record starts on its own line (the partial one is skipped on read,
+## and its battle is played again).
+static func open_for_append(path: String) -> FileAccess:
+	if not FileAccess.file_exists(path):
+		return FileAccess.open(path, FileAccess.WRITE)
+	var file := FileAccess.open(path, FileAccess.READ_WRITE)
+	var length := file.get_length()
+	if length > 0:
+		file.seek(length - 1)
+		var last := file.get_8()
+		file.seek_end()
+		if last != 10:
+			file.store_string("
+")
+	return file
 
 
 static func _stored_keys(dir: String) -> Dictionary:

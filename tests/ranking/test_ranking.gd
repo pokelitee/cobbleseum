@@ -79,3 +79,21 @@ func test_matchups_are_head_to_head_shares() -> void:
 	assert_almost_eq(rates["x|y"], 0.75, 1e-9)
 	assert_almost_eq(rates["y|x"], 0.25, 1e-9)
 	assert_false(rates.has("x|z"), "only species in the matrix")
+
+
+func test_resuming_after_a_partial_line_starts_a_new_one() -> void:
+	var path := TestFiles.fresh_dir("rank_resume").path_join("shard0.jsonl")
+	TestFiles.write_text(path, '{"a":"x","b":"y","seed":1,"result":"A"}
+{"a":"x","b"')
+	var file := preload("res://tools/rank.gd").open_for_append(path)
+	file.store_line('{"a":"x","b":"z","seed":2,"result":"B"}')
+	file.close()
+	var lines := FileAccess.get_file_as_string(path).split("
+", false)
+	assert_eq(lines.size(), 3)
+	assert_eq(JSON.parse_string(lines[2]).b, "z", "the new record is whole")
+	file = preload("res://tools/rank.gd").open_for_append(path)
+	file.store_line("{}")
+	file.close()
+	assert_eq(FileAccess.get_file_as_string(path).split("
+", false).size(), 4, "no blank line added after a complete one")
