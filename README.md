@@ -74,7 +74,7 @@ Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I o
 godot --path . -- --play=cinderace --vs=blastoise --ai=normal
 ```
 
-Watch the showcase battle in a window: `godot --path .`, or any AI-vs-AI battle with the flags above: `godot --path . -- --watch=garchomp --vs=hydreigon --ai=hard`. Press F3 to show the AI debug overlay (each side's candidate actions and their scores); `godot --path . -- --ai-debug` starts with it on, and `tools/record.gd -- <spec> --ai-debug` records it.
+Watch the showcase battle in a window: `godot --path .`, or any AI-vs-AI battle with the flags above: `godot --path . -- --watch=garchomp --vs=hydreigon --ai=hard`. Add `--arena=grassland|beach|volcano|snowfield|cave|stadium` to pick the arena; otherwise the seed picks one that suits the fighters' types. Press F3 to show the AI debug overlay (each side's candidate actions and their scores); `godot --path . -- --ai-debug` starts with it on, and `tools/record.gd -- <spec> --ai-debug` records it.
 
 Run the tests:
 

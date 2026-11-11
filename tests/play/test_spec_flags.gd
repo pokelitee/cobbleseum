@@ -33,3 +33,11 @@ func test_specs_round_trip_through_flags() -> void:
 			{"play": "cinderace", "vs": "blastoise", "ai": "normal", "seed": "3"}]:
 		var spec := SpecFlags.to_spec(flags)
 		assert_eq(SpecFlags.to_spec(SpecFlags.parse(SpecFlags.from_spec(spec)).flags), spec)
+
+
+func test_arena_flag_is_kept_and_passed_on() -> void:
+	var spec := SpecFlags.to_spec({"watch": "garchomp", "arena": "volcano", "seed": "2"})
+	assert_eq(spec.arena, "volcano")
+	assert_eq(SpecFlags.to_spec(SpecFlags.parse(SpecFlags.from_spec(spec)).flags), spec)
+	assert_false(SpecFlags.to_spec({"watch": "garchomp"}).has("arena"))
+
