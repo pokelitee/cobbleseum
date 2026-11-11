@@ -5,8 +5,8 @@ extends RefCounted
 ##
 ## Colours are [ground, patches (paths, gravel, ash), stone (cliffs and rock), higher ground,
 ## earth (the sides of the ground)]. Props are {kind: share of cells beyond the arena that get
-## one}. Details are small things on level ground that the battle ignores, grouped in patches:
-## `detail` is the share of level cells inside a patch that get a cluster, `details` is
+## one}. Details are small things on the ground that the battle ignores, grouped in patches:
+## `detail` is the share of cells inside a patch (near the arena) that get a cluster, `details` is
 ## {kind: weight} over the kinds Arena knows ("grass", "flower", "pebble", "shell", "drift",
 ## "crack", "mushroom"). Particles are a weather name Arena knows ("petals", "sand", "embers",
 ## "snow", "dust") or "".
