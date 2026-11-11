@@ -3,7 +3,8 @@ extends RefCounted
 ## Converts one Cobblemon species folder into a packed Godot scene: the model from
 ## BedrockGeometry plus an AnimationPlayer holding the clips the game needs
 ## (concepts_brief.md §7). Clip choices are stored in the root's "clips" metadata as
-## role -> animation name. Parts the poser shows or hides by pose (open or folded wings) are
+## role -> animation name, and the standing pose's idle quirks (fidgets) in "quirks" as a
+## list of animation names. Parts the poser shows or hides by pose (open or folded wings) are
 ## stored in "parts" as {"ground": {bone: visible}, "air": {bone: visible}}. Forms are
 ## converted by passing their aspects (["alolan"]).
 ## Resolver texture layers become extra material passes over the same mesh.
@@ -22,9 +23,16 @@ const FALLBACK_CLIPS := {
 	"sleep": ["sleep"],
 	"air_idle": ["air_idle"],
 	"air_fly": ["air_fly"],
+	"air_sleep": ["air_sleep"],
+	"run": ["ground_run"],
+	"happy": ["happy"],
+	"sad": ["sad"],
+	"angry": ["angry"],
+	"shock": ["shock", "surprised", "shocked"],
 }
-## Roles only some species have (hovering and flying), left out of the missing-roles QA.
-const OPTIONAL_ROLES: Array[String] = ["air_idle", "air_fly"]
+## Roles only some species have, left out of the missing-roles QA.
+const OPTIONAL_ROLES: Array[String] = ["air_idle", "air_fly", "air_sleep", "run", "happy", "sad", "angry", "shock"]
+const QUIRK_CALL := "q\\.bedrock_quirk\\w*\\(\\s*'([^']+)'\\s*,\\s*'([^']+)'"
 ## Pose types whose pose gives each air role, and the part set it shows.
 const AIR_POSE_TYPES := {"air_idle": "HOVER", "air_fly": "FLY"}
 ## How far into the idle clip posed_bounds() samples. Rest poses are often stretched out
@@ -62,10 +70,10 @@ static func convert(source_root: String, folder: String, aspects: Array = []) ->
 	report.poser = not poser.is_empty()
 	var groups: Array[String] = [files.poser, folder.get_slice("_", 1)]
 	var roles := choose_clips(poser, clips.keys(), groups)
+	var quirks := choose_quirks(poser, clips.keys())
 
 	var library := AnimationLibrary.new()
-	for role: String in roles:
-		var clip_name: String = roles[role]
+	for clip_name: String in roles.values() + quirks:
 		if not library.has_animation(clip_name):
 			library.add_animation(clip_name, BedrockAnimation.build(
 				clips[clip_name], clip_name, skeleton, root.get_meta("rest_rotations"), "Skeleton", report))
@@ -75,6 +83,8 @@ static func convert(source_root: String, folder: String, aspects: Array = []) ->
 	root.add_child(player)
 	player.owner = root
 	root.set_meta("clips", roles)
+	if not quirks.is_empty():
+		root.set_meta("quirks", quirks)
 	var parts := part_sets(poser, skeleton)
 	if not parts.is_empty():
 		root.set_meta("parts", parts)
@@ -163,7 +173,7 @@ static func choose_clips(poser: Dictionary, available: Array, groups: Array[Stri
 	for pose_name: String in poser.get("poses", {}):
 		var pose: Dictionary = poser.poses[pose_name]
 		if "STAND" in pose.get("poseTypes", []):
-			(battle_standing if pose.get("isBattle", false) else standing).append(pose)
+			(battle_standing if _is_battle(pose) else standing).append(pose)
 	for pose: Dictionary in (battle_standing if not battle_standing.is_empty() else standing):
 		for entry: Variant in pose.get("animations", []):
 			var found := calls.search(str(entry))
@@ -210,6 +220,27 @@ static func choose_clips(poser: Dictionary, available: Array, groups: Array[Stri
 	return roles
 
 
+## The idle fidgets (quirks other than blinking) of the poser's battle standing pose, else
+## its standing pose, that the species' files hold, sorted.
+static func choose_quirks(poser: Dictionary, available: Array) -> Array[String]:
+	var calls := RegEx.create_from_string(QUIRK_CALL)
+	var standing := _poses_of(poser, "STAND")
+	var battle := standing.filter(func(pose: Dictionary) -> bool: return _is_battle(pose))
+	var found: Array[String] = []
+	for pose: Dictionary in (battle if not battle.is_empty() else standing):
+		for entry: Variant in pose.get("quirks", []):
+			var call := calls.search(str(entry))
+			if call == null:
+				continue
+			var clip := _clip_id(call)
+			if not call.get_string(2).begins_with("blink") and available.has(clip) and not found.has(clip):
+				found.append(clip)
+		if not found.is_empty():
+			break
+	found.sort()
+	return found
+
+
 ## Parts the poser shows or hides by pose, for bones the model has: "ground" from its standing
 ## pose, "air" from its hover pose (else its fly pose). {} when no pose changes any part.
 static func part_sets(poser: Dictionary, skeleton: Skeleton3D) -> Dictionary:
@@ -219,7 +250,7 @@ static func part_sets(poser: Dictionary, skeleton: Skeleton3D) -> Dictionary:
 			if sets.has(entry[0]):
 				break
 			var poses := _poses_of(poser, pose_type)
-			poses.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.get("isBattle", false) and not b.get("isBattle", false))
+			poses.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return _is_battle(a) and not _is_battle(b))
 			for pose in poses:
 				var visible := {}
 				for part: Variant in pose.get("transformedParts", []):
@@ -229,6 +260,11 @@ static func part_sets(poser: Dictionary, skeleton: Skeleton3D) -> Dictionary:
 					sets[entry[0]] = visible
 					break
 	return sets
+
+
+## A few posers write isBattle as the text "true" or "false" rather than a boolean.
+static func _is_battle(pose: Dictionary) -> bool:
+	return str(pose.get("isBattle", false)).to_lower() == "true"
 
 
 ## The poser's poses that include `pose_type`, in file order.

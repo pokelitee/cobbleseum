@@ -141,3 +141,37 @@ func test_part_sets_follow_the_standing_and_hover_poses() -> void:
 	assert_eq(CobblemonModel.part_sets({}, skeleton), {}, "no poser, nothing swaps")
 	skeleton.free()
 
+
+func test_emotion_run_and_air_sleep_roles_by_name() -> void:
+	var available := ["mon.ground_idle", "mon.ground_walk", "mon.ground_run", "mon.happy", "mon.sad", "mon.angry",
+		"mon.surprised", "mon.air_sleep"]
+	var roles := CobblemonModel.choose_clips({}, available, ["mon"] as Array[String])
+	assert_eq(roles.walk, "mon.ground_walk")
+	assert_eq(roles.run, "mon.ground_run")
+	assert_eq(roles.happy, "mon.happy")
+	assert_eq(roles.sad, "mon.sad")
+	assert_eq(roles.angry, "mon.angry")
+	assert_eq(roles.shock, "mon.surprised", "shock falls back to surprised")
+	assert_eq(roles.air_sleep, "mon.air_sleep")
+
+
+func test_quirks_come_from_the_standing_pose_without_blinks() -> void:
+	var poser := {"poses": {
+		"battle": {"isBattle": true, "poseTypes": ["STAND"], "animations": [],
+			"quirks": ["q.bedrock_quirk('mon', 'blink')", "q.bedrock_quirk('mon', 'look_quirk')", "q.bedrock_quirk('mon', 'sniff_quirk')", "q.bedrock_quirk('mon', 'gone')"]},
+		"standing": {"poseTypes": ["STAND"], "quirks": ["q.bedrock_quirk('mon', 'other_quirk')"]},
+	}}
+	var available := ["mon.blink", "mon.look_quirk", "mon.sniff_quirk", "mon.other_quirk"]
+	assert_eq(CobblemonModel.choose_quirks(poser, available), ["mon.look_quirk", "mon.sniff_quirk"] as Array[String],
+		"the battle pose's, blinks and missing clips left out")
+	assert_eq(CobblemonModel.choose_quirks({}, available), [] as Array[String])
+
+
+func test_battle_poses_written_as_text_count_correctly() -> void:
+	var poser := {"poses": {
+		"odd": {"isBattle": "false", "poseTypes": ["STAND"], "animations": ["q.bedrock('mon', 'wrong_idle')"]},
+		"battle": {"isBattle": "true", "poseTypes": ["STAND"], "animations": ["q.bedrock('mon', 'fight_idle')"]},
+	}}
+	var roles := CobblemonModel.choose_clips(poser, ["mon.wrong_idle", "mon.fight_idle"], ["mon"] as Array[String])
+	assert_eq(roles.idle, "mon.fight_idle", "\"false\" isn't a battle pose")
+

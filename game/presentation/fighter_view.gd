@@ -15,6 +15,12 @@ const HEAD_BONE := "head"
 const HEAD_MAX := deg_to_rad(60.0)
 const HEAD_GIVE_UP := deg_to_rad(110.0)
 const HEAD_EASE := 0.2
+## Above this speed (m/s) a grounded fighter with a run clip runs instead of walking.
+const RUN_SPEED := 3.5
+## The overlay layer: frames between blinks or fidgets (picked at random within the range),
+## and the share of them that are fidgets (quirks) when the species has any.
+const OVERLAY_GAP := Vector2i(60, 180)
+const QUIRK_SHARE := 0.25
 
 ## Rendered height in metres, from the roster.
 var height := 1.0
@@ -37,6 +43,16 @@ var _asleep := false
 var _time_scale := 1.0
 var _motion: ProceduralMotion
 var _motion_root: Node3D
+## A second player for clips layered over the main one: blinks and idle fidgets. It only
+## touches the bones those clips animate (it isn't deterministic-blended).
+var _overlay: AnimationPlayer
+var _quirks: Array = []
+var _overlay_wait := 0.0
+var _rng := RandomNumberGenerator.new()
+var _celebrating := false
+## A one-off role to play after a delay (the intro cry), in frames.
+var _pending_role := ""
+var _pending_frames := 0
 ## Procedural stand-ins for one-off roles the species has no clip for.
 const PROCEDURAL_ROLES := {"physical": "lunge", "special": "rear", "status": "spin", "recoil": "tilt"}
 
@@ -74,6 +90,15 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 		view._head.bone = skeleton.find_bone(HEAD_BONE)
 		skeleton.add_child(view._head)
 	view._player.animation_finished.connect(view._on_clip_finished)
+	view._quirks = model.get_meta("quirks", [])
+	if view._clips.has("blink") or not view._quirks.is_empty():
+		view._overlay = AnimationPlayer.new()
+		view._overlay.deterministic = false
+		view._overlay.add_animation_library("", view._player.get_animation_library(""))
+		model.add_child(view._overlay)
+	# Seeded by the model, so renders of the same battle are identical.
+	view._rng.seed = hash(path)
+	view._overlay_wait = view._rng.randi_range(OVERLAY_GAP.x, OVERLAY_GAP.y)
 	view.play_idle()
 	return view
 
@@ -102,7 +127,25 @@ func _idle_role() -> String:
 func _walk_role() -> String:
 	if _motion.hovers and _clips.has("air_fly"):
 		return "air_fly"
-	return "air_idle" if _motion.hovers and _clips.has("air_idle") else "walk"
+	if _motion.hovers and _clips.has("air_idle"):
+		return "air_idle"
+	return "run" if _clips.has("run") and _motion.velocity.length() > RUN_SPEED else "walk"
+
+
+func has_clip(role: String) -> bool:
+	return _clips.has(role)
+
+
+## Plays `role` once after `delay_frames` (the cry when the fighter is sent out).
+func play_role_after(role: String, delay_frames: int) -> void:
+	_pending_role = role
+	_pending_frames = delay_frames
+
+
+## The winner's loop: its happy clip, when it has one.
+func celebrate() -> void:
+	_celebrating = true
+	_update_base()
 
 
 ## Moves the view to a simulation position (x, z on the floor) facing a direction. The
@@ -122,6 +165,8 @@ func place(position_2d: Vector2, facing: Vector2) -> void:
 ## The fighter's movement over the last tick (m/s on the floor), for leaning and swooping.
 func set_velocity(velocity: Vector2) -> void:
 	_motion.velocity = velocity
+	if _moving:
+		_update_base()
 
 
 ## Squashes briefly on landing (the end of a dodge).
@@ -151,16 +196,39 @@ func next_frame() -> void:
 		var fade := float(_flash_frames) / FLASH_FRAMES
 		_flash_material.albedo_color = Color(1, 1, 1, FLASH_STRENGTH * fade * fade)
 		_mesh.material_overlay = _flash_material if _flash_frames > 0 else null
+	if not _pending_role.is_empty():
+		_pending_frames -= 1
+		if _pending_frames <= 0:
+			play_role(_pending_role)
+			_pending_role = ""
+	_next_overlay()
 	_motion.next_frame(_time_scale)
 	if _head != null:
 		_head.yaw = _motion.head_yaw
 	_motion_root.transform = _motion.transform()
 
 
+## Counts down to the next blink or fidget and starts it. Fidgets only play while idling,
+## since they move the head and limbs; blinks only touch the eyes.
+func _next_overlay() -> void:
+	if _overlay == null or _fainted:
+		return
+	_overlay_wait -= _time_scale
+	if _overlay_wait > 0.0:
+		return
+	_overlay_wait = _rng.randi_range(OVERLAY_GAP.x, OVERLAY_GAP.y)
+	var fidget := not _quirks.is_empty() and not _one_off and not _moving and not _asleep and _rng.randf() < QUIRK_SHARE
+	var clip: String = _quirks[_rng.randi() % _quirks.size()] if fidget else _clips.get("blink", "")
+	if not clip.is_empty() and not _asleep:
+		_overlay.play(clip)
+
+
 ## Animation speed relative to normal: 0 freezes (hit-stop), below 1 is slow motion.
 func set_time_scale(scale: float) -> void:
 	_time_scale = scale
 	_player.speed_scale = scale
+	if _overlay != null:
+		_overlay.speed_scale = scale
 
 
 func play_idle() -> void:
@@ -178,14 +246,18 @@ func set_moving(moving: bool) -> void:
 ## Asleep fighters loop their sleep clip, when the species has one.
 func set_asleep(asleep: bool) -> void:
 	_asleep = asleep
-	_motion.asleep = asleep and not _clips.has("sleep")
+	_motion.asleep = asleep and not (_clips.has("sleep") or (_motion.hovers and _clips.has("air_sleep")))
 	_update_base()
 
 
 func _update_base() -> void:
 	var role := _idle_role()
-	if _asleep and _clips.has("sleep"):
+	if _asleep and _motion.hovers and _clips.has("air_sleep"):
+		role = "air_sleep"
+	elif _asleep and _clips.has("sleep"):
 		role = "sleep"
+	elif _celebrating and _clips.has("happy"):
+		role = "happy"
 	elif _moving and _clips.has(_walk_role()):
 		role = _walk_role()
 	if role == _base_role:
@@ -195,8 +267,8 @@ func _update_base() -> void:
 		play_idle()
 
 
-## Plays a one-off clip for a role (physical, special, status, recoil, faint), or its
-## procedural stand-in when the species has no clip for it.
+## Plays a one-off clip for a role (physical, special, status, recoil, faint, cry, shock,
+## angry, sad), or its procedural stand-in when the species has no clip for it.
 func play_role(role: String) -> void:
 	if _fainted:
 		return
