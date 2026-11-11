@@ -110,3 +110,34 @@ func test_choose_clips_falls_back_across_animation_groups() -> void:
 	assert_eq(roles.cry, "mon.cry", "fallback names are searched in the species' group too")
 	var floating := CobblemonModel.choose_clips({}, ["bug.air_idle", "bug.blink"], ["other"] as Array[String])
 	assert_eq(floating.idle, "bug.air_idle", "air idles count, in any group the files hold")
+
+
+const BIRD := {"poses": {
+	"standing": {"poseTypes": ["STAND", "NONE"], "animations": ["q.bedrock('bird', 'ground_idle')"],
+		"transformedParts": [{"part": "wing_open", "isVisible": false}, {"part": "wing_closed", "isVisible": true}]},
+	"hover": {"poseTypes": ["HOVER", "FLOAT"], "animations": ["q.pitch_tilt('body')", "q.bedrock('bird', 'air_idle')"],
+		"transformedParts": [{"part": "wing_open", "isVisible": true}, {"part": "wing_closed", "isVisible": false}, {"part": "ghost", "isVisible": false}]},
+	"fly": {"poseTypes": ["FLY", "SWIM"], "animations": ["q.bedrock('bird', 'air_fly')"],
+		"transformedParts": [{"part": "wing_open", "isVisible": true}, {"part": "wing_closed", "isVisible": false}]},
+}}
+
+
+func test_air_roles_come_from_hover_and_fly_poses() -> void:
+	var roles := CobblemonModel.choose_clips(BIRD, ["bird.ground_idle", "bird.air_idle", "bird.air_fly"], ["bird"] as Array[String])
+	assert_eq(roles.idle, "bird.ground_idle")
+	assert_eq(roles.air_idle, "bird.air_idle")
+	assert_eq(roles.air_fly, "bird.air_fly")
+	var grounded := CobblemonModel.choose_clips({}, ["mon.ground_idle"], ["mon"] as Array[String])
+	assert_false(grounded.has("air_idle"), "only species with air clips get air roles")
+
+
+func test_part_sets_follow_the_standing_and_hover_poses() -> void:
+	var skeleton := Skeleton3D.new()
+	skeleton.add_bone("wing_open")
+	skeleton.add_bone("wing_closed")
+	var sets := CobblemonModel.part_sets(BIRD, skeleton)
+	assert_eq(sets.ground, {"wing_open": false, "wing_closed": true})
+	assert_eq(sets.air, {"wing_open": true, "wing_closed": false}, "bones the model lacks are left out")
+	assert_eq(CobblemonModel.part_sets({}, skeleton), {}, "no poser, nothing swaps")
+	skeleton.free()
+

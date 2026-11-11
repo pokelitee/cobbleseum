@@ -3,7 +3,9 @@ extends RefCounted
 ## Converts one Cobblemon species folder into a packed Godot scene: the model from
 ## BedrockGeometry plus an AnimationPlayer holding the clips the game needs
 ## (concepts_brief.md §7). Clip choices are stored in the root's "clips" metadata as
-## role -> animation name. Forms are converted by passing their aspects (["alolan"]).
+## role -> animation name. Parts the poser shows or hides by pose (open or folded wings) are
+## stored in "parts" as {"ground": {bone: visible}, "air": {bone: visible}}. Forms are
+## converted by passing their aspects (["alolan"]).
 ## Resolver texture layers become extra material passes over the same mesh.
 
 ## Roles the game uses, with clip names to try when the poser doesn't name one.
@@ -18,7 +20,13 @@ const FALLBACK_CLIPS := {
 	"faint": ["faint"],
 	"blink": ["blink"],
 	"sleep": ["sleep"],
+	"air_idle": ["air_idle"],
+	"air_fly": ["air_fly"],
 }
+## Roles only some species have (hovering and flying), left out of the missing-roles QA.
+const OPTIONAL_ROLES: Array[String] = ["air_idle", "air_fly"]
+## Pose types whose pose gives each air role, and the part set it shows.
+const AIR_POSE_TYPES := {"air_idle": "HOVER", "air_fly": "FLY"}
 ## How far into the idle clip posed_bounds() samples. Rest poses are often stretched out
 ## (snakes lie straight), so QA compares the idle pose with the hitbox instead.
 const POSED_MOMENT := 0.3
@@ -67,13 +75,17 @@ static func convert(source_root: String, folder: String, aspects: Array = []) ->
 	root.add_child(player)
 	player.owner = root
 	root.set_meta("clips", roles)
+	var parts := part_sets(poser, skeleton)
+	if not parts.is_empty():
+		root.set_meta("parts", parts)
 	report.clips = roles
 	var posed := bounds
 	if roles.has("idle"):
 		var idle := library.get_animation(roles.idle)
 		posed = posed_bounds(skeleton, idle, idle.length * POSED_MOMENT).size
 	report.posed_bounds = [posed.x, posed.y, posed.z]
-	report.missing_roles = FALLBACK_CLIPS.keys().filter(func(role: String) -> bool: return not roles.has(role))
+	report.missing_roles = FALLBACK_CLIPS.keys().filter(func(role: String) -> bool:
+		return not roles.has(role) and not OPTIONAL_ROLES.has(role))
 
 	var scene := PackedScene.new()
 	var err := scene.pack(root)
@@ -157,6 +169,12 @@ static func choose_clips(poser: Dictionary, available: Array, groups: Array[Stri
 			var found := calls.search(str(entry))
 			if found and not roles.has("idle") and available.has(_clip_id(found)):
 				roles.idle = _clip_id(found)
+	for role: String in AIR_POSE_TYPES:
+		for pose: Dictionary in _poses_of(poser, AIR_POSE_TYPES[role]):
+			for entry: Variant in pose.get("animations", []):
+				var found := calls.search(str(entry))
+				if found and not roles.has(role) and available.has(_clip_id(found)):
+					roles[role] = _clip_id(found)
 	for pose: Dictionary in battle_standing:
 		for role: String in pose.get("namedAnimations", {}):
 			var found := calls.search(str(pose.namedAnimations[role]))
@@ -190,6 +208,37 @@ static func choose_clips(poser: Dictionary, available: Array, groups: Array[Stri
 			if roles.has(role):
 				break
 	return roles
+
+
+## Parts the poser shows or hides by pose, for bones the model has: "ground" from its standing
+## pose, "air" from its hover pose (else its fly pose). {} when no pose changes any part.
+static func part_sets(poser: Dictionary, skeleton: Skeleton3D) -> Dictionary:
+	var sets := {}
+	for entry: Array in [["ground", ["STAND"]], ["air", ["HOVER", "FLY"]]]:
+		for pose_type: String in entry[1]:
+			if sets.has(entry[0]):
+				break
+			var poses := _poses_of(poser, pose_type)
+			poses.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.get("isBattle", false) and not b.get("isBattle", false))
+			for pose in poses:
+				var visible := {}
+				for part: Variant in pose.get("transformedParts", []):
+					if part is Dictionary and part.has("isVisible") and skeleton.find_bone(str(part.get("part", ""))) >= 0:
+						visible[str(part.part)] = bool(part.isVisible)
+				if not visible.is_empty():
+					sets[entry[0]] = visible
+					break
+	return sets
+
+
+## The poser's poses that include `pose_type`, in file order.
+static func _poses_of(poser: Dictionary, pose_type: String) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for pose_name: String in poser.get("poses", {}):
+		var pose: Variant = poser.poses[pose_name]
+		if pose is Dictionary and pose_type in pose.get("poseTypes", []):
+			found.append(pose)
+	return found
 
 
 static func _clip_id(found: RegExMatch) -> String:

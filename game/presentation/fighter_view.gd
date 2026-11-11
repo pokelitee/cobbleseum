@@ -24,6 +24,8 @@ var _flash_material: StandardMaterial3D
 var _flash_frames := 0
 var _flash_delay := 0
 var _head: HeadTurn
+## Shows the poser's ground or air parts (folded or open wings); null when nothing swaps.
+var _parts: PartSwap
 var _watched: FighterView
 var _clips: Dictionary = {}
 var _fainted := false
@@ -62,6 +64,11 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 	view.height = model_height
 	model.scale = Vector3.ONE * scale
 	var skeleton: Skeleton3D = model.get_node("Skeleton")
+	var parts: Dictionary = model.get_meta("parts", {})
+	if not parts.is_empty():
+		view._parts = PartSwap.new()
+		view._parts.setup(skeleton, parts)
+		skeleton.add_child(view._parts)
 	if skeleton.find_bone(HEAD_BONE) >= 0:
 		view._head = HeadTurn.new()
 		view._head.bone = skeleton.find_bone(HEAD_BONE)
@@ -71,9 +78,31 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 	return view
 
 
-## Flying types hover above the ground (§9.2).
+## Hovering fighters float above the ground (§9.2), play their air clips when the species
+## has them, and show their air parts (open wings).
 func set_hovering(hovering: bool) -> void:
 	_motion.hovers = hovering
+	if _parts != null:
+		_parts.air = hovering
+	_motion.moving = _moving and not _clips.has(_walk_role())
+	_update_base()
+
+
+## Whether the species only idles in the air (its idle clip is its air idle), so it hovers
+## whatever its types. Many species have air clips just for being ridden in flight
+## (Blastoise, Garchomp) and stay grounded.
+func floats() -> bool:
+	return _clips.has("air_idle") and _clips.get("idle") == _clips.air_idle
+
+
+func _idle_role() -> String:
+	return "air_idle" if _motion.hovers and _clips.has("air_idle") else "idle"
+
+
+func _walk_role() -> String:
+	if _motion.hovers and _clips.has("air_fly"):
+		return "air_fly"
+	return "air_idle" if _motion.hovers and _clips.has("air_idle") else "walk"
 
 
 ## Moves the view to a simulation position (x, z on the floor) facing a direction. The
@@ -142,7 +171,7 @@ func play_idle() -> void:
 ## Switches the looping clip between walking and idling; one-off clips play out first.
 func set_moving(moving: bool) -> void:
 	_moving = moving
-	_motion.moving = moving and not _clips.has("walk")
+	_motion.moving = moving and not _clips.has(_walk_role())
 	_update_base()
 
 
@@ -154,11 +183,11 @@ func set_asleep(asleep: bool) -> void:
 
 
 func _update_base() -> void:
-	var role := "idle"
+	var role := _idle_role()
 	if _asleep and _clips.has("sleep"):
 		role = "sleep"
-	elif _moving and _clips.has("walk"):
-		role = "walk"
+	elif _moving and _clips.has(_walk_role()):
+		role = _walk_role()
 	if role == _base_role:
 		return
 	_base_role = role

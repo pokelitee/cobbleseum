@@ -330,6 +330,7 @@ Unknown queries and variables, such as riding yaw and a few custom variables, ev
   - head-tracking bones and their limits;
   - quirks such as blinking.
 - The 248 species without a poser use a name-based fallback: `battle_idle`, else `ground_idle`, with `air_idle` for species that fly.
+- **Air clips and parts:** the hover pose's clip becomes the `air_idle` role and the fly pose's `air_fly` (about 120 species), falling back to clips of those names. Poses also show or hide parts (`transformedParts`), mostly open or folded wings on about 40 birds; the standing pose's set and the hover (else fly) pose's set are stored as the model's `parts`. In the game, a `PartSwap` skeleton modifier scales the hidden parts' bones to zero after the clip has posed them, so either stance works with any clip. Before this, both sets of wings showed at once.
 
 **Resolvers:** the converter takes the base variation (no aspects) or the requested aspects (shiny, female, regional form).
 
@@ -433,7 +434,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - **Facing:** fighters turn at 360° a second (900° while winding up, to aim). Walking, they face between the foe and where they're going, so they turn away to run and square up to fight, instead of always staring at each other.
 - **Agility** (rules version 10): acceleration and turning scale with body, by the square root of the Speed stat over 120 (a base-100 species) times (50 kg / weight)^0.15, within ×0.6 to ×1.5. Heavy, slow species lumber; light, fast ones dart, and the utility AI switches strafe direction more often for them. Flying types brake at half their acceleration, so they glide to a stop.
 - **Knockback:** a hit pushes the defender away at up to 5 m/s (at 8% of max HP or more, less for smaller hits), scaled by weight: lighter species fly further, heavier ones barely move (within ×0.5 to ×1.5 of a 50 kg species).
-- **Flying:** Flying-type species hover above the ground.
+- **Flying:** Flying-type species, and species whose only idle is an air idle, hover above the ground. Hovering species with air clips play `air_idle` and `air_fly` instead of idle and walk, with their air parts (open wings). Species with air clips only for being ridden in flight (Blastoise, Garchomp) stay grounded. This is presentation only.
 
 All constants in this section are starting points for tuning (§9.7).
 
