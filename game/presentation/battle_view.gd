@@ -124,7 +124,7 @@ func _ready() -> void:
 		if view == null:
 			return _fail("cannot load the model %s; run tools/assets.gd" % entry.model)
 		add_child(view)
-		view.set_hovering("Flying" in battle.fighters[side].types)
+		view.set_hovering("Flying" in battle.fighters[side].types or view.floats())
 		_views.append(view)
 	for side in 2:
 		_views[side].watch(_views[1 - side])
