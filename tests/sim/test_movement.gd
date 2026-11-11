@@ -64,7 +64,15 @@ func _battle(script_a: Variant, script_b: Variant, moves := ["jet", "kick"]) -> 
 		controllers.append(Scripted.new(script) if script is Array else script)
 	var created := Battle.create(spec, BattleData.new(SPECIES, MOVES, {}), controllers)
 	assert_false(created.has("error"), str(created.get("error", "")))
+	_place(created.battle)
 	return created.battle
+
+
+## These tests are written for fighters 8 m apart (in projectile range, out of melee reach),
+## whatever the rules' starting distance.
+func _place(battle: Battle) -> void:
+	battle.fighters[0].position = Vector2(0, -4)
+	battle.fighters[1].position = Vector2(0, 4)
 
 
 func _events(battle: Battle, type: String) -> Array:
