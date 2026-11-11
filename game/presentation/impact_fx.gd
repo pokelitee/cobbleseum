@@ -30,6 +30,8 @@ var _hud_bands := Vector2.ZERO
 var _flash: ColorRect
 var _impact: ColorRect
 var _speed_lines: ColorRect
+## Kept here: a shader parameter never set reads back as null, not the shader's default.
+var _speed_line_intensity := 0.0
 var _impact_queue: Array[String] = []
 var _shake_frames := 0
 var _shake_strength := 0.0
@@ -81,8 +83,8 @@ func on_dodge(dodger: FighterView) -> void:
 
 ## Speed lines fade in while `active` (strong wind-ups in close-up) and out otherwise.
 func set_speed_lines(active: bool) -> void:
-	var current: float = _speed_lines.material.get_shader_parameter("intensity")
-	_speed_lines.material.set_shader_parameter("intensity", move_toward(current, 1.0 if active else 0.0, 0.2))
+	_speed_line_intensity = move_toward(_speed_line_intensity, 1.0 if active else 0.0, 0.2)
+	_speed_lines.material.set_shader_parameter("intensity", _speed_line_intensity)
 
 
 ## Advances every effect by one video frame.
