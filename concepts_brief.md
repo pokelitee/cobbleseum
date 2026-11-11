@@ -368,6 +368,14 @@ Since M6 it also adds life on top of every clip, for every species:
 
 Knockback is the simulation's own since rules version 9, so the view no longer fakes it.
 
+**More of Cobblemon's clips** (presentation only):
+
+- **Cries:** each fighter plays its cry clip when the battle opens, in time with its cry sound.
+- **Blinks and fidgets:** a second animation player layers the blink clip (about 930 species), and now and then one of the standing pose's idle quirks (look around, sniff, tail twitch; about 200 species, only while idling), every 2–6 s. It's seeded by the model, so renders repeat exactly, and it only touches the bones those clips animate.
+- **Emotions:** a crit or super-effective hit plays `shock` (falling back to `surprised`) instead of the hit clip, a stat drop while ready plays `angry`, the winner loops `happy`, and a time-up draw plays `sad` on both (about 100–210 species each).
+- **Running:** grounded fighters with a `ground_run` clip run above 3.5 m/s.
+- **Sleeping in the air:** hovering species with `air_sleep` sleep in mid-air.
+
 ### 7.5 Quality checks
 
 A QA pass over every roster species reports:

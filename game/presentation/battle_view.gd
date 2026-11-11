@@ -140,6 +140,8 @@ func _ready() -> void:
 	add_child(_sound)
 	_sound.setup([spec.fighters[0].species, spec.fighters[1].species])
 	_sound.intro()
+	_views[0].play_role_after("cry", 0)
+	_views[1].play_role_after("cry", BattleSound.INTRO_CRY_GAP)
 	_fx = ImpactFX.new()
 	_fx.layer = 2  # callouts and impact frames draw over the HUD
 	add_child(_fx)
@@ -379,8 +381,9 @@ func _play_events() -> void:
 				var move := _move(event.side, event.move)
 				var share := float(event.damage) / battle.fighters[defender].max_hp
 				_hit_counts[event.side] += 1
-				_views[defender].play_role("recoil")
 				var big: bool = event.crit or event.effectiveness > 1.0
+				# Big hits get a shocked reaction from species that have one.
+				_views[defender].play_role("shock" if big and _views[defender].has_clip("shock") else "recoil")
 				_views[defender].take_hit(ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
 				_fx.on_hit(event, _views[defender], share, big)
 				if _live:
@@ -420,6 +423,9 @@ func _play_events() -> void:
 				_move_fx.hit(_views[defender], move, false)
 			"boost":
 				_announce_boost(event)
+				var fell: bool = (event.boosts as Dictionary).values().any(func(stages: Variant) -> bool: return int(stages) < 0)
+				if fell and battle.fighters[event.side].action == Fighter.Action.READY:
+					_views[event.side].play_role("angry")
 			"heal":
 				_move_fx.aura(_views[event.side], HEAL_COLOUR, true)
 				_fx.announce(_views[event.side], "+%d" % event.amount, HEAL_COLOUR)
@@ -447,12 +453,15 @@ func _play_events() -> void:
 				_fx.on_dodge(_views[event.side])
 			"faint":
 				_views[event.side].play_role("faint")
+				_views[1 - int(event.side)].celebrate()
 				_sound.faint(event.side)
 				_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
 			"overtime":
 				_hud.flash_title("Overtime!", Color(1.0, 0.55, 0.3))
 			"time_up":
 				_hud.show_winner("Time up: draw")
+				for view in _views:
+					view.play_role("sad")
 
 
 ## "Attack rose!", "Defense fell sharply!", or "Stats rose!" for several at once.
