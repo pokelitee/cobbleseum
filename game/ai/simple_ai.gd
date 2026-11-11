@@ -145,10 +145,9 @@ static func _damage_score(me: Fighter, move: BattleMove) -> float:
 	if move.fixed_damage == 0:
 		# Weigh the attacking stat's current stage, and charge moves that lower it (Overheat,
 		# Draco Meteor) for the drop too, so they aren't spammed down to -6.
-		var stat := "atk" if move.physical else "spa"
-		var stage: int = me.boosts[stat]
+		var stage: int = 0 if move.target_attacks else me.boosts[move.offensive_stat]
 		score *= Rules.stage_multiplier(stage)
-		var drop: int = move.self_boosts.get(stat, 0)
+		var drop := move.own_stat_drop()
 		if drop < 0:
 			# Below -2 it waits for the stage to wear off rather than sinking it further.
 			if stage + drop < -STAGE_TARGET:

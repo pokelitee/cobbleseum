@@ -526,7 +526,7 @@ Every species gets one deterministic standard moveset, generated from its learns
 Only playable moves are eligible. Details (`game/sim/movesets.gd`, report via `tools/movesets.gd`):
 
 - **Learnable moves:** the species' learnset in every generation, plus its pre-evolutions', plus its base species' for forms with fewer than 25 moves of their own (Rotom's appliances, cosmetic forms).
-- **Attack value:** power × expected hits × accuracy. Using the weaker attacking stat costs 40%; charge, recharge, recoil and self-destruct are discounted; fixed damage counts as 80 power.
+- **Attack value:** power × expected hits × accuracy. Using the weaker attacking stat costs 40%; charge, recharge, recoil and self-destruct are discounted; fixed damage counts as 80 power. A drop to the stat the move attacks with is charged twice at the stage multiplier (Superpower's −1 halves the value, Draco Meteor's −2 leaves a third): with no switching, the drop weakens every later attack on that stat until it wears off. Probes showed species carrying Draco Meteor, Overheat or Superpower winning 17–30 points less than with the next-best pick.
 - **Coverage:** an attack of another type gains 25% for each type it hits super effectively that the first two don't.
 - **Utility:** sleep, paralysis, burn, poison, a buff to the species' attacking stat (more for more stages, Speed included), a heal, confusion or a debuff, scaled by accuracy. It's used if it scores at least 80, otherwise a third attack.
 - **Ties** break by move ID, so the same data always gives the same moveset.
@@ -559,9 +559,11 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **Changes:** the HP multiplier went from 8 to 22, which put the median in range. That pushed the slowest 10% (resisted matchups and weak unevolved species) into the 90 s cap, so overtime was added to finish them.
 - **Move use:** melee 43–44%, projectile 35%, area 12–13%, self-buff 7%, heal 1%, status 1%. Debuffs are almost never in a generated moveset.
 - **Side bias:** with every pairing run both ways round, side A wins 49.2% of 571 decided battles.
-- **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead.
+- **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 8** (self-lowering moves discounted in movesets, the AI's veto fixed, Showdown's stat overrides, 1,000 battles): median 30.2 s, 10th–90th percentile 16.8–57.9 s, draws 0.5%, type-advantaged side wins 56.1%.
+- **Stat overrides:** damage reads Showdown's `overrideOffensivePokemon`, `overrideOffensiveStat` and `overrideDefensiveStat`, so Foul Play uses the target's Attack, Body Press attacks with Defense, and Psyshock and Psystrike hit Defense. Foul Play had used the user's own Attack, which helped Kingambit to a 94% win rate.
 
 ## 10. Simulation and determinism
 

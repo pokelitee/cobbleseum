@@ -10,6 +10,7 @@ const MOVES := {
 	"jet": {"name": "Jet", "category": "Special", "type": "Water", "basePower": 80, "accuracy": 100, "pp": 15, "priority": 0, "flags": {}, "target": "normal"},
 	"leaf": {"name": "Leaf", "category": "Special", "type": "Grass", "basePower": 80, "accuracy": 100, "pp": 15, "priority": 0, "flags": {}, "target": "normal"},
 	"kick": {"name": "Kick", "category": "Physical", "type": "Fighting", "basePower": 60, "accuracy": 100, "pp": 20, "priority": 0, "flags": {"contact": 1}, "target": "normal"},
+	"meteor": {"name": "Meteor", "category": "Special", "type": "Water", "basePower": 130, "accuracy": 100, "pp": 5, "priority": 0, "flags": {}, "target": "normal", "self": {"boosts": {"spa": -2}}},
 	"recover": {"name": "Recover", "category": "Status", "type": "Normal", "basePower": 0, "accuracy": true, "pp": 5, "priority": 0, "flags": {}, "target": "self", "heal": [1, 2]},
 }
 const TYPES := {
@@ -94,6 +95,22 @@ func test_does_not_heal_when_the_foe_could_cancel_it() -> void:
 	foe.cooldowns[0] = 0
 	seen = {"position": foe.position, "action": Fighter.Action.RECOVERY, "action_ticks": 60}
 	assert_eq(UtilityAI.heal_cover(me, foe, seen, {}, channel), 1.0, "safe while the foe recovers")
+
+
+func test_self_lowering_moves_are_vetoed_and_charged() -> void:
+	var ai := _ai()
+	ai.keep_scores = true
+	var battle := _battle(ai, ["meteor", "jet"])
+	_place(battle, 4.0)
+	var me := battle.fighters[0]
+	assert_eq(UtilityAI.stage_cost(me, me.moves[0]), 0.5, "-2 halves the other special attack")
+	me.boosts.spa = 2
+	assert_eq(UtilityAI.stage_cost(me, me.moves[0]), 0.5, "throwing away +2 costs as much")
+	me.boosts.spa = -1
+	me.cooldowns[1] = 90
+	assert_eq(ai.decide(battle, 0).get("use", -1), -1, "won't sink to -3 even with nothing else ready")
+	var meteor: Dictionary = ai.last_scores.filter(func(c: Dictionary) -> bool: return c.action == "move:meteor")[0]
+	assert_eq(meteor.score, 0.0)
 
 
 func test_prefers_a_super_effective_move() -> void:

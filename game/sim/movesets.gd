@@ -126,6 +126,12 @@ static func attack_value(move: BattleMove, raw: Dictionary, physical: bool) -> f
 		value *= RECOIL_FACTOR
 	if move.self_destructs:
 		value *= SELF_DESTRUCT_FACTOR
+	# A drop to the stat the move attacks with weakens every later attack on that stat until
+	# it wears off, and with no switching that can't be reset. It usually lasts through the
+	# next use as well, so it's charged twice: -1 (Superpower) halves the value, -2 (Draco
+	# Meteor) leaves a third. Batch probes showed species with these moves winning 17-30
+	# points less than with the next-best pick.
+	value *= Rules.stage_multiplier(2 * move.own_stat_drop())
 	return value
 
 

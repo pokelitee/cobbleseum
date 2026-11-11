@@ -75,6 +75,14 @@ func test_utility_slot_weighs_accuracy() -> void:
 	assert_true(Movesets.generate("bloom", data).moves.has("sleeppowder"), "without the buff, sleep clears the threshold")
 
 
+func test_attacks_that_lower_their_own_stat_are_discounted() -> void:
+	var meteor := {"name": "Meteor", "category": "Special", "type": "Grass", "basePower": 130, "accuracy": 100, "pp": 5, "flags": {}, "target": "normal", "self": {"boosts": {"spa": -2}}}
+	var move: BattleMove = BattleMove.from_showdown("meteor", meteor).move
+	assert_almost_eq(Movesets.attack_value(move, meteor, false), 130.0 / 3.0, 1e-4, "-2 Special Attack, charged twice")
+	assert_eq(Movesets.attack_value(move, meteor, false) < Movesets.attack_value(
+		BattleMove.from_showdown("energyball", MOVES.energyball).move, MOVES.energyball, false), true, "below a clean 90")
+
+
 func test_forms_with_few_moves_learn_their_base_species_moves() -> void:
 	var learnable := Movesets.learnable("bloomwash", _data())
 	assert_true(learnable.has("hydropump") and learnable.has("energyball") and learnable.has("gigadrain"), str(learnable))

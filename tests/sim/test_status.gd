@@ -19,6 +19,10 @@ const MOVES := {
 	"scald": {"name": "Scald", "category": "Special", "type": "Water", "basePower": 80, "accuracy": 100, "pp": 15, "priority": 0, "flags": {}, "target": "normal", "secondary": {"chance": 100, "status": "brn"}},
 	"closecombat": {"name": "Close Combat", "category": "Physical", "type": "Fighting", "basePower": 120, "accuracy": 100, "pp": 5, "priority": 0, "flags": {"contact": 1}, "target": "normal", "self": {"boosts": {"def": -1, "spd": -1}}},
 	"gigadrain": {"name": "Giga Drain", "category": "Special", "type": "Grass", "basePower": 75, "accuracy": 100, "pp": 10, "priority": 0, "flags": {}, "target": "normal", "drain": [1, 2]},
+	"dracometeor": {"name": "Draco Meteor", "category": "Special", "type": "Dragon", "basePower": 130, "accuracy": 90, "pp": 5, "priority": 0, "flags": {}, "target": "normal", "self": {"boosts": {"spa": -2}}},
+	"foulplay": {"name": "Foul Play", "category": "Physical", "type": "Dark", "basePower": 95, "accuracy": 100, "pp": 15, "priority": 0, "flags": {"contact": 1}, "target": "normal", "overrideOffensivePokemon": "target"},
+	"bodypress": {"name": "Body Press", "category": "Physical", "type": "Fighting", "basePower": 80, "accuracy": 100, "pp": 10, "priority": 0, "flags": {"contact": 1}, "target": "normal", "overrideOffensiveStat": "def"},
+	"psyshock": {"name": "Psyshock", "category": "Special", "type": "Psychic", "basePower": 80, "accuracy": 100, "pp": 10, "priority": 0, "flags": {}, "target": "normal", "overrideDefensiveStat": "def"},
 	"bravebird": {"name": "Brave Bird", "category": "Physical", "type": "Flying", "basePower": 120, "accuracy": 100, "pp": 15, "priority": 0, "flags": {"contact": 1}, "target": "any", "recoil": [33, 100]},
 }
 
@@ -210,6 +214,22 @@ func test_a_hit_cancels_a_heal() -> void:
 	_run_ticks(battle, 50)
 	assert_eq(fighter.hp, hp, "no heal later either")
 	assert_eq(_events(battle, "heal").size(), 0)
+
+
+func test_showdown_stat_overrides() -> void:
+	var battle := _battle(["kick"], ["jet"])
+	var user := battle.fighters[0]
+	var target := battle.fighters[1]
+	target.boosts.atk = 2
+	user.boosts.def = 1
+	target.boosts.def = -1
+	assert_eq(_move("foulplay").attack_stat(user, target), target.stat("atk"), "Foul Play attacks with the target's Attack")
+	assert_eq(_move("bodypress").attack_stat(user, target), user.stat("def"), "Body Press attacks with Defense")
+	assert_eq(_move("psyshock").defensive_stat, "def", "Psyshock hits Defense")
+	assert_eq(_move("jet").defensive_stat, "spd")
+	assert_eq(_move("dracometeor").own_stat_drop(), -2)
+	assert_eq(_move("closecombat").own_stat_drop(), 0, "drops to other stats don't count")
+	assert_eq(_move("foulplay").own_stat_drop(), 0)
 
 
 func test_secondary_and_self_stat_changes_apply_on_hit() -> void:

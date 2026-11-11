@@ -495,8 +495,8 @@ func _hurt_in_confusion(fighter: Fighter) -> void:
 static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData, random: SimRandom) -> Dictionary:
 	if move.fixed_damage > 0:
 		return {"damage": move.fixed_damage, "crit": false, "effectiveness": 1.0}
-	var attack := attacker.stat("atk" if move.physical else "spa")
-	var defense := defender.stat("def" if move.physical else "spd")
+	var attack := move.attack_stat(attacker, defender)
+	var defense := defender.stat(move.defensive_stat)
 	var base := floorf(floorf(floorf(2.0 * Rules.LEVEL / 5.0 + 2.0) * move.power * attack / defense) / 50.0) + 2.0
 	var stab := Rules.STAB if move.type in attacker.types else 1.0
 	var effectiveness := Rules.compressed_effectiveness(data.effectiveness(move.type, defender.types))
