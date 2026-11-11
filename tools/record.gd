@@ -124,10 +124,11 @@ func _render(source: PackedStringArray, format: String, out_dir: String, seconds
 	] + Array(_view_args), output, true)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(OVERRIDE_FILE))
 	var log := "".join(output)
-	if status != 0 or not log.contains("%s %s" % [BattleView.CHECKSUM_OK, checksum]):
+	var problem := render_problem(log, status, checksum)
+	if not problem.is_empty():
 		DirAccess.remove_absolute(movie)
-		return "rendering %s failed or didn't verify (exit %d):
-%s" % [format, status, log.strip_edges().right(2000)]
+		return "rendering %s %s (exit %d):
+%s" % [format, problem, status, log.strip_edges().right(2000)]
 	for line in log.split("
 "):
 		if line.begins_with(BattleView.CLIP_WINDOW + " "):
@@ -141,6 +142,19 @@ func _render(source: PackedStringArray, format: String, out_dir: String, seconds
 	if status != 0:
 		return "ffmpeg failed:
 %s" % "".join(output).strip_edges()
+	return ""
+
+
+## Why a render can't be used, or "": it failed, didn't verify against the headless run's
+## checksum, or logged a script error. GDScript errors don't stop the view, so a clip could
+## otherwise look fine while effects silently broke.
+static func render_problem(log: String, status: int, checksum: String) -> String:
+	if status != 0:
+		return "failed"
+	if not log.contains("%s %s" % [BattleView.CHECKSUM_OK, checksum]):
+		return "didn't verify"
+	if log.contains("SCRIPT ERROR"):
+		return "logged script errors"
 	return ""
 
 
