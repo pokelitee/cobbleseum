@@ -22,11 +22,11 @@ const BY_TYPE := {
 ## Per biome: plateau count and height (metres, in STEP multiples), pillar count and height.
 ## The stadium is the flat classic.
 const SHAPES := {
-	"grassland": {"plateaus": Vector2i(1, 2), "plateau_height": Vector2(0.5, 1.0), "pillars": Vector2i(3, 5), "pillar_height": Vector2(2.0, 3.0)},
-	"beach": {"plateaus": Vector2i(1, 2), "plateau_height": Vector2(0.5, 0.5), "pillars": Vector2i(2, 3), "pillar_height": Vector2(1.5, 2.0)},
-	"volcano": {"plateaus": Vector2i(2, 3), "plateau_height": Vector2(1.0, 1.5), "pillars": Vector2i(4, 6), "pillar_height": Vector2(2.5, 4.0)},
-	"snowfield": {"plateaus": Vector2i(1, 2), "plateau_height": Vector2(0.5, 1.0), "pillars": Vector2i(3, 5), "pillar_height": Vector2(2.0, 2.5)},
-	"cave": {"plateaus": Vector2i(2, 3), "plateau_height": Vector2(0.5, 1.5), "pillars": Vector2i(5, 7), "pillar_height": Vector2(3.0, 4.0)},
+	"grassland": {"plateaus": Vector2i(2, 3), "plateau_height": Vector2(0.5, 1.0), "pillars": Vector2i(6, 9), "pillar_height": Vector2(2.0, 3.0)},
+	"beach": {"plateaus": Vector2i(2, 3), "plateau_height": Vector2(0.5, 0.5), "pillars": Vector2i(4, 6), "pillar_height": Vector2(1.5, 2.0)},
+	"volcano": {"plateaus": Vector2i(3, 4), "plateau_height": Vector2(1.0, 1.5), "pillars": Vector2i(8, 11), "pillar_height": Vector2(2.5, 4.0)},
+	"snowfield": {"plateaus": Vector2i(2, 3), "plateau_height": Vector2(0.5, 1.0), "pillars": Vector2i(6, 9), "pillar_height": Vector2(2.0, 2.5)},
+	"cave": {"plateaus": Vector2i(3, 4), "plateau_height": Vector2(0.5, 1.5), "pillars": Vector2i(10, 13), "pillar_height": Vector2(3.0, 4.0)},
 	"stadium": {"plateaus": Vector2i(0, 0), "plateau_height": Vector2(0.0, 0.0), "pillars": Vector2i(0, 0), "pillar_height": Vector2(0.0, 0.0)},
 }
 const STEP := 0.5

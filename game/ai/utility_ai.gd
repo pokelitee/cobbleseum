@@ -15,7 +15,7 @@ extends RefCounted
 ## - Exact ties go to the side's random stream, never list order.
 ## With `keep_scores` set (the debug overlay), the last evaluation is kept in `last_scores`.
 
-enum Action { USE_MOVE, DODGE, APPROACH, RETREAT, CIRCLE, HOLD }
+enum Action { USE_MOVE, DODGE, APPROACH, RETREAT, CIRCLE, HOLD, TAKE_COVER, FLANK }
 
 ## Movement scores stay below a usable attack's, so ready moves in range get used; the
 ## commitment bonus only steadies the choice between ways of moving.
@@ -42,6 +42,16 @@ const WALL_MARGIN := 1.5
 const HISTORY := 32
 ## A heal's "cover" when the opponent could land a hit before the channel ends (and cancel it).
 const EXPOSED := 0.15
+## Terrain tactics (§9.8), only where the ground rises at least TACTICS_RELIEF somewhere:
+## taking cover from a ranged attack it can't answer, and moving for a clear shot. Spots
+## are looked for SPOT_DIRECTIONS ways at SPOT_DISTANCES; the foe's ranged attack counts as
+## coming if it's ready within SHOT_SOON ticks.
+const TACTICS_RELIEF := 1.0
+const TAKE_COVER_SCORE := 0.45
+const FLANK_SCORE := 0.5
+const SPOT_DIRECTIONS := 16
+const SPOT_DISTANCES: Array[float] = [1.5, 3.0]
+const SHOT_SOON := 15
 
 var profile: AIProfile
 var random: SimRandom
@@ -62,6 +72,9 @@ var _dodge_allowed := {}
 var _strafe := 1.0
 var _strafe_ticks := 0
 var _band_shift := 0.0
+## Where the chosen terrain tactic is heading (Vector2.INF for nowhere).
+var _cover_spot := Vector2.INF
+var _flank_spot := Vector2.INF
 
 static var _curves := {}
 
@@ -117,6 +130,8 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 	var urgency := _urgency(threat.ticks) if can_avoid else 0.0
 	var candidates: Array[Dictionary] = []
 	var any_ready := false
+	# One line-of-sight check per decision (it's symmetric), shared by every move and tactic.
+	var sight := battle.terrain.highest() <= 0.0 or battle.can_see(me, foe)
 	for i in me.moves.size():
 		if not me.move_ready(i):
 			continue
@@ -124,7 +139,7 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 		var move := me.moves[i]
 		var considerations := {
 			# In range, and able to connect over the terrain (a clear line, a small height gap).
-			"in_range": 1.0 if gap <= move.reach() and battle.can_reach(me, foe, move) else 0.0,
+			"in_range": 1.0 if gap <= move.reach() and (sight if _needs_sight(move) else battle.can_reach(me, foe, move)) else 0.0,
 			"safe_to_commit": 1.0 - 0.6 * urgency,
 		}
 		if move.is_damaging():
@@ -155,10 +170,67 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 	candidates.append(_scored("retreat", Action.RETREAT, {"too_close": _sample("too_close", band.x - gap)}))
 	candidates.append(_scored("circle", Action.CIRCLE, {"base": CIRCLE_SCORE + (0.0 if any_ready else WAITING_CIRCLE_BONUS)}))
 	candidates.append(_scored("hold", Action.HOLD, {"base": HOLD_SCORE}))
+	_add_terrain_tactics(battle, me, foe, seen, gap, sight, candidates)
 	for candidate in candidates:
 		if candidate.action == _current and candidate.score > 0.0 and candidate.kind >= Action.APPROACH:
 			candidate.score += COMMITMENT_BONUS
 	return candidates
+
+
+## Terrain tactics, where the ground has relief: with no attack ready while the foe can see it
+## and has a ranged attack coming, head for the nearest spot out of its sight; with a ranged
+## move ready and in range but no clear line, head for the nearest spot with one.
+func _add_terrain_tactics(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, gap: float, exposed: bool,
+		candidates: Array[Dictionary]) -> void:
+	_cover_spot = Vector2.INF
+	_flank_spot = Vector2.INF
+	if battle.terrain.highest() < TACTICS_RELIEF:
+		return
+	var attack_ready := false
+	var shot_ready := false
+	for i in me.moves.size():
+		var move := me.moves[i]
+		if not me.move_ready(i):
+			continue
+		attack_ready = attack_ready or move.is_damaging()
+		if _needs_sight(move) and gap <= move.reach():
+			shot_ready = true
+	var foe_shoots := false
+	for i in foe.moves.size():
+		if foe.moves[i].kind == BattleMove.Kind.PROJECTILE and foe.cooldowns[i] <= SHOT_SOON:
+			foe_shoots = true
+	var foe_eye := Vector3(seen.position.x, foe.ground + Rules.CHEST_HEIGHT, seen.position.y)
+	if not attack_ready and foe_shoots and exposed:
+		_cover_spot = find_spot(battle, me, foe_eye, false)
+		if _cover_spot != Vector2.INF:
+			candidates.append(_scored("take_cover", Action.TAKE_COVER, {"base": TAKE_COVER_SCORE}))
+	if shot_ready and not exposed:
+		_flank_spot = find_spot(battle, me, foe_eye, true)
+		if _flank_spot != Vector2.INF:
+			candidates.append(_scored("flank", Action.FLANK, {"base": FLANK_SCORE}))
+
+
+static func _needs_sight(move: BattleMove) -> bool:
+	return move.kind in [BattleMove.Kind.PROJECTILE, BattleMove.Kind.STATUS, BattleMove.Kind.DEBUFF]
+
+
+## The nearest spot around `me` it can walk to (no climb beyond its reach, inside the wall)
+## that `foe_eye` can see (`visible`) or can't: Vector2.INF if none.
+static func find_spot(battle: Battle, me: Fighter, foe_eye: Vector3, visible: bool) -> Vector2:
+	var terrain := battle.terrain
+	for distance in SPOT_DISTANCES:
+		for d in SPOT_DIRECTIONS:
+			var angle := TAU * d / SPOT_DIRECTIONS
+			var spot := me.position + Vector2(cos(angle), sin(angle)) * distance
+			if spot.length() > Rules.ARENA_RADIUS - me.radius - 0.5:
+				continue
+			var ground := terrain.height_at(spot)
+			if ground > me.ground + me.climb:
+				continue
+			var chest := Vector3(spot.x, ground + Rules.CHEST_HEIGHT, spot.y)
+			if terrain.clear_line(foe_eye, chest) == visible:
+				return spot
+	return Vector2.INF
 
 
 ## Picks from scored candidates: the best, ties broken at random, sometimes (a mistake) the
@@ -180,7 +252,7 @@ func _choose(candidates: Array[Dictionary]) -> Dictionary:
 			second = candidate
 	if not second.is_empty() and second.score > 0.0 and random.chance(profile.mistake_chance):
 		best = second
-	var moving := [Action.APPROACH, Action.RETREAT, Action.CIRCLE, Action.HOLD]
+	var moving := [Action.APPROACH, Action.RETREAT, Action.CIRCLE, Action.HOLD, Action.TAKE_COVER, Action.FLANK]
 	if _held < MIN_HOLD_TICKS and best.kind in moving and best.action != _current:
 		for candidate in candidates:
 			if candidate.action == _current:
@@ -397,6 +469,11 @@ func _movement_intent(me: Fighter, seen: Dictionary, action: String) -> Dictiona
 			direction = -toward + side * 0.5
 		"circle":
 			direction = side * STRAFE_WEIGHT
+		"take_cover", "flank":
+			var spot := _cover_spot if action == "take_cover" else _flank_spot
+			if spot == Vector2.INF:
+				return {"move": Vector2.ZERO}
+			direction = spot - me.position
 		_:
 			return {"move": Vector2.ZERO}
 	if me.position.length() > Rules.ARENA_RADIUS - me.radius - WALL_MARGIN:

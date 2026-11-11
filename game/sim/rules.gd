@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 12
+const RULES_VERSION := 13
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -15,7 +15,7 @@ const OVERTIME_RAMP := 0.1
 ## Multiplies the HP stat to set how long battles last (target 30-45 s).
 const HP_MULTIPLIER := 22.0
 
-const ARENA_RADIUS := 11.0
+const ARENA_RADIUS := 14.0
 ## Terrain (§9.8): the most a fighter can step up (fliers more); projectiles leave and aim at
 ## CHEST_HEIGHT above the ground and hit within PROJECTILE_VERTICAL_REACH of it; melee and area
 ## moves only reach across height differences up to their limits.

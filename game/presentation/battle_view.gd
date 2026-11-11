@@ -310,6 +310,7 @@ func _next_live_frame() -> void:
 	_hud.update_move_bar(battle.fighters[_player_side])
 	_move_fx.sync_projectiles(battle)
 	_player_camera.apply(_camera, _views[_player_side], _views[1 - _player_side])
+	_update_sight()
 
 
 ## Saves the battle as a replay: its spec with every tick's intents per side, so it plays
@@ -499,6 +500,16 @@ func _move(side: int, move_id: String) -> BattleMove:
 	return battle.fighters[side].moves[0]
 
 
+## Keeps the fighters visible through cover between them and the camera.
+func _update_sight() -> void:
+	var chests: Array[Vector3] = []
+	var grounds: Array[float] = []
+	for view in _views:
+		chests.append(view.global_position + Vector3.UP * view.height * 0.5)
+		grounds.append(view.global_position.y)
+	_arena.set_sight(chests, grounds)
+
+
 func _sync_views() -> void:
 	if _hold_is_hitstop and _hold_frames < plan.slow[_shown_tick()]:
 		_hold_is_hitstop = false
@@ -508,6 +519,7 @@ func _sync_views() -> void:
 		var fighter := battle.fighters[side]
 		_views[side].place(fighter.position, fighter.facing, fighter.ground)
 		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
+	_update_sight()
 	_move_fx.sync_projectiles(battle)
 	var span := maxi(1, int(_segment.end) - int(_segment.start))
 	var progress := float(_shown_tick() - int(_segment.start)) / span

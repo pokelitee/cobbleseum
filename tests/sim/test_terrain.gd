@@ -122,3 +122,21 @@ func _walk(direction: Vector2, ticks: int) -> Array:
 	for i in ticks:
 		steps.append({"move": direction})
 	return steps
+
+
+func test_the_ai_finds_cover_and_a_clear_shot() -> void:
+	var battle := _battle([])
+	var me := battle.fighters[0]
+	me.position = Vector2(0, -2)
+	battle.fighters[1].position = Vector2(0, 4)
+	var foe_eye := Vector3(0, Rules.CHEST_HEIGHT, 4)
+	# A wall of pillars two cells to the right of the line between them.
+	_raise(battle.terrain, Vector2i(1, 0), Vector2i(2, 1), 3.0)
+	var hidden := UtilityAI.find_spot(battle, me, foe_eye, false)
+	assert_true(hidden != Vector2.INF, "somewhere to hide")
+	var chest := Vector3(hidden.x, Rules.CHEST_HEIGHT, hidden.y)
+	assert_false(battle.terrain.clear_line(foe_eye, chest), "out of sight: %s" % hidden)
+	me.position = Vector2(1.5, -2)
+	var clear := UtilityAI.find_spot(battle, me, foe_eye, true)
+	assert_true(battle.terrain.clear_line(foe_eye, Vector3(clear.x, Rules.CHEST_HEIGHT, clear.y)), "in sight: %s" % clear)
+
