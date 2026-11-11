@@ -40,19 +40,20 @@ func test_every_biome_builds_the_same_way_twice_with_seats() -> void:
 		second.free()
 
 
-func test_bare_ground_is_built_at_the_terrain_height() -> void:
+func test_the_visible_ground_follows_the_battle_ground() -> void:
 	var terrain := Terrain.generate("grassland", SimRandom.new(4))
 	var arena := Arena.create("grassland", 4, [], terrain)
 	var checked := 0
-	for entry: Array in arena._blocks:
-		var t: Transform3D = entry[0]
-		var cell := Vector2(t.origin.x, t.origin.z)
-		var size := t.basis.get_scale()
-		# The ground's top layer: a full cell, a quarter of a metre deep.
-		if cell.length() <= Rules.ARENA_RADIUS and is_equal_approx(size.x, 1.0) and is_equal_approx(size.y, 0.25):
-			assert_almost_eq(t.origin.y + 0.125, terrain.ground_at(cell), 1e-4, "ground at %s" % cell)
-			checked += 1
-	assert_true(checked > 300, "checked %d cells" % checked)
+	for cell in terrain.cells():
+		if terrain.kind_at(cell) != Terrain.Kind.GROUND:
+			continue
+		var shown := arena.surface_at(cell, -100.0)
+		# Corners average the cells within a step, so the slope stays within a step of the
+		# battle's terraces (fighters are drawn on the slope; the battle uses the terraces).
+		assert_true(absf(shown - terrain.ground_at(cell)) < Terrain.STEP,
+			"within a step at %s: %.2f vs %.2f" % [cell, shown, terrain.ground_at(cell)])
+		checked += 1
+	assert_true(checked > 300)
 	arena.free()
 
 
@@ -97,19 +98,20 @@ func test_ring_segments_meet_without_gaps() -> void:
 	arena.free()
 
 
-func test_the_floor_follows_the_battle_terrain() -> void:
+func test_features_reach_their_battle_height() -> void:
 	var terrain := Terrain.generate("volcano", SimRandom.new(11))
 	var arena := Arena.create("volcano", 11, [], terrain)
-	var raised := terrain.cells().filter(func(c: Vector2) -> bool: return terrain.height_at(c) > 0.0)
-	assert_true(raised.size() > 0, "volcanoes have plateaus and spires")
-	var cell: Vector2 = raised[0]
-	var tops := arena._blocks.filter(func(e: Array) -> bool:
-		var at: Vector3 = (e[0] as Transform3D).origin
-		return is_equal_approx(at.x, cell.x) and is_equal_approx(at.z, cell.y))
-	var top := 0.0
-	for entry: Array in tops:
-		var t: Transform3D = entry[0]
-		top = maxf(top, t.origin.y + t.basis.get_scale().y * 0.5)
-	assert_almost_eq(top, terrain.height_at(cell), 1e-4, "the blocks reach the ground's height")
+	var vertices := PackedVector3Array()
+	for child in arena.get_children():
+		if child is MeshInstance3D and (child as MeshInstance3D).mesh is ArrayMesh:
+			vertices.append_array((child.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX])
+	var features := terrain.cells().filter(func(c: Vector2) -> bool: return terrain.kind_at(c) != Terrain.Kind.GROUND)
+	assert_true(features.size() > 0, "volcanoes have basalt and rocks")
+	for cell: Vector2 in features:
+		var top := -100.0
+		for v in vertices:
+			if Vector2(v.x, v.z).distance_to(cell) < 0.75:
+				top = maxf(top, v.y)
+		assert_true(top >= terrain.height_at(cell) - 0.05, "%s reaches %.1f (got %.2f)" % [cell, terrain.height_at(cell), top])
 	arena.free()
 

@@ -27,8 +27,8 @@ const BIOMES := {
 	"beach": {
 		"colours": [Color(0.84, 0.76, 0.56), Color(0.74, 0.66, 0.48), Color(0.55, 0.52, 0.48), Color(0.88, 0.8, 0.6), Color(0.72, 0.64, 0.46)],
 		"sky": [Color(0.2, 0.55, 0.95), Color(0.75, 0.9, 1.0)],
-		"sun": {"angle": Vector3(-60, -20, 0), "colour": Color(1.0, 0.97, 0.9), "energy": 1.05},
-		"ambient": [Color(0.7, 0.78, 0.85), 0.75],
+		"sun": {"angle": Vector3(-55, -20, 0), "colour": Color(1.0, 0.96, 0.88), "energy": 0.95},
+		"ambient": [Color(0.66, 0.74, 0.84), 0.6],
 		"fog": [Color(0.75, 0.9, 1.0), 0.003],
 		"water": -0.4,
 		"props": {"palm": 0.03, "rock": 0.01},

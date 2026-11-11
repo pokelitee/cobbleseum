@@ -19,6 +19,10 @@ const EDGE_BAND := 3.0
 const EDGE_DENSITY := 3.0
 ## Patch noise above this gives the patch colour (paths, gravel, ash).
 const PATCH_THRESHOLD := 0.3
+## Ground corners are nudged off the grid by up to this much, so it doesn't read as squares.
+const CORNER_JITTER := 0.18
+## Features' bases sink this far, so they sit in the faceted ground rather than on a corner.
+const SINK := 0.3
 ## Where spectators may sit outside a stadium: ground this far out, at most this high.
 const SEAT_RANGE := Vector2(FLOOR_RADIUS + 3.0, FLOOR_RADIUS + 12.0)
 const SEAT_MAX_HEIGHT := 3.0
@@ -54,6 +58,8 @@ var _arcs := {}
 var _surfaces: Array[ShaderMaterial] = []
 ## Ground height by cell beyond the arena, so props sit on top.
 var _heights := {}
+## Each built cell's four corner heights ([-x-z, +x-z, +x+z, -x+z]), for surface_at().
+var _tops := {}
 
 
 ## Builds the arena for `name` (one of Terrain.BIOMES) seeded by `seed`, around the battle's
@@ -140,11 +146,7 @@ func add_arc_ring(inner: float, outer: float, bottom: float, top: float, colour:
 ## face's metres, for the surface shader's pixel grid. The underside matters for what floats
 ## (the roof); with `inner` at 0 the segment is a wedge.
 func add_sector(from: float, to: float, inner: float, outer: float, bottom: float, top: float, colour: Color, glow := false) -> void:
-	var tool: SurfaceTool = _arcs.get(glow)
-	if tool == null:
-		tool = SurfaceTool.new()
-		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-		_arcs[glow] = tool
+	var tool := _mesh_tool(glow)
 	var steps := maxi(1, ceili((to - from) * maxf(outer, 0.01) / ARC_STEP))
 	var up_top := Vector3.UP * top
 	var up_bottom := Vector3.UP * bottom
@@ -203,9 +205,7 @@ func _build_landscape() -> void:
 	for cell in _terrain.world_cells(Terrain.WORLD_RADIUS):
 		var ground := _terrain.ground_at(cell)
 		var steep := _steepness(cell, ground)
-		var side := _colour(2) if steep >= 1.0 else _colour(4)
-		add_box(cell, -4.0, ground - 0.25, vary(side, 0.05))
-		add_box(cell, ground - 0.25, ground, vary(_surface(cell, ground, steep, water), 0.04))
+		_ground_cell(cell, ground, vary(_surface(cell, ground, steep, water), 0.04))
 		var kind := _terrain.kind_at(cell)
 		if kind != Terrain.Kind.GROUND:
 			_feature(kind, cell, ground, _terrain.height_at(cell))
@@ -216,6 +216,110 @@ func _build_landscape() -> void:
 			_heights[cell] = ground
 			if ground >= maxf(water, 0.0) and distance >= SEAT_RANGE.x and distance <= SEAT_RANGE.y and ground <= SEAT_MAX_HEIGHT and steep < 1.0:
 				add_seat(cell, ground)
+
+
+## One cell of the faceted ground: its top, with each corner at the average of the cells
+## around it that are within a step of this one (so walkable ground slopes smoothly and cliffs
+## stay sharp), and walls down to any lower neighbour (earth, or stone where it drops a metre
+## or more). Corners are nudged off the grid, the same way for every cell that shares them.
+func _ground_cell(cell: Vector2, ground: float, top_colour: Color) -> void:
+	var tool := _mesh_tool(false)
+	var i := int(floorf(cell.x))
+	var j := int(floorf(cell.y))
+	var corners: Array[Vector2i] = [Vector2i(i, j), Vector2i(i + 1, j), Vector2i(i + 1, j + 1), Vector2i(i, j + 1)]
+	var heights: Array[float] = []
+	var points: Array = []
+	for corner in corners:
+		var h := _corner_height(cell, ground, corner)
+		heights.append(h)
+		var xz := _corner_xz(corner)
+		points.append(Vector3(xz.x, h, xz.y))
+	_tops[Vector2i(i, j)] = heights
+	LowPoly.face(tool, top_colour, points, points.map(func(p: Vector3) -> Vector2: return Vector2(p.x, p.z)), Vector3.UP)
+	# Walls close the gap along each edge where this cell and its neighbour meet at different
+	# heights. Each shared edge is built once (from the -x or -z cell, or from the cell at the
+	# world's rim) and seen from both sides: the two cells' edges can cross, which a one-sided
+	# wall facing one way would leave half hidden.
+	# Corners run -x-z, +x-z, +x+z, -x+z, so each pair of corners borders one neighbour.
+	var sides := [[0, 1, Vector2(0, -1)], [1, 2, Vector2(1, 0)], [2, 3, Vector2(0, 1)], [3, 0, Vector2(-1, 0)]]
+	for side: Array in sides:
+		var a: int = side[0]
+		var b: int = side[1]
+		var neighbour: Vector2 = cell + side[2]
+		var inside := neighbour.length() <= Terrain.WORLD_RADIUS
+		if inside and (side[2].x < 0.0 or side[2].y < 0.0):
+			continue
+		var n_ground := _terrain.ground_at(neighbour)
+		var low_a := _corner_height(neighbour, n_ground, corners[a]) if inside else -4.0
+		var low_b := _corner_height(neighbour, n_ground, corners[b]) if inside else -4.0
+		if absf(heights[a] - low_a) < 1e-4 and absf(heights[b] - low_b) < 1e-4:
+			continue
+		var drop := maxf(absf(heights[a] - low_a), absf(heights[b] - low_b))
+		# Small steps are the ground's own colour, shaded (the dark earth colour made them read
+		# as cracks); a metre or more is a cliff of bare stone.
+		var wall := vary(_colour(2) if drop >= 1.0 else top_colour.darkened(0.18), 0.05)
+		var pa: Vector3 = points[a]
+		var pb: Vector3 = points[b]
+		var length := Vector2(pa.x, pa.z).distance_to(Vector2(pb.x, pb.z))
+		var out := Vector3(side[2].x, 0, side[2].y)
+		var quad := [pa, pb, Vector3(pb.x, low_b, pb.z), Vector3(pa.x, low_a, pa.z)]
+		var uvs := [Vector2(0, heights[a]), Vector2(length, heights[b]), Vector2(length, low_b), Vector2(0, low_a)]
+		LowPoly.face(tool, wall, quad, uvs, out)
+		LowPoly.face(tool, wall, quad, uvs, -out)
+
+
+## A corner's height for `cell`. The four cells around the corner are grouped by height (from
+## the lowest, a group spans at most a step), the same way whichever cell asks, and a cell gets
+## its group's average. So cells that slope together share the corner exactly, and the ground
+## only parts where a group ends: a step or a cliff.
+func _corner_height(cell: Vector2, ground: float, corner: Vector2i) -> float:
+	var around: Array[float] = []
+	for di in [-0.5, 0.5]:
+		for dj in [-0.5, 0.5]:
+			around.append(_terrain.ground_at(Vector2(corner.x + di, corner.y + dj)))
+	around.sort()
+	var groups: Array = []
+	for h in around:
+		if groups.is_empty() or h - (groups[-1] as Array)[0] > Terrain.STEP + 1e-4:
+			groups.append([h])
+		else:
+			(groups[-1] as Array).append(h)
+	for group: Array in groups:
+		if ground >= float(group[0]) - 1e-4 and ground <= float(group[-1]) + 1e-4:
+			var total := 0.0
+			for h: float in group:
+				total += h
+			return total / group.size()
+	return ground
+
+
+## A corner's place on the floor, nudged off the grid by up to CORNER_JITTER.
+static func _corner_xz(corner: Vector2i) -> Vector2:
+	var h := hash(corner)
+	var dx := (float(h & 0xffff) / 65535.0 - 0.5) * 2.0 * CORNER_JITTER
+	var dy := (float((h >> 16) & 0xffff) / 65535.0 - 0.5) * 2.0 * CORNER_JITTER
+	return Vector2(corner.x + dx, corner.y + dy)
+
+
+## The visible ground's height under `point` (between its cell's corners), or `fallback` where
+## the faceted ground isn't built (the stadium) or something stands on the cell.
+func surface_at(point: Vector2, fallback: float) -> float:
+	var key := Vector2i(int(floorf(point.x)), int(floorf(point.y)))
+	if not _tops.has(key) or _terrain.kind_at(point) != Terrain.Kind.GROUND:
+		return fallback
+	var h: Array[float] = _tops[key]
+	var fx := point.x - key.x
+	var fy := point.y - key.y
+	return lerpf(lerpf(h[0], h[1], fx), lerpf(h[3], h[2], fx), fy)
+
+
+func _mesh_tool(glow: bool) -> SurfaceTool:
+	var tool: SurfaceTool = _arcs.get(glow)
+	if tool == null:
+		tool = SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		_arcs[glow] = tool
+	return tool
 
 
 ## The largest height difference to a neighbouring cell's ground.
@@ -239,51 +343,74 @@ func _surface(cell: Vector2, ground: float, steep: float, water: float) -> Color
 	return _colour(3) if ground >= 1.0 else _colour(0)
 
 
-## What stands on a cell, drawn within its footprint and up to the battle's height for it (so
-## shots stop where the rock is seen), plus canopies above the trunks.
+## What stands on a cell, in low-poly shapes within about its footprint and up to the battle's
+## height for it (so shots stop where the rock is seen), plus canopies above the trunks. Bases
+## sink a little so they sit in the faceted ground.
 func _feature(kind: Terrain.Kind, at: Vector2, ground: float, top: float) -> void:
 	var stone := _colour(2)
+	var tool := _mesh_tool(false)
+	var base := Vector3(at.x, ground - SINK, at.y)
+	var tall := top - ground + SINK
+	var turn := _rng.randf() * TAU
 	match kind:
 		Terrain.Kind.ROCK:
-			add_box(at, ground, top - 0.5, vary(stone, 0.1), Vector2(1.0, 1.0))
-			add_box(at, top - 0.5, top, vary(stone.lightened(0.12), 0.08), Vector2(0.8, 0.8))
-		Terrain.Kind.TREE:
-			add_box(at, ground, top, vary(Color(0.42, 0.29, 0.18)), Vector2(0.7, 0.7))
-			add_box(at, top - 0.6, top + 1.4, vary(Color(0.27, 0.5, 0.22), 0.08), Vector2(3, 3))
-			add_box(at, top + 1.4, top + 2.2, vary(Color(0.3, 0.55, 0.24), 0.08), Vector2(1.8, 1.8))
-		Terrain.Kind.PINE:
-			add_box(at, ground, ground + 1.2, Color(0.35, 0.25, 0.17), Vector2(0.6, 0.6))
-			for layer in 3:
-				var width := 2.6 - layer * 0.8
-				var bottom := ground + 1.0 + layer * 1.1
-				add_box(at, bottom, bottom + 1.1, vary(Color(0.16, 0.34, 0.24)), Vector2(width, width))
-				add_box(at, bottom + 1.1, bottom + 1.25, Color(0.95, 0.97, 1.0), Vector2(width * 0.7, width * 0.7))
-		Terrain.Kind.PALM:
-			var lean := Vector2(_rng.randf_range(-0.25, 0.25), _rng.randf_range(-0.25, 0.25))
-			var height := top - ground
-			for i in int(height):
-				add_box(at + lean * (float(i) / height), ground + i, ground + i + 1, Color(0.55, 0.42, 0.27), Vector2(0.5, 0.5))
-			var crown := at + lean
-			add_box(crown, top, top + 0.3, vary(Color(0.24, 0.55, 0.22)), Vector2(3.6, 0.8))
-			add_box(crown, top, top + 0.3, vary(Color(0.24, 0.55, 0.22)), Vector2(0.8, 3.6))
-		Terrain.Kind.LOG:
-			add_box(at, ground, top, vary(Color(0.45, 0.32, 0.2), 0.06), Vector2(1.0, 0.8))
+			LowPoly.frustum(tool, vary(stone, 0.1), base, 0.66, 0.34, tall, 6, turn, 0.22, _rng)
 		Terrain.Kind.BASALT:
-			add_box(at, ground, top - 0.15, vary(stone, 0.06), Vector2(0.92, 0.92))
-			add_box(at, top - 0.15, top, vary(stone.lightened(0.2), 0.05), Vector2(0.8, 0.8))
+			LowPoly.frustum(tool, vary(stone, 0.06), base, 0.54, 0.54, tall - 0.08, 6, 0.0)
+			LowPoly.frustum(tool, stone.lightened(0.18), base + Vector3.UP * (tall - 0.08), 0.54, 0.5, 0.08, 6, 0.0)
 		Terrain.Kind.STALAGMITE:
-			var height := top - ground
-			add_box(at, ground, ground + height * 0.45, vary(stone, 0.08), Vector2(0.95, 0.95))
-			add_box(at, ground + height * 0.45, ground + height * 0.8, vary(stone, 0.08), Vector2(0.7, 0.7))
-			add_box(at, ground + height * 0.8, top, vary(stone.lightened(0.1), 0.08), Vector2(0.45, 0.45))
+			LowPoly.frustum(tool, vary(stone, 0.08), base, 0.62, 0.0, tall, 6, turn, 0.18, _rng)
 		Terrain.Kind.ICE:
-			var height := top - ground
-			add_box(at, ground, ground + height * 0.6, Color(0.7, 0.85, 0.95), Vector2(0.95, 0.95))
-			add_box(at, ground + height * 0.6, top, Color(0.8, 0.92, 1.0), Vector2(0.6, 0.6))
+			LowPoly.frustum(tool, vary(Color(0.72, 0.86, 0.96), 0.04), base, 0.58, 0.04, tall, 4, turn, 0.15, _rng)
 		Terrain.Kind.CRYSTAL:
 			var colour: Color = [Color(0.4, 0.85, 1.0), Color(0.75, 0.45, 1.0)][_rng.randi() % 2]
-			add_box(at, ground, top, colour, Vector2(0.5, 0.5), true)
-			add_box(at + Vector2(0.25, 0.2), ground, ground + (top - ground) * 0.6, colour, Vector2(0.35, 0.35), true)
+			LowPoly.frustum(_mesh_tool(true), colour, base, 0.28, 0.0, tall, 6, turn)
+			LowPoly.frustum(_mesh_tool(true), colour, base + Vector3(0.22, 0, 0.15), 0.18, 0.0, tall * 0.6, 6, turn)
+		Terrain.Kind.TREE:
+			_tree(Vector3(at.x, ground, at.y), top - ground)
+		Terrain.Kind.PINE:
+			_pine(Vector3(at.x, ground, at.y), top - ground)
+		Terrain.Kind.PALM:
+			_palm(Vector3(at.x, ground, at.y), top - ground)
+		Terrain.Kind.LOG:
+			var along := Vector3.RIGHT
+			if _terrain.kind_at(at + Vector2.UP) == Terrain.Kind.LOG or _terrain.kind_at(at + Vector2.DOWN) == Terrain.Kind.LOG:
+				along = Vector3.BACK
+			var radius := (top - ground) * 0.55
+			LowPoly.log_(tool, vary(Color(0.45, 0.32, 0.2), 0.06), Vector3(at.x, ground + radius * 0.8, at.y), along, 1.02, radius, 7)
+
+
+func _tree(base: Vector3, trunk: float) -> void:
+	var tool := _mesh_tool(false)
+	LowPoly.frustum(tool, vary(Color(0.42, 0.29, 0.18)), base - Vector3.UP * SINK, 0.32, 0.24, trunk + SINK, 6, _rng.randf() * TAU)
+	LowPoly.ball(tool, vary(Color(0.29, 0.52, 0.23), 0.08), base + Vector3.UP * (trunk + 0.9), 1.6, 2.4, 7, _rng.randf() * TAU, _rng)
+
+
+func _pine(base: Vector3, height: float) -> void:
+	var tool := _mesh_tool(false)
+	LowPoly.frustum(tool, Color(0.35, 0.25, 0.17), base - Vector3.UP * SINK, 0.24, 0.2, 1.2 + SINK, 6, 0.0)
+	var green := Color(0.16, 0.34, 0.24)
+	for layer in 3:
+		var radius := 1.35 - layer * 0.35
+		var bottom := base + Vector3.UP * (0.9 + layer * height * 0.27)
+		var turn := _rng.randf() * TAU
+		LowPoly.frustum(tool, vary(green, 0.06), bottom, radius, 0.0, 1.7 - layer * 0.15, 7, turn, 0.08, _rng)
+		LowPoly.frustum(tool, Color(0.95, 0.97, 1.0), bottom + Vector3.UP * (1.7 - layer * 0.15) * 0.62, radius * 0.38, 0.0, (1.7 - layer * 0.15) * 0.38, 7, turn)
+
+
+func _palm(base: Vector3, height: float) -> void:
+	var tool := _mesh_tool(false)
+	var lean := Vector3(_rng.randf_range(-0.3, 0.3), 0, _rng.randf_range(-0.3, 0.3))
+	var segments := 4
+	for i in segments:
+		var t := float(i) / segments
+		LowPoly.frustum(tool, Color(0.55, 0.42, 0.27).darkened(0.08 * (i % 2)), base + lean * t * t + Vector3.UP * height * t,
+			0.22 - t * 0.05, 0.2 - t * 0.05, height / segments, 6, 0.0)
+	var crown := base + lean + Vector3.UP * height
+	for leaf in 5:
+		var angle := TAU * leaf / 5 + _rng.randf() * 0.4
+		var direction := Vector3(cos(angle), -0.35, sin(angle)).normalized()
+		LowPoly.log_(tool, vary(Color(0.24, 0.55, 0.22), 0.08), crown + direction * 1.0, direction, 2.0, 0.12, 4)
 
 
 ## Small things on level ground that the battle ignores: grass tufts and flowers, pebbles,
@@ -326,31 +453,19 @@ func _build_props() -> void:
 
 
 func _prop(kind: String, at: Vector2, ground: float) -> void:
+	var tool := _mesh_tool(false)
+	var base := Vector3(at.x, ground - SINK, at.y)
+	var turn := _rng.randf() * TAU
 	match kind:
 		"tree":
-			var trunk := _rng.randi_range(2, 4)
-			add_box(at, ground, ground + trunk, vary(Color(0.42, 0.29, 0.18)), Vector2(0.8, 0.8))
-			add_box(at, ground + trunk - 0.5, ground + trunk + 2.0, vary(Color(0.27, 0.5, 0.22), 0.08), Vector2(3, 3))
-			add_box(at, ground + trunk + 2.0, ground + trunk + 3.0, vary(Color(0.3, 0.55, 0.24), 0.08), Vector2(1.6, 1.6))
+			_tree(Vector3(at.x, ground, at.y), _rng.randf_range(2.0, 4.0))
 		"pine":
-			var trunk := _rng.randi_range(1, 2)
-			add_box(at, ground, ground + trunk, Color(0.35, 0.25, 0.17), Vector2(0.7, 0.7))
-			for layer in 3:
-				var width := 3.0 - layer
-				var bottom := ground + trunk + layer * 1.2
-				add_box(at, bottom, bottom + 1.2, vary(Color(0.16, 0.34, 0.24)), Vector2(width, width))
-				add_box(at, bottom + 1.2, bottom + 1.4, Color(0.95, 0.97, 1.0), Vector2(width * 0.7, width * 0.7))
+			_pine(Vector3(at.x, ground, at.y), _rng.randf_range(3.5, 5.0))
 		"palm":
-			var height := _rng.randi_range(4, 6)
-			var lean := Vector2(_rng.randf_range(-0.6, 0.6), _rng.randf_range(-0.6, 0.6))
-			for i in height:
-				add_box(at + lean * (float(i) / height), ground + i, ground + i + 1, Color(0.55, 0.42, 0.27), Vector2(0.5, 0.5))
-			var crown := at + lean
-			add_box(crown, ground + height, ground + height + 0.3, vary(Color(0.24, 0.55, 0.22)), Vector2(4.0, 0.8))
-			add_box(crown, ground + height, ground + height + 0.3, vary(Color(0.24, 0.55, 0.22)), Vector2(0.8, 4.0))
+			_palm(Vector3(at.x, ground, at.y), _rng.randf_range(4.0, 6.0))
 		"rock":
-			var size := _rng.randf_range(0.8, 1.8)
-			add_box(at, ground, ground + size * 0.8, vary(Color(0.5, 0.5, 0.52), 0.1), Vector2(size, size * 0.9))
+			var size := _rng.randf_range(0.6, 1.4)
+			LowPoly.frustum(tool, vary(_colour(2), 0.1), base, size, size * 0.45, size * 1.1 + SINK, 6, turn, 0.25, _rng)
 		"flowers":
 			var colours := [Color(0.95, 0.35, 0.35), Color(1.0, 0.85, 0.3), Color(0.95, 0.95, 1.0), Color(0.7, 0.5, 0.95)]
 			for i in 3:
@@ -359,18 +474,14 @@ func _prop(kind: String, at: Vector2, ground: float) -> void:
 		"lava":
 			add_box(at, ground - 0.2, ground + 0.05, Color(1.0, 0.45, 0.1), Vector2(_rng.randf_range(1.5, 3.0), _rng.randf_range(1.5, 3.0)), true)
 		"spire":
-			var height := _rng.randi_range(3, 8)
-			var width := _rng.randf_range(0.8, 1.6)
-			add_box(at, ground, ground + height, vary(_colour(4), 0.08), Vector2(width, width))
-			add_box(at, ground + height, ground + height + 1.0, vary(_colour(4), 0.08), Vector2(width * 0.5, width * 0.5))
+			var height := _rng.randf_range(3.0, 8.0)
+			LowPoly.frustum(tool, vary(_colour(4), 0.08), base, _rng.randf_range(0.6, 1.1), 0.0, height, 6, turn, 0.15, _rng)
 		"ice":
-			var size := _rng.randf_range(1.0, 2.2)
-			add_box(at, ground, ground + size * 1.5, Color(0.7, 0.85, 0.95), Vector2(size, size))
+			var size := _rng.randf_range(0.7, 1.3)
+			LowPoly.frustum(tool, Color(0.72, 0.86, 0.96), base, size, 0.05, size * 2.4, 4, turn, 0.15, _rng)
 		"crystal":
 			var colour: Color = [Color(0.4, 0.85, 1.0), Color(0.75, 0.45, 1.0)][_rng.randi() % 2]
-			var height := _rng.randf_range(1.0, 2.5)
-			add_box(at, ground, ground + height, colour, Vector2(0.5, 0.5), true)
-			add_box(at + Vector2(0.4, 0.2), ground, ground + height * 0.6, colour, Vector2(0.35, 0.35), true)
+			LowPoly.frustum(_mesh_tool(true), colour, base, 0.3, 0.0, _rng.randf_range(1.0, 2.5), 6, turn)
 
 
 func _add_blocks(blocks: Array, glow: bool) -> void:
@@ -472,6 +583,10 @@ func _add_environment() -> void:
 	environment.fog_light_color = fog[0]
 	environment.fog_density = fog[1]
 	environment.fog_sky_affect = 0.3
+	# Contact shadows in creases and under rocks, so faceted shapes read.
+	environment.ssao_enabled = true
+	environment.ssao_radius = 1.2
+	environment.ssao_intensity = 1.8
 	var world := WorldEnvironment.new()
 	world.environment = environment
 	add_child(world)
