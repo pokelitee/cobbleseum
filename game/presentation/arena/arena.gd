@@ -21,6 +21,10 @@ const EDGE_DENSITY := 3.0
 const PATCH_THRESHOLD := 0.3
 ## Details grow where their own noise is above this (about half the ground), in patches.
 const DETAIL_PATCH := 0.0
+## Details are at full density out to DETAIL_FULL and thin out to none at DETAIL_END: the
+## battle camera sees the arena and the treeline up close, and fog hides the hills beyond.
+const DETAIL_FULL := Rules.ARENA_RADIUS + 6.0
+const DETAIL_END := Rules.ARENA_RADIUS + 16.0
 ## Ground corners are nudged off the grid by up to this much, so it doesn't read as squares.
 const CORNER_JITTER := 0.18
 ## Features' bases sink this far, so they sit in the faceted ground rather than on a corner.
@@ -415,16 +419,18 @@ func _palm(base: Vector3, height: float) -> void:
 		LowPoly.log_(tool, vary(Color(0.24, 0.55, 0.22), 0.08), crown + direction * 1.0, direction, 2.0, 0.12, 4)
 
 
-## Small things on level ground that the battle ignores, in low-poly shapes: clumps of grass,
+## Small things on the ground that the battle ignores, in low-poly shapes: clumps of grass,
 ## flowers, pebbles, shells, snow drifts, glowing cracks and mushrooms. They gather in patches
-## (where the detail noise is high) as small clusters, and sit on the visible ground.
+## (where the detail noise is high) as small clusters, and sit on the visible ground, which
+## slopes smoothly where neighbours are within a step; only cliff edges are left bare.
 func _decorate(at: Vector2, ground: float, steep: float) -> void:
 	var kinds: Dictionary = _biome.get("details", {})
-	if steep > 0.0 or kinds.is_empty():
+	if steep > Terrain.STEP + 1e-4 or kinds.is_empty():
 		return
 	if _noise.get_noise_2d(at.x * 0.8 - 300.0, at.y * 0.8) < DETAIL_PATCH:
 		return
-	if _rng.randf() > float(_biome.get("detail", 0.0)):
+	var fade := clampf(inverse_lerp(DETAIL_END, DETAIL_FULL, at.length()), 0.0, 1.0)
+	if _rng.randf() > float(_biome.get("detail", 0.0)) * fade:
 		return
 	var kind := _pick_detail(kinds)
 	for n in _rng.randi_range(2, 5):
@@ -530,12 +536,13 @@ func _prop(kind: String, at: Vector2, ground: float) -> void:
 			var size := _rng.randf_range(0.6, 1.4)
 			LowPoly.frustum(tool, vary(_colour(2), 0.1), base, size, size * 0.45, size * 1.1 + SINK, 6, turn, 0.25, _rng)
 		"flowers":
-			var colours := [Color(0.95, 0.35, 0.35), Color(1.0, 0.85, 0.3), Color(0.95, 0.95, 1.0), Color(0.7, 0.5, 0.95)]
-			for i in 3:
+			for i in _rng.randi_range(3, 6):
 				var spot := at + Vector2(_rng.randf_range(-0.4, 0.4), _rng.randf_range(-0.4, 0.4))
-				add_box(spot, ground, ground + 0.25, colours[_rng.randi() % colours.size()], Vector2(0.2, 0.2))
+				_detail("flower", Vector3(spot.x, surface_at(spot, ground), spot.y))
 		"lava":
-			add_box(at, ground - 0.2, ground + 0.05, Color(1.0, 0.45, 0.1), Vector2(_rng.randf_range(1.5, 3.0), _rng.randf_range(1.5, 3.0)), true)
+			# A flat, ragged pool, a little proud of the ground so the facets don't cover it.
+			var radius := _rng.randf_range(0.8, 1.5)
+			LowPoly.frustum(_mesh_tool(true), Color(1.0, 0.45, 0.1), Vector3(at.x, ground - 0.1, at.y), radius, radius * 0.92, 0.16, 7, turn, 0.3, _rng)
 		"spire":
 			var height := _rng.randf_range(3.0, 8.0)
 			LowPoly.frustum(tool, vary(_colour(4), 0.08), base, _rng.randf_range(0.6, 1.1), 0.0, height, 6, turn, 0.15, _rng)
@@ -681,7 +688,7 @@ func _add_particles(kind: String) -> void:
 			particles.position.y = 0.2
 			_weather(particles, 110, 5.0, Vector3(0.1, 0.9, 0.0), 0.12, Color(1.0, 0.55, 0.15, 1.0))
 		"snow":
-			_weather(particles, 260, 7.0, Vector3(0.2, -0.8, 0.0), 0.13, Color(1, 1, 1, 0.95))
+			_weather(particles, 300, 7.0, Vector3(0.2, -0.8, 0.0), 0.08, Color(1, 1, 1, 0.95))
 		"dust":
 			_weather(particles, 70, 10.0, Vector3(0.05, 0.05, 0.05), 0.08, Color(0.8, 0.85, 1.0, 0.5))
 	add_child(particles)
