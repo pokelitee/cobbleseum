@@ -5,9 +5,11 @@ extends RefCounted
 ##
 ## Colours are [ground, patches (paths, gravel, ash), stone (cliffs and rock), higher ground,
 ## earth (the sides of the ground)]. Props are {kind: share of cells beyond the arena that get
-## one}. Details are small things on level ground that the battle ignores: `detail` is the share
-## of cells that get one, `details` lists [colour, Vector2(width, height), glowing?]. Particles
-## are a weather name Arena knows ("petals", "sand", "embers", "snow", "dust") or "".
+## one}. Details are small things on level ground that the battle ignores, grouped in patches:
+## `detail` is the share of level cells inside a patch that get a cluster, `details` is
+## {kind: weight} over the kinds Arena knows ("grass", "flower", "pebble", "shell", "drift",
+## "crack", "mushroom"). Particles are a weather name Arena knows ("petals", "sand", "embers",
+## "snow", "dust") or "".
 
 ## The biome names and the choice of biome are the simulation's (Terrain), since the
 ## terrain is part of the battle.
@@ -20,8 +22,8 @@ const BIOMES := {
 		"ambient": [Color(0.62, 0.68, 0.75), 0.9],
 		"fog": [Color(0.72, 0.84, 0.95), 0.004],
 		"props": {"tree": 0.05, "rock": 0.012, "flowers": 0.05},
-		"detail": 0.22,
-		"details": [[Color(0.3, 0.52, 0.22), Vector2(0.12, 0.3)], [Color(0.33, 0.57, 0.25), Vector2(0.1, 0.22)], [Color(0.95, 0.4, 0.4), Vector2(0.12, 0.2)], [Color(1.0, 0.86, 0.35), Vector2(0.12, 0.2)], [Color(0.95, 0.95, 1.0), Vector2(0.1, 0.18)], [Color(0.55, 0.55, 0.55), Vector2(0.18, 0.1)]],
+		"detail": 0.55,
+		"details": {"grass": 6, "flower": 2, "pebble": 1},
 		"particles": "petals",
 	},
 	"beach": {
@@ -32,8 +34,8 @@ const BIOMES := {
 		"fog": [Color(0.75, 0.9, 1.0), 0.003],
 		"water": -0.4,
 		"props": {"palm": 0.03, "rock": 0.01},
-		"detail": 0.08,
-		"details": [[Color(0.95, 0.9, 0.85), Vector2(0.14, 0.06)], [Color(0.95, 0.7, 0.65), Vector2(0.12, 0.06)], [Color(0.6, 0.58, 0.55), Vector2(0.16, 0.08)], [Color(0.45, 0.6, 0.3), Vector2(0.1, 0.25)]],
+		"detail": 0.25,
+		"details": {"shell": 3, "pebble": 2, "grass": 1},
 		"particles": "sand",
 	},
 	"volcano": {
@@ -43,8 +45,8 @@ const BIOMES := {
 		"ambient": [Color(0.8, 0.45, 0.35), 0.7],
 		"fog": [Color(0.55, 0.22, 0.12), 0.012],
 		"props": {"lava": 0.025, "spire": 0.02},
-		"detail": 0.1,
-		"details": [[Color(1.0, 0.45, 0.1), Vector2(0.5, 0.02), true], [Color(1.0, 0.6, 0.15), Vector2(0.3, 0.02), true], [Color(0.3, 0.27, 0.26), Vector2(0.2, 0.12)]],
+		"detail": 0.3,
+		"details": {"crack": 3, "pebble": 2},
 		"particles": "embers",
 	},
 	"snowfield": {
@@ -54,8 +56,8 @@ const BIOMES := {
 		"ambient": [Color(0.75, 0.82, 0.92), 0.7],
 		"fog": [Color(0.85, 0.9, 0.96), 0.014],
 		"props": {"pine": 0.05, "ice": 0.015},
-		"detail": 0.08,
-		"details": [[Color(0.96, 0.98, 1.0), Vector2(0.4, 0.12)], [Color(0.5, 0.53, 0.58), Vector2(0.16, 0.1)], [Color(0.3, 0.45, 0.35), Vector2(0.1, 0.22)]],
+		"detail": 0.3,
+		"details": {"drift": 3, "pebble": 1, "grass": 1},
 		"particles": "snow",
 	},
 	"cave": {
@@ -65,8 +67,8 @@ const BIOMES := {
 		"ambient": [Color(0.45, 0.45, 0.6), 0.6],
 		"fog": [Color(0.06, 0.06, 0.09), 0.03],
 		"props": {"crystal": 0.03, "spire": 0.04},
-		"detail": 0.12,
-		"details": [[Color(0.45, 0.43, 0.41), Vector2(0.16, 0.08)], [Color(0.85, 0.55, 0.75), Vector2(0.12, 0.18), true], [Color(0.55, 0.85, 0.95), Vector2(0.1, 0.15), true], [Color(0.75, 0.68, 0.55), Vector2(0.12, 0.14)]],
+		"detail": 0.35,
+		"details": {"pebble": 3, "mushroom": 2},
 		"particles": "dust",
 	},
 	# A cool, slightly dim day under thin haze, so the moves' colours stand out; the
