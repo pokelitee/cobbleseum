@@ -7,7 +7,8 @@ extends RefCounted
 ## {kind: share of outer cells that get one}. Particles are a weather name Arena knows
 ## ("petals", "sand", "embers", "snow", "dust") or "".
 
-const NAMES: Array[String] = ["grassland", "beach", "volcano", "snowfield", "cave", "stadium"]
+## The biome names and the choice of biome are the simulation's (Terrain), since the
+## terrain is part of the battle.
 
 const BIOMES := {
 	"grassland": {
@@ -76,24 +77,3 @@ const BIOMES := {
 		"particles": "",
 	},
 }
-
-## Biomes that suit each type, for picking an arena from the fighters.
-const BY_TYPE := {
-	"Fire": "volcano", "Ice": "snowfield", "Water": "beach", "Rock": "cave", "Ground": "cave",
-	"Ghost": "cave", "Dark": "cave", "Grass": "grassland", "Bug": "grassland", "Flying": "grassland",
-	"Steel": "stadium", "Fighting": "stadium", "Normal": "stadium",
-}
-
-
-## The arena for a battle: `requested` if it names a biome, else one picked by `seed` from the
-## biomes the fighters' types suit, plus grassland and stadium.
-static func choose(requested: String, types: Array, seed: int) -> String:
-	if BIOMES.has(requested):
-		return requested
-	var options: Array[String] = ["grassland", "stadium"]
-	for type: String in types:
-		var biome: String = BY_TYPE.get(type, "")
-		if not biome.is_empty() and not options.has(biome):
-			options.append(biome)
-	options.sort()
-	return options[posmod(seed, options.size())]

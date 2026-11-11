@@ -7,7 +7,7 @@ extends RefCounted
 ## Each tick: controllers produce intents, then both sides act in an order that alternates
 ## every tick, projectiles move, and the battle checks for a knockout or the time cap.
 
-enum Stream { BATTLE, SIDE_A, SIDE_B, COSMETIC }
+enum Stream { BATTLE, SIDE_A, SIDE_B, COSMETIC, TERRAIN }
 enum Result { ONGOING, WIN_A, WIN_B, DRAW }
 
 var tick := 0
@@ -17,6 +17,8 @@ var projectiles: Array[Dictionary] = []
 ## Events for presentation and highlight picking: {"tick", "type", "side", ...}.
 var events: Array[Dictionary] = []
 var spec: Dictionary
+## The arena's ground (§9.8), from the spec's "arena" (or the fighters' types) and the seed.
+var terrain: Terrain
 ## With record_intents set (battles with a player), every tick's intents per side, as
 ## [move x, move y, use, dodge x, dodge y]; a ReplayController plays them back.
 var record_intents := false
@@ -29,7 +31,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 21
+const FIGHTER_STATE_SIZE := 22
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
@@ -53,6 +55,11 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 	battle._controllers = controllers
 	battle._random = SimRandom.stream(int(battle_spec.seed), Stream.BATTLE)
 	battle._time_cap_ticks = Rules.seconds_to_ticks(Rules.TIME_CAP_SECONDS)
+	var types: Array = []
+	for entry: Dictionary in entries:
+		types.append_array(data.species.get(entry.get("species", ""), {}).get("types", []))
+	var biome := Terrain.choose_biome(str(battle_spec.get("arena", "")), types, int(battle_spec.seed))
+	battle.terrain = Terrain.generate(biome, SimRandom.stream(int(battle_spec.seed), Stream.TERRAIN))
 	for side in 2:
 		var entry: Dictionary = entries[side]
 		var species: Variant = data.species.get(entry.get("species", ""))
@@ -78,6 +85,7 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		var fighter := Fighter.create(side, entry.species, species, battle_moves, radius)
 		fighter.position = Vector2(0, (-0.5 if side == 0 else 0.5) * Rules.START_DISTANCE)
 		fighter.facing = Vector2(0, 1 if side == 0 else -1)
+		fighter.ground = battle.terrain.height_at(fighter.position)
 		battle.fighters.append(fighter)
 	battle._hash.start(HashingContext.HASH_SHA256)
 	return {"battle": battle}
@@ -223,6 +231,25 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 				Rules.AIM_TURN_RATE if fighter.action == Fighter.Action.WINDUP else Rules.TURN_RATE)
 
 
+## Whether `fighter` can see `foe` over the terrain (chest to chest).
+func can_see(fighter: Fighter, foe: Fighter) -> bool:
+	return terrain.clear_line(Vector3(fighter.position.x, fighter.ground + Rules.CHEST_HEIGHT, fighter.position.y),
+		Vector3(foe.position.x, foe.ground + Rules.CHEST_HEIGHT, foe.position.y))
+
+
+## Whether `move` could connect from `fighter` to `foe` right now, terrain aside from range:
+## a clear line for projectiles, a small enough height difference for melee and area moves.
+func can_reach(fighter: Fighter, foe: Fighter, move: BattleMove) -> bool:
+	match move.kind:
+		BattleMove.Kind.PROJECTILE, BattleMove.Kind.DEBUFF, BattleMove.Kind.STATUS:
+			return can_see(fighter, foe)
+		BattleMove.Kind.MELEE:
+			return absf(foe.ground - fighter.ground) <= Rules.MELEE_HEIGHT
+		BattleMove.Kind.AREA:
+			return absf(foe.ground - fighter.ground) <= Rules.AREA_HEIGHT
+	return true
+
+
 ## Gap between two fighters' hitboxes.
 static func _gap(fighter: Fighter, foe: Fighter) -> float:
 	return fighter.position.distance_to(foe.position) - fighter.radius - foe.radius
@@ -267,7 +294,11 @@ func _slide(fighter: Fighter, foe: Fighter, delta: Vector2) -> void:
 	var limit := Rules.ARENA_RADIUS - fighter.radius
 	if next.length() > limit:
 		next = next.normalized() * limit
+	next = terrain.push_out(next, fighter.radius, fighter.ground, fighter.climb)
+	if next.length() > limit:
+		next = next.normalized() * limit
 	fighter.position = next
+	fighter.ground = terrain.height_at(next)
 
 
 func _release(fighter: Fighter, foe: Fighter) -> void:
@@ -299,7 +330,8 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> void:
 			var reach := Rules.MELEE_REACH if move.kind == BattleMove.Kind.MELEE else Rules.AREA_RADIUS
 			if move.kind == BattleMove.Kind.AREA:
 				_event("blast", fighter.side, {"move": move.id})
-			if _gap(fighter, foe) > reach or foe.is_fainted():
+			var reach_up := Rules.MELEE_HEIGHT if move.kind == BattleMove.Kind.MELEE else Rules.AREA_HEIGHT
+			if _gap(fighter, foe) > reach or foe.is_fainted() or absf(foe.ground - fighter.ground) > reach_up:
 				_event("miss", fighter.side, {"move": move.id})
 			elif foe.is_invulnerable():
 				_event("miss", fighter.side, {"move": move.id})
@@ -308,12 +340,18 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> void:
 				_hit(fighter, foe, move)
 		_:
 			_projectile_count += 1
+			# Aimed along the facing, rising or falling to reach the foe's chest at its distance.
+			var start := fighter.position + fighter.facing * fighter.radius
+			var speed := move.projectile_speed / Rules.TICK_RATE
+			var ticks_to_foe := maxf(start.distance_to(foe.position) / speed, 1.0)
 			projectiles.append({
 				"id": _projectile_count,
 				"owner": fighter.side,
 				"move": move_index,
-				"position": fighter.position + fighter.facing * fighter.radius,
-				"velocity": fighter.facing * (move.projectile_speed / Rules.TICK_RATE),
+				"position": start,
+				"velocity": fighter.facing * speed,
+				"height": fighter.ground + Rules.CHEST_HEIGHT,
+				"rise": (foe.ground - fighter.ground) / ticks_to_foe,
 				"travelled": 0.0,
 			})
 			_event("fire", fighter.side, {"move": move.id})
@@ -341,7 +379,9 @@ func _move_projectiles() -> void:
 		var end: Vector2 = start + projectile.velocity
 		var closest := Geometry2D.get_closest_point_to_segment(target.position, start, end)
 		var move := owner.moves[projectile.move]
-		if closest.distance_to(target.position) <= target.radius + Rules.PROJECTILE_RADIUS and not target.is_fainted():
+		var height: float = projectile.height
+		var level := absf(height - (target.ground + Rules.CHEST_HEIGHT)) <= Rules.PROJECTILE_VERTICAL_REACH
+		if closest.distance_to(target.position) <= target.radius + Rules.PROJECTILE_RADIUS and not target.is_fainted() and level:
 			if not target.is_invulnerable():
 				if move.is_damaging():
 					_hit(owner, target, move)
@@ -352,8 +392,12 @@ func _move_projectiles() -> void:
 				projectile.dodged = true  # it flies on through the dodging fighter
 				_event("dodged", target.side, {"move": move.id})
 		projectile.position = end
+		projectile.height = height + float(projectile.rise)
 		projectile.travelled += (projectile.velocity as Vector2).length()
-		if projectile.travelled < Rules.PROJECTILE_RANGE * 1.5 and end.length() < Rules.ARENA_RADIUS:
+		if terrain.height_at(end) > projectile.height:
+			_event("blocked", owner.side, {"move": move.id, "position": [end.x, end.y], "height": projectile.height})
+			_event("miss", owner.side, {"move": move.id})
+		elif projectile.travelled < Rules.PROJECTILE_RANGE * 1.5 and end.length() < Rules.ARENA_RADIUS:
 			remaining.append(projectile)
 		else:
 			_event("miss", owner.side, {"move": move.id})
@@ -553,7 +597,7 @@ func _check_end() -> void:
 
 ## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
 func _record_state() -> void:
-	_state.resize(FIGHTER_STATE_SIZE * 2 + projectiles.size() * 2)
+	_state.resize(FIGHTER_STATE_SIZE * 2 + projectiles.size() * 3)
 	var i := 0
 	for fighter in fighters:
 		_state[i] = fighter.position.x
@@ -577,11 +621,13 @@ func _record_state() -> void:
 		_state[i + 18] = fighter.velocity.y
 		_state[i + 19] = fighter.facing.x
 		_state[i + 20] = fighter.facing.y
+		_state[i + 21] = fighter.ground
 		i += FIGHTER_STATE_SIZE
 	for projectile in projectiles:
 		_state[i] = projectile.position.x
 		_state[i + 1] = projectile.position.y
-		i += 2
+		_state[i + 2] = projectile.height
+		i += 3
 	_hash.update(_state.to_byte_array())
 
 

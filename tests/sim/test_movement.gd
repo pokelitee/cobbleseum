@@ -58,7 +58,7 @@ class LateDodger extends RefCounted:
 
 
 func _battle(script_a: Variant, script_b: Variant, moves := ["jet", "kick"]) -> Battle:
-	var spec := {"seed": 1, "fighters": [{"species": "squirt", "moves": moves}, {"species": "squirt", "moves": moves}]}
+	var spec := {"seed": 1, "arena": "stadium", "fighters": [{"species": "squirt", "moves": moves}, {"species": "squirt", "moves": moves}]}
 	var controllers := []
 	for script: Variant in [script_a, script_b]:
 		controllers.append(Scripted.new(script) if script is Array else script)
@@ -162,7 +162,7 @@ func test_ai_dodges_some_but_not_all_projectiles() -> void:
 	var dodges := 0
 	var hits := 0
 	for seed in 30:
-		var spec := {"seed": seed, "fighters": [{"species": "squirt", "moves": ["jet"]}, {"species": "squirt", "moves": ["jet"]}]}
+		var spec := {"seed": seed, "arena": "stadium", "fighters": [{"species": "squirt", "moves": ["jet"]}, {"species": "squirt", "moves": ["jet"]}]}
 		var battle: Battle = Battle.create(spec, BattleData.new(SPECIES, MOVES, {}), SimpleAI.pair(seed)).battle
 		for i in 300:
 			battle.step()

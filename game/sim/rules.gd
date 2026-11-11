@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 11
+const RULES_VERSION := 12
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -16,6 +16,15 @@ const OVERTIME_RAMP := 0.1
 const HP_MULTIPLIER := 22.0
 
 const ARENA_RADIUS := 11.0
+## Terrain (§9.8): the most a fighter can step up (fliers more); projectiles leave and aim at
+## CHEST_HEIGHT above the ground and hit within PROJECTILE_VERTICAL_REACH of it; melee and area
+## moves only reach across height differences up to their limits.
+const CLIMB := 0.5
+const FLY_CLIMB := 1.5
+const CHEST_HEIGHT := 0.8
+const PROJECTILE_VERTICAL_REACH := 1.0
+const MELEE_HEIGHT := 1.0
+const AREA_HEIGHT := 1.5
 const START_DISTANCE := 10.0
 ## Movement speed in metres per second, mapped from the Speed stat.
 const MIN_MOVE_SPEED := 2.0

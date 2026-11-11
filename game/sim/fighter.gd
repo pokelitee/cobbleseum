@@ -27,6 +27,9 @@ var weight_kg := Rules.KNOCKBACK_REFERENCE_KG
 ## Scales acceleration and turning (Rules.agility); flying types glide (brake gently).
 var agility := 1.0
 var glides := false
+## The ground height under the fighter (Terrain), and how high it can step up.
+var ground := 0.0
+var climb := Rules.CLIMB
 var action := Action.READY
 var action_ticks := 0
 var action_move := -1
@@ -67,6 +70,7 @@ static func create(side_index: int, species_id_value: String, species: Dictionar
 	fighter.weight_kg = float(species.get("weightkg", Rules.KNOCKBACK_REFERENCE_KG))
 	fighter.agility = Rules.agility(fighter.stats.spe, fighter.weight_kg)
 	fighter.glides = "Flying" in fighter.types
+	fighter.climb = Rules.FLY_CLIMB if fighter.glides else Rules.CLIMB
 	fighter.move_speed = Rules.move_speed(fighter.stats.spe)
 	fighter.dodge_recharge_total = Rules.seconds_to_ticks(Rules.dodge_recharge_seconds(fighter.stats.spe))
 	fighter.moves = battle_moves

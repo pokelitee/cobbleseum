@@ -38,7 +38,7 @@ class Scripted extends RefCounted:
 
 
 func _battle(moves_a: Array, moves_b: Array, script_a := [], species_b := "squirt") -> Battle:
-	var spec := {"seed": 7, "fighters": [{"species": "squirt", "moves": moves_a}, {"species": species_b, "moves": moves_b}]}
+	var spec := {"seed": 7, "arena": "stadium", "fighters": [{"species": "squirt", "moves": moves_a}, {"species": species_b, "moves": moves_b}]}
 	var created := Battle.create(spec, BattleData.new(SPECIES, MOVES, {}), [Scripted.new(script_a), Scripted.new([])])
 	assert_false(created.has("error"), str(created.get("error", "")))
 	# Written for fighters 8 m apart (in projectile range), whatever the starting distance.

@@ -27,7 +27,7 @@ func test_keeping_scores_never_changes_a_battle() -> void:
 		{"squirt": {"name": "Squirt", "types": ["Water"], "baseStats": {"hp": 80, "atk": 80, "def": 100, "spa": 85, "spd": 100, "spe": 80}}},
 		{"jet": {"name": "Jet", "category": "Special", "type": "Water", "basePower": 80, "accuracy": 100, "pp": 15, "priority": 0, "flags": {}, "target": "normal"},
 			"kick": {"name": "Kick", "category": "Physical", "type": "Fighting", "basePower": 60, "accuracy": 100, "pp": 20, "priority": 0, "flags": {"contact": 1}, "target": "normal"}}, {})
-	var spec := {"seed": 4, "fighters": [{"species": "squirt", "moves": ["jet", "kick"]}, {"species": "squirt", "moves": ["jet", "kick"]}]}
+	var spec := {"seed": 4, "arena": "stadium", "fighters": [{"species": "squirt", "moves": ["jet", "kick"]}, {"species": "squirt", "moves": ["jet", "kick"]}]}
 	var checksums: Array[String] = []
 	for keep in [false, true]:
 		var controllers: Array = Controllers.for_spec(spec).controllers

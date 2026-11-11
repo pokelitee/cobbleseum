@@ -28,7 +28,7 @@ class Scripted extends RefCounted:
 
 
 func _battle(moves_a: Array, script_a := []) -> Battle:
-	var spec := {"seed": 3, "fighters": [{"species": "squirt", "moves": moves_a}, {"species": "squirt", "moves": ["jet"]}]}
+	var spec := {"seed": 3, "arena": "stadium", "fighters": [{"species": "squirt", "moves": moves_a}, {"species": "squirt", "moves": ["jet"]}]}
 	var created := Battle.create(spec, BattleData.new(SPECIES, MOVES, {}), [Scripted.new(script_a), Scripted.new([])])
 	assert_false(created.has("error"), str(created.get("error", "")))
 	return created.battle

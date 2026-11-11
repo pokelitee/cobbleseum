@@ -6,8 +6,8 @@ extends Node3D
 ##
 ## Instead of a spec file, SpecFlags can describe the battle: --watch=<species> [--vs=<species>]
 ## [--ai=<profile>] [--vs-ai=<profile>] [--seed=N] for AI against AI. --arena=<biome> (or a
-## spec's "arena") picks the arena (ArenaBiomes.NAMES); otherwise the seed picks one that
-## suits the fighters' types.
+## spec's "arena") picks the arena (Terrain.BIOMES); otherwise the seed picks one that suits
+## the fighters' types. The arena is part of the battle: its terrain (§9.8).
 ##
 ## Play mode (--play=<species> [--vs=<species>] [--ai=<profile>] [--seed=N], or a spec with
 ## "ai": "player"): the battle runs live, one tick per 1/30 s, since a player's choices can't
@@ -120,8 +120,7 @@ func _ready() -> void:
 
 	var size := get_viewport().get_visible_rect().size
 	_portrait = VideoFormat.is_portrait(size)
-	_build_stage(ArenaBiomes.choose(str(spec.get("arena", "")),
-		battle.fighters[0].types + battle.fighters[1].types, int(spec.seed)))
+	_build_stage(battle.terrain.biome)
 	if _player_camera != null:
 		_player_camera.limit = _arena.camera_limit
 	for side in 2:
@@ -306,7 +305,7 @@ func _next_live_frame() -> void:
 		_overlay.refresh()
 	for side in 2:
 		var fighter := battle.fighters[side]
-		_views[side].place(fighter.position, fighter.facing)
+		_views[side].place(fighter.position, fighter.facing, fighter.ground)
 		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
 	_hud.update_move_bar(battle.fighters[_player_side])
 	_move_fx.sync_projectiles(battle)
@@ -507,7 +506,7 @@ func _sync_views() -> void:
 			view.set_time_scale(1.0 / plan.slow[_shown_tick()])
 	for side in 2:
 		var fighter := battle.fighters[side]
-		_views[side].place(fighter.position, fighter.facing)
+		_views[side].place(fighter.position, fighter.facing, fighter.ground)
 		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
 	_move_fx.sync_projectiles(battle)
 	var span := maxi(1, int(_segment.end) - int(_segment.start))
@@ -518,7 +517,7 @@ func _sync_views() -> void:
 
 ## The arena (its own sky, sun and weather) and the camera.
 func _build_stage(biome: String) -> void:
-	_arena = Arena.create(biome, int(battle.spec.seed), [battle.fighters[0].name, battle.fighters[1].name])
+	_arena = Arena.create(biome, int(battle.spec.seed), [battle.fighters[0].name, battle.fighters[1].name], battle.terrain)
 	add_child(_arena)
 	_camera = Camera3D.new()
 	_camera.far = Arena.OUTER_RADIUS * 3.0

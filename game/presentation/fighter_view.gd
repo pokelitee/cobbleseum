@@ -15,6 +15,8 @@ const HEAD_BONE := "head"
 const HEAD_MAX := deg_to_rad(60.0)
 const HEAD_GIVE_UP := deg_to_rad(110.0)
 const HEAD_EASE := 0.2
+## Share of the way to a new ground height covered each frame.
+const GROUND_EASE := 0.35
 ## Above this speed (m/s) a grounded fighter with a run clip runs instead of walking.
 const RUN_SPEED := 3.5
 ## The overlay layer: frames between blinks or fidgets (picked at random within the range),
@@ -33,6 +35,8 @@ var _head: HeadTurn
 ## Shows the poser's ground or air parts (folded or open wings); null when nothing swaps.
 var _parts: PartSwap
 var _watched: FighterView
+var _ground_shown := 0.0
+var _placed := false
 var _clips: Dictionary = {}
 var _fainted := false
 ## The looping clip between one-off clips: "walk" while moving (if the species has one), else "idle".
@@ -150,8 +154,11 @@ func celebrate() -> void:
 
 ## Moves the view to a simulation position (x, z on the floor) facing a direction. The
 ## simulation does knockback itself.
-func place(position_2d: Vector2, facing: Vector2) -> void:
-	position = Vector3(position_2d.x, 0, position_2d.y)
+func place(position_2d: Vector2, facing: Vector2, ground := 0.0) -> void:
+	# Steps up and down ease over a few frames rather than snapping a whole block.
+	_ground_shown = ground if not _placed else lerpf(_ground_shown, ground, GROUND_EASE)
+	_placed = true
+	position = Vector3(position_2d.x, _ground_shown, position_2d.y)
 	if facing.length_squared() > 0.0:
 		look_at(position + Vector3(facing.x, 0, facing.y), Vector3.UP)
 		_motion.facing = facing

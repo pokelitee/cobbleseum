@@ -42,6 +42,8 @@ var seats: Array[Transform3D] = []
 var camera_limit := CLEAR_RADIUS - CAMERA_MARGIN
 
 var _biome: Dictionary
+## The battle's ground: the floor is built at its heights.
+var _terrain: Terrain
 var _rng := RandomNumberGenerator.new()
 var _noise := FastNoiseLite.new()
 ## Blocks to draw: [Transform3D, Color], plain and glowing.
@@ -53,9 +55,9 @@ var _arcs := {}
 var _heights := {}
 
 
-## Builds the arena for `name` (one of ArenaBiomes.NAMES) seeded by `seed`. `names` are the
-## fighters' names, shown on the stadium's scoreboard.
-static func create(name: String, seed: int, names: Array = []) -> Arena:
+## Builds the arena for `name` (one of Terrain.BIOMES) seeded by `seed`, around the battle's
+## `terrain` (flat if not given). `names` are the fighters' names, for the stadium's screens.
+static func create(name: String, seed: int, names: Array = [], terrain: Terrain = null) -> Arena:
 	var arena := Arena.new()
 	arena.name = "Arena"
 	arena.biome_name = name
@@ -63,6 +65,7 @@ static func create(name: String, seed: int, names: Array = []) -> Arena:
 	arena._rng.seed = hash("%s|%d" % [name, seed])
 	arena._noise.seed = seed
 	arena._noise.frequency = 0.06
+	arena._terrain = terrain if terrain != null else Terrain.flat(name)
 	arena._build(names)
 	return arena
 
@@ -201,7 +204,26 @@ func _build_floor() -> void:
 			add_box(cell, -1.0, RIM_HEIGHT, vary(_colour(2)))
 			continue
 		var checker := (int(floor(cell.x)) + int(floor(cell.y))) % 2 == 0
-		add_box(cell, -1.0, 0.0, vary(_colour(0) if checker else _colour(1), 0.02))
+		var floor_colour := _colour(0) if checker else _colour(1)
+		var height := _terrain.height_at(cell)
+		if height <= 0.0:
+			add_box(cell, -1.0, 0.0, vary(floor_colour, 0.02))
+		elif _is_pillar(cell, height):
+			# Cover: a pillar of the biome's rock, with a cap.
+			add_box(cell, -1.0, height - 0.25, vary(_colour(4), 0.06))
+			add_box(cell, height - 0.25, height, vary(_colour(2), 0.06))
+		else:
+			# Raised ground: earth sides, the floor's own surface on top.
+			add_box(cell, -1.0, height - 0.25, vary(_colour(4), 0.04))
+			add_box(cell, height - 0.25, height, vary(_colour(3), 0.03))
+
+
+## A cell standing well above all four neighbours is a pillar of cover, not raised ground.
+func _is_pillar(cell: Vector2, height: float) -> bool:
+	for side in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
+		if _terrain.height_at(cell + side) > height - 1.0:
+			return false
+	return true
 
 
 func _build_terrain() -> void:

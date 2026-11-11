@@ -86,7 +86,7 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		elif move.is_projectile():
 			ranged_ready = true
 		# Ties go to a random pick so the order of the moveset never decides.
-		if gap <= move.reach() and (score > best_score or (score == best_score and random.chance(0.5))):
+		if gap <= move.reach() and battle.can_reach(me, foe, move) and (score > best_score or (score == best_score and random.chance(0.5))):
 			best = i
 			best_score = score
 	if best >= 0:
@@ -98,7 +98,7 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		band = Vector2(0.0, Rules.MELEE_DASH_RANGE * 0.8)
 	elif ranged_ready:
 		band = RANGED_GAP
-	intent.move = _steer(me, foe, gap, band)
+	intent.move = battle.terrain.steer(me.position, me.radius, me.ground, me.climb, _steer(me, foe, gap, band))
 	return intent
 
 

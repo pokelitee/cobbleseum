@@ -583,11 +583,24 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 12** (terrain, §9.8; 1,000 battles): median 40.3 s, draws 2.6%, side A 48.6%. Over 100 battles across biomes, 3% of shots were blocked and fighters spent 3% of the time on raised ground; terrain is mild until the AI uses cover on purpose.
 - **Rules version 11** (an 11 m arena, fighters starting 10 m apart; 1,000 battles): median 39.7 s, 10th–90th percentile 20.7–72.9 s, draws 2.2%, side A 48.8%, melee 38% and projectiles 40% of move uses (unchanged). The average gap went from 3.5 m to 3.8 m.
 - **Rules version 10** (agility and gliding, 1,000 battles): median 38.0 s, 10th–90th percentile 20.2–71.9 s, draws 1.8%, side A 48.8%.
 - **Rules version 9** (facing, acceleration, knockback, and the utility AI's wider, varied spacing; 1,000 battles): median 37.8 s, 10th–90th percentile 20.1–70.9 s, draws 2.2%, side A 50.4%, misses up from 5.7 to 10 per battle. The average gap between fighters went from 1.6 m to 3.4 m, and the share of time more than 3 m apart from 13% to 51%.
 - **Rules version 8** (self-lowering moves discounted in movesets, the AI's veto fixed, Showdown's stat overrides, 1,000 battles): median 30.2 s, 10th–90th percentile 16.8–57.9 s, draws 0.5%, type-advantaged side wins 56.1%.
 - **Stat overrides:** damage reads Showdown's `overrideOffensivePokemon`, `overrideOffensiveStat` and `overrideDefensiveStat`, so Foul Play uses the target's Attack, Body Press attacks with Defense, and Psyshock and Psystrike hit Defense. Foul Play had used the user's own Attack, which helped Kingambit to a 94% win rate.
+
+### 9.8 Terrain
+
+Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.gd`). The battle is still played on the floor plane, with a height for every 1 m cell on top:
+
+- **Generation:** from the battle seed for the arena's biome. Plateaus rise 0.5–1.5 m with a ramp of 0.5 m steps down one side and cliffs elsewhere; pillars of cover stand 1.5–4 m tall, at least 3 m apart and clear of the wall. Each fighter's starting spot is kept flat and open for 2.5 m. The stadium is flat; caves and volcanoes have the most relief.
+- **Biome:** the arena is chosen in the simulation (the spec's `"arena"`, else the seed from biomes that suit the fighters' types), since it decides the terrain.
+- **Moving:** a fighter stands at the height of the cell under its centre and can step up 0.5 m (fliers 1.5 m); stepping down is free. Higher ground is a wall it slides along.
+- **Projectiles** leave from and aim at chest height (0.8 m above the ground), rising or falling to reach the foe, and stop where the ground rises above them. They hit within 1 m of the target's chest height.
+- **Melee and area moves** only reach across height differences of 1 m and 1.5 m.
+- **AI:** both AIs only use a move that can connect (a clear line for projectiles and status moves, a small enough height difference otherwise), and steer around ground they can't climb. Taking cover on purpose is still to come.
+- **Cost:** each cell keeps the highest ground within 3 cells, so collision and sight checks stop early where nothing rises; battles take about 20% longer to simulate.
 
 ## 10. Simulation and determinism
 
@@ -812,7 +825,7 @@ Battles take place in one of six biomes: grassland, beach, volcano, snowfield, c
 
   Distances are measured from the floor's edge, so the world follows the arena's size.
 - **Look:** each biome sets its sky, sun angle and colour, ambient light, fog and weather particles (petals, blown sand, rising embers, snow, cave dust).
-- **Choice:** `"arena"` in a battle spec or `--arena=<biome>` picks one. Otherwise the battle seed picks from grassland, stadium and the biomes the fighters' types suit (Fire → volcano, Ice → snowfield, Water → beach, Rock, Ground, Ghost and Dark → cave, and so on).
+- **Choice:** `"arena"` in a battle spec or `--arena=<biome>` picks one. Otherwise the battle seed picks from grassland, stadium and the biomes the fighters' types suit (Fire → volcano, Ice → snowfield, Water → beach, Rock, Ground, Ghost and Dark → cave, and so on). The choice is the simulation's, since each biome's terrain is part of the battle (§9.8); the floor, plateaus and pillars are built from that terrain, and fighters stand at its height.
 - **The stadium** (`Stadium`) is a coliseum rather than terrain, about 15 m tall and 75 m across:
   - the field of concentric rings of pale paving with painted lines (boundary, halfway line, centre circle), then an apron of grey-green paving with a trainer's box at each end;
   - a 2.4 m stone wall with a coping;
