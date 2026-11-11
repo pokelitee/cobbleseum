@@ -51,6 +51,8 @@ var _blocks: Array = []
 var _glowing: Array = []
 ## Ring segments, built straight into meshes: {glow: SurfaceTool}.
 var _arcs := {}
+## The surface shader's materials, for see-through updates.
+var _surfaces: Array[ShaderMaterial] = []
 ## Terrain height by cell, so props sit on top.
 var _heights := {}
 
@@ -364,7 +366,19 @@ func _material(glow: bool, face_uv: bool) -> Material:
 	surface.shader = SURFACE_SHADER
 	surface.set_shader_parameter("MOSS", float(_biome.get("moss", 0.0)))
 	surface.set_shader_parameter("FACE_UV", face_uv)
+	_surfaces.append(surface)
 	return surface
+
+
+## Lets the camera see the fighters through cover: anything between the camera and a
+## fighter's chest (`chests`, world positions), above that fighter's ground, dissolves.
+func set_sight(chests: Array[Vector3], grounds: Array[float]) -> void:
+	for surface in _surfaces:
+		surface.set_shader_parameter("SIGHT_ON", true)
+		surface.set_shader_parameter("SIGHT_A", chests[0])
+		surface.set_shader_parameter("SIGHT_B", chests[1])
+		surface.set_shader_parameter("SIGHT_GROUND_A", grounds[0])
+		surface.set_shader_parameter("SIGHT_GROUND_B", grounds[1])
 
 
 func _add_water(level: float) -> void:

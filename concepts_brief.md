@@ -422,7 +422,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 
 ### 9.1 Format
 
-- One-on-one, in a round arena with walls (no ring-outs), 11 m in radius since rules version 11 (8 m before), with fighters starting 10 m apart. Once fighters kept their distance (version 9), 8 m was cramped: they spent 11% of the time within a metre of the wall, 6% at 11 m. Rankings use this one size.
+- One-on-one, in a round arena with walls (no ring-outs), 14 m in radius since rules version 13 (8 m until version 11, then 11 m), with fighters starting 10 m apart. Once fighters kept their distance (version 9), 8 m was cramped: they spent 11% of the time within a metre of the wall, 6% at 11 m. With terrain (§9.8) the extra room holds plateaus and cover; fighters don't use all of it at once, and needn't. Rankings use this one size.
 - The simulation runs at a fixed 30 ticks per second.
 - **Length:** battles should last 30–45 seconds. From 60 seconds, **overtime** raises hit damage by 10% per second (×4 by the cap), so slow matchups finish. At 90 seconds the battle ends in a draw.
 - **Controls:** both fighters are controlled through the same intents:
@@ -583,6 +583,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 13** (a 14 m arena, more cover, the utility AI's terrain tactics; 1,000 battles): median 40.3 s, 10th–90th percentile 20.1–74.9 s, draws 3.0%, side A 48.0%.
 - **Rules version 12** (terrain, §9.8; 1,000 battles): median 40.3 s, draws 2.6%, side A 48.6%. Over 100 battles across biomes, 3% of shots were blocked and fighters spent 3% of the time on raised ground; terrain is mild until the AI uses cover on purpose.
 - **Rules version 11** (an 11 m arena, fighters starting 10 m apart; 1,000 battles): median 39.7 s, 10th–90th percentile 20.7–72.9 s, draws 2.2%, side A 48.8%, melee 38% and projectiles 40% of move uses (unchanged). The average gap went from 3.5 m to 3.8 m.
 - **Rules version 10** (agility and gliding, 1,000 battles): median 38.0 s, 10th–90th percentile 20.2–71.9 s, draws 1.8%, side A 48.8%.
@@ -599,7 +600,9 @@ Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.g
 - **Moving:** a fighter stands at the height of the cell under its centre and can step up 0.5 m (fliers 1.5 m); stepping down is free. Higher ground is a wall it slides along.
 - **Projectiles** leave from and aim at chest height (0.8 m above the ground), rising or falling to reach the foe, and stop where the ground rises above them. They hit within 1 m of the target's chest height.
 - **Melee and area moves** only reach across height differences of 1 m and 1.5 m.
-- **AI:** both AIs only use a move that can connect (a clear line for projectiles and status moves, a small enough height difference otherwise), and steer around ground they can't climb. Taking cover on purpose is still to come.
+- **AI:** both AIs only use a move that can connect (a clear line for projectiles and status moves, a small enough height difference otherwise), and steer around ground they can't climb. The utility AI also has two terrain tactics where the ground rises at least 1 m somewhere: with no attack ready while the foe can see it and has a ranged attack coming, it heads for the nearest spot out of sight; with a ranged move ready and in range but no clear line, it heads for the nearest spot with one (spots are tried 16 ways at 1.5 and 3 m). They're chosen about 3–4% of the time in caves; their main effect is not getting stuck without a line of sight.
+- **Amount:** since rules version 13, cover scales with the 14 m arena: 2–4 plateaus and 4–13 pillars by biome. In 100 cave battles, 7% of shots hit rock and the fighters were out of each other's sight 10% of the time; in grassland 4% and 6%. Fighters fight 3–6 m apart, so what counts is cover near them, not the total.
+- **See-through:** in the view, anything between the camera and a fighter (above that fighter's ground) dissolves with a screen-door dither, so cover never hides the battle.
 - **Cost:** each cell keeps the highest ground within 3 cells, so collision and sight checks stop early where nothing rises; battles take about 20% longer to simulate.
 
 ## 10. Simulation and determinism
