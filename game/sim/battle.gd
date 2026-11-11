@@ -237,7 +237,10 @@ func _walk(fighter: Fighter, foe: Fighter, direction: Vector2) -> void:
 ## Eases the fighter's velocity toward `target` (m/s) at Rules.ACCELERATION and moves it. The
 ## velocity kept is what it actually moved, so walls and the foe's body stop it.
 func _drift(fighter: Fighter, foe: Fighter, target: Vector2) -> void:
-	fighter.velocity = fighter.velocity.move_toward(target, Rules.ACCELERATION / Rules.TICK_RATE)
+	var rate := Rules.ACCELERATION * fighter.agility
+	if fighter.glides and target.length_squared() < fighter.velocity.length_squared():
+		rate *= Rules.GLIDE_BRAKING
+	fighter.velocity = fighter.velocity.move_toward(target, rate / Rules.TICK_RATE)
 	var before := fighter.position
 	_slide(fighter, foe, fighter.velocity / Rules.TICK_RATE)
 	fighter.velocity = (fighter.position - before) * Rules.TICK_RATE
@@ -247,7 +250,7 @@ func _drift(fighter: Fighter, foe: Fighter, target: Vector2) -> void:
 static func _turn(fighter: Fighter, direction: Vector2, degrees_per_second: float) -> void:
 	if direction.length_squared() < 1e-8:
 		return
-	var step := deg_to_rad(degrees_per_second) / Rules.TICK_RATE
+	var step := deg_to_rad(degrees_per_second * fighter.agility) / Rules.TICK_RATE
 	fighter.facing = fighter.facing.rotated(clampf(fighter.facing.angle_to(direction), -step, step)).normalized()
 
 

@@ -358,6 +358,15 @@ Implemented in `game/presentation/procedural_motion.gd`, as a transform on a nod
 
 Flying types hover and bob throughout. The layer advances per video frame at the clips' speed, so it freezes in hit-stop and slows in slow motion.
 
+Since M6 it also adds life on top of every clip, for every species:
+
+- leaning into movement: pitched forward by forward speed and banked by sideways speed, twice as much for fliers;
+- fliers swooping low when moving faster than walking (from 4 m/s, fully at a 10 m/s melee dash);
+- a squash on landing from a dodge;
+- head tracking: models with a `head` bone (about three in four) turn it up to 60° toward the foe, eased, through a small skeleton modifier (`HeadTurn`); past 110° off to the side the head turns back to centre.
+
+Knockback is the simulation's own since rules version 9, so the view no longer fakes it.
+
 ### 7.5 Quality checks
 
 A QA pass over every roster species reports:
@@ -422,6 +431,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - **Dodges:** each fighter has 2 dodge charges, each recharging in 3 s (slowest) to 1.5 s (fastest, by Speed). A dodge is a 2.5 m dash over 0.2 s, invulnerable throughout: projectiles fly on through and melee strikes whiff. A fighter can't dodge while winding up or recovering, so attacking commits it.
 - **Movement:** fighters walk at their speed, can't pass through each other (they slide around) and stay inside the wall. Since rules version 9 they speed up and slow down (14 m/s²) rather than starting and stopping instantly, and the slide out of a dodge carries on briefly.
 - **Facing:** fighters turn at 360° a second (900° while winding up, to aim). Walking, they face between the foe and where they're going, so they turn away to run and square up to fight, instead of always staring at each other.
+- **Agility** (rules version 10): acceleration and turning scale with body, by the square root of the Speed stat over 120 (a base-100 species) times (50 kg / weight)^0.15, within ×0.6 to ×1.5. Heavy, slow species lumber; light, fast ones dart, and the utility AI switches strafe direction more often for them. Flying types brake at half their acceleration, so they glide to a stop.
 - **Knockback:** a hit pushes the defender away at up to 5 m/s (at 8% of max HP or more, less for smaller hits), scaled by weight: lighter species fly further, heavier ones barely move (within ×0.5 to ×1.5 of a 50 kg species).
 - **Flying:** Flying-type species hover above the ground.
 
@@ -564,6 +574,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 10** (agility and gliding, 1,000 battles): median 38.0 s, 10th–90th percentile 20.2–71.9 s, draws 1.8%, side A 48.8%.
 - **Rules version 9** (facing, acceleration, knockback, and the utility AI's wider, varied spacing; 1,000 battles): median 37.8 s, 10th–90th percentile 20.1–70.9 s, draws 2.2%, side A 50.4%, misses up from 5.7 to 10 per battle. The average gap between fighters went from 1.6 m to 3.4 m, and the share of time more than 3 m apart from 13% to 51%.
 - **Rules version 8** (self-lowering moves discounted in movesets, the AI's veto fixed, Showdown's stat overrides, 1,000 battles): median 30.2 s, 10th–90th percentile 16.8–57.9 s, draws 0.5%, type-advantaged side wins 56.1%.
 - **Stat overrides:** damage reads Showdown's `overrideOffensivePokemon`, `overrideOffensiveStat` and `overrideDefensiveStat`, so Foul Play uses the target's Attack, Body Press attacks with Defense, and Psyshock and Psystrike hit Defense. Foul Play had used the user's own Attack, which helped Kingambit to a 94% win rate.

@@ -59,3 +59,42 @@ func test_faint_tips_over_sinks_and_stays() -> void:
 	motion.start("lunge")
 	_advance(motion, 2)
 	assert_true(motion.transform().is_equal_approx(settled), "no actions after fainting")
+
+
+func test_leans_into_movement_and_fliers_bank_more() -> void:
+	var walker := ProceduralMotion.new(2.0, false)
+	walker.velocity = Vector2(0, 4)
+	walker.facing = Vector2(0, 1)
+	_advance(walker, 30)
+	var pitch := walker.transform().basis.get_euler().x
+	assert_true(pitch < -0.05, "leans forward walking forward: %f" % pitch)
+	walker.velocity = Vector2.ZERO
+	_advance(walker, 60)
+	assert_almost_eq(walker.transform().basis.get_euler().x, 0.0, 1e-3, "and straightens up when stopped")
+	var flier := ProceduralMotion.new(2.0, true)
+	flier.velocity = Vector2(0, 4)
+	flier.facing = Vector2(0, 1)
+	_advance(flier, 30)
+	assert_true(flier.transform().basis.get_euler().x < pitch, "fliers lean further")
+
+
+func test_fliers_swoop_only_when_faster_than_walking() -> void:
+	var flier := ProceduralMotion.new(2.0, true)
+	flier.velocity = Vector2(ProceduralMotion.SWOOP_FROM, 0)
+	_advance(flier, 30)
+	assert_almost_eq(flier._swoop, 0.0, 1e-6, "walking pace keeps the hover")
+	flier.velocity = Vector2(ProceduralMotion.SWOOP_FULL, 0)
+	_advance(flier, 30)
+	assert_true(flier._swoop > 0.95, "a dash dives")
+	var bob := ProceduralMotion.HOVER_BOB * 2.0
+	assert_true(flier.transform().origin.y < 2.0 * (ProceduralMotion.HOVER_HEIGHT * (1.0 - ProceduralMotion.SWOOP_DEPTH * 0.95)) + bob)
+
+
+func test_landing_squashes_then_recovers() -> void:
+	var motion := ProceduralMotion.new(2.0, false)
+	motion.start("land")
+	_advance(motion, ProceduralMotion.ACTION_FRAMES.land / 2)
+	assert_true(motion.transform().basis.get_scale().y < 0.95)
+	_advance(motion, ProceduralMotion.ACTION_FRAMES.land)
+	assert_true(motion.transform().is_equal_approx(Transform3D.IDENTITY))
+

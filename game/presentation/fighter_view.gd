@@ -8,10 +8,13 @@ const CROSSFADE := 0.15
 ## Hit flash: frames it lasts and its peak strength.
 const FLASH_FRAMES := 6
 const FLASH_STRENGTH := 0.6
-## Visual knockback: peak distance in metres per HP share dealt, and frames to recover.
-const KNOCKBACK_PER_SHARE := 3.0
-const KNOCKBACK_MAX := 0.6
-const KNOCKBACK_FRAMES := 10
+## Head tracking: the bone that turns to watch the foe, at most HEAD_MAX either way, eased
+## by HEAD_EASE per frame. Past HEAD_GIVE_UP off to the side the head turns back to centre,
+## as a body that has turned away no longer watches.
+const HEAD_BONE := "head"
+const HEAD_MAX := deg_to_rad(60.0)
+const HEAD_GIVE_UP := deg_to_rad(110.0)
+const HEAD_EASE := 0.2
 
 ## Rendered height in metres, from the roster.
 var height := 1.0
@@ -20,8 +23,8 @@ var _mesh: MeshInstance3D
 var _flash_material: StandardMaterial3D
 var _flash_frames := 0
 var _flash_delay := 0
-var _knockback := Vector3.ZERO
-var _knockback_frames := 0
+var _head: HeadTurn
+var _watched: FighterView
 var _clips: Dictionary = {}
 var _fainted := false
 ## The looping clip between one-off clips: "walk" while moving (if the species has one), else "idle".
@@ -58,6 +61,11 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 	view._flash_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	view.height = model_height
 	model.scale = Vector3.ONE * scale
+	var skeleton: Skeleton3D = model.get_node("Skeleton")
+	if skeleton.find_bone(HEAD_BONE) >= 0:
+		view._head = HeadTurn.new()
+		view._head.bone = skeleton.find_bone(HEAD_BONE)
+		skeleton.add_child(view._head)
 	view._player.animation_finished.connect(view._on_clip_finished)
 	view.play_idle()
 	return view
@@ -68,28 +76,44 @@ func set_hovering(hovering: bool) -> void:
 	_motion.hovers = hovering
 
 
-## Moves the view to a simulation position (x, z on the floor) facing a direction, plus any
-## visual knockback (presentation only; the simulation has no knockback yet).
+## Moves the view to a simulation position (x, z on the floor) facing a direction. The
+## simulation does knockback itself.
 func place(position_2d: Vector2, facing: Vector2) -> void:
-	var recovery := float(_knockback_frames) / KNOCKBACK_FRAMES
-	position = Vector3(position_2d.x, 0, position_2d.y) + _knockback * recovery * recovery
+	position = Vector3(position_2d.x, 0, position_2d.y)
 	if facing.length_squared() > 0.0:
 		look_at(position + Vector3(facing.x, 0, facing.y), Vector3.UP)
+		_motion.facing = facing
+	if _head != null and _watched != null and not _fainted and facing.length_squared() > 0.0:
+		var to_foe := Vector2(_watched.position.x - position.x, _watched.position.z - position.z)
+		var off := facing.angle_to(to_foe) if to_foe.length_squared() > 1e-6 else 0.0
+		# Floor angles run from x toward z, the opposite way to turning about +Y.
+		_motion.head_target = 0.0 if absf(off) > HEAD_GIVE_UP else clampf(-off, -HEAD_MAX, HEAD_MAX)
 
 
-## Flashes white and recoils away from `from` (a world position), scaled by HP share lost.
-## `delay_frames` holds the flash back, e.g. until full-screen impact frames have passed,
-## since a white model would vanish in the two-tone impact frame.
-func take_hit(from: Vector3, damage_share: float, delay_frames := 0) -> void:
+## The fighter's movement over the last tick (m/s on the floor), for leaning and swooping.
+func set_velocity(velocity: Vector2) -> void:
+	_motion.velocity = velocity
+
+
+## Squashes briefly on landing (the end of a dodge).
+func land() -> void:
+	if not _fainted:
+		_motion.start("land")
+
+
+## Turns this fighter's head (if its model has one) to follow `foe`.
+func watch(foe: FighterView) -> void:
+	_watched = foe
+
+
+## Flashes white. `delay_frames` holds the flash back, e.g. until full-screen impact frames
+## have passed, since a white model would vanish in the two-tone impact frame.
+func take_hit(delay_frames := 0) -> void:
 	_flash_frames = FLASH_FRAMES
 	_flash_delay = delay_frames
-	var away := (global_position - from) * Vector3(1, 0, 1)
-	var distance := minf(KNOCKBACK_MAX, damage_share * KNOCKBACK_PER_SHARE)
-	_knockback = away.normalized() * distance if away.length() > 0.01 else Vector3.ZERO
-	_knockback_frames = KNOCKBACK_FRAMES
 
 
-## Advances the hit flash and knockback by one video frame.
+## Advances the hit flash and procedural motion by one video frame.
 func next_frame() -> void:
 	if _flash_delay > 0:
 		_flash_delay -= 1
@@ -98,9 +122,9 @@ func next_frame() -> void:
 		var fade := float(_flash_frames) / FLASH_FRAMES
 		_flash_material.albedo_color = Color(1, 1, 1, FLASH_STRENGTH * fade * fade)
 		_mesh.material_overlay = _flash_material if _flash_frames > 0 else null
-	if _knockback_frames > 0:
-		_knockback_frames -= 1
 	_motion.next_frame(_time_scale)
+	if _head != null:
+		_head.yaw = _motion.head_yaw
 	_motion_root.transform = _motion.transform()
 
 

@@ -126,6 +126,8 @@ func _ready() -> void:
 		add_child(view)
 		view.set_hovering("Flying" in battle.fighters[side].types)
 		_views.append(view)
+	for side in 2:
+		_views[side].watch(_views[1 - side])
 	_hud = Hud.new()
 	add_child(_hud)
 	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size)
@@ -235,13 +237,7 @@ func _next_frame() -> void:
 		_hold_frames -= 1
 	else:
 		if not battle.is_over():
-			var before: Array[Vector2] = [battle.fighters[0].position, battle.fighters[1].position]
-			battle.step()
-			for side in 2:
-				var fighter := battle.fighters[side]
-				_views[side].set_moving(fighter.action == Fighter.Action.READY
-					and fighter.position.distance_to(before[side]) > WALK_THRESHOLD)
-			_play_events()
+			_step_battle()
 		_tick += 1
 		if _tick >= _end_tick:
 			return
@@ -258,6 +254,22 @@ func _next_frame() -> void:
 	_sync_views()
 
 
+## Steps the battle one tick and tells the views how each fighter moved: walking, its speed
+## over the tick (melee dashes included, for leaning and swooping), and landing from a dodge.
+func _step_battle() -> void:
+	var before: Array[Vector2] = [battle.fighters[0].position, battle.fighters[1].position]
+	var dodging: Array[bool] = [battle.fighters[0].action == Fighter.Action.DODGE, battle.fighters[1].action == Fighter.Action.DODGE]
+	battle.step()
+	for side in 2:
+		var fighter := battle.fighters[side]
+		_views[side].set_moving(fighter.action == Fighter.Action.READY
+			and fighter.position.distance_to(before[side]) > WALK_THRESHOLD)
+		_views[side].set_velocity((fighter.position - before[side]) * Rules.TICK_RATE)
+		if dodging[side] and fighter.action != Fighter.Action.DODGE:
+			_views[side].land()
+	_play_events()
+
+
 ## Play mode: one tick per frame, except while a hit freezes play.
 func _next_live_frame() -> void:
 	_live_frames += 1
@@ -272,13 +284,7 @@ func _next_live_frame() -> void:
 			for view in _views:
 				view.set_time_scale(1.0)
 	else:
-		var before: Array[Vector2] = [battle.fighters[0].position, battle.fighters[1].position]
-		battle.step()
-		for side in 2:
-			var fighter := battle.fighters[side]
-			_views[side].set_moving(fighter.action == Fighter.Action.READY
-				and fighter.position.distance_to(before[side]) > WALK_THRESHOLD)
-		_play_events()
+		_step_battle()
 	if _live_frames == HINT_FRAMES and not battle.is_over():
 		_hud.show_hint("")
 	for view in _views:
@@ -375,8 +381,7 @@ func _play_events() -> void:
 				_hit_counts[event.side] += 1
 				_views[defender].play_role("recoil")
 				var big: bool = event.crit or event.effectiveness > 1.0
-				_views[defender].take_hit(_views[event.side].global_position, share,
-					ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
+				_views[defender].take_hit(ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
 				_fx.on_hit(event, _views[defender], share, big)
 				if _live:
 					# Hit-stop in play pauses the battle itself, so it stays fair and replays exactly.
@@ -406,7 +411,7 @@ func _play_events() -> void:
 			"recharge":
 				_fx.announce(_views[event.side], "Must recharge!", Color(0.85, 0.85, 0.9), 48)
 			"self_destruct":
-				_views[event.side].take_hit(_views[event.side].global_position, 1.0)
+				_views[event.side].take_hit()
 			"landed":
 				var defender := 1 - int(event.side)
 				var move := _move(event.side, event.move)
@@ -431,7 +436,7 @@ func _play_events() -> void:
 			"status_damage":
 				_fx.announce(_views[event.side], "-%d" % event.damage, Hud.STATUS_BADGES[event.status][1].lightened(0.3), 44)
 			"recoil", "confusion_hit":
-				_views[event.side].take_hit(_views[event.side].global_position, float(event.damage) / battle.fighters[event.side].max_hp)
+				_views[event.side].take_hit()
 				_fx.announce(_views[event.side], "-%d" % event.damage if event.type == "recoil" else "It hurt itself in confusion!",
 					Color(1, 1, 1) if event.type == "recoil" else Hud.STATUS_BADGES.confusion[1].lightened(0.3), 48)
 			"stunned":
