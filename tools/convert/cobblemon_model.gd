@@ -119,7 +119,7 @@ static func _add_layers(mesh_instance: MeshInstance3D, layers: Array) -> void:
 		pass_material.albedo_texture = texture
 		pass_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 		pass_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		pass_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		pass_material.cull_mode = BaseMaterial3D.CULL_BACK
 		pass_material.roughness = 1.0
 		if layer.emissive:
 			pass_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
