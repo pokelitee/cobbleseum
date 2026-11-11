@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 8
+const RULES_VERSION := 9
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -32,6 +32,22 @@ const TYPE_MULTIPLIERS := {4.0: 1.6, 2.0: 1.3, 1.0: 1.0, 0.5: 0.8, 0.25: 0.6, 0.
 
 ## Dodging (§9.2): a short dash with invulnerability, from a few charges that recharge
 ## faster with Speed.
+## Facing turns at a limited rate (degrees per second), faster while winding up (aiming).
+## Walking, a fighter faces between the foe and where it's going (MOVE_FACING_WEIGHT is how
+## much the walk counts at full speed), so it turns away to run and squares up to fight.
+const TURN_RATE := 360.0
+const AIM_TURN_RATE := 900.0
+const MOVE_FACING_WEIGHT := 1.2
+## Walking speeds up and slows down at this rate (m/s²); knockback slides out at the same rate.
+const ACCELERATION := 14.0
+## A hit taking KNOCKBACK_FULL_SHARE of the defender's max HP (or more) knocks it back at
+## KNOCKBACK_SPEED m/s, less for smaller hits; lighter species fly further, heavier less,
+## by the square root of KNOCKBACK_REFERENCE_KG / weight within KNOCKBACK_WEIGHT_LIMITS.
+const KNOCKBACK_SPEED := 5.0
+const KNOCKBACK_FULL_SHARE := 0.08
+const KNOCKBACK_REFERENCE_KG := 50.0
+const KNOCKBACK_WEIGHT_LIMITS := Vector2(0.5, 1.5)
+
 const DODGE_CHARGES := 2
 const DODGE_DISTANCE := 2.5
 const DODGE_SECONDS := 0.2
@@ -131,6 +147,11 @@ static func stat(base: int) -> int:
 
 static func hp_stat(base: int) -> int:
 	return int((2 * base + IV) * LEVEL / 100.0) + LEVEL + 10
+
+
+static func knockback_speed(damage_share: float, weight_kg: float) -> float:
+	var weight_factor := clampf(sqrt(KNOCKBACK_REFERENCE_KG / maxf(weight_kg, 0.1)), KNOCKBACK_WEIGHT_LIMITS.x, KNOCKBACK_WEIGHT_LIMITS.y)
+	return KNOCKBACK_SPEED * clampf(damage_share / KNOCKBACK_FULL_SHARE, 0.0, 1.0) * weight_factor
 
 
 static func move_speed(speed_stat: int) -> float:

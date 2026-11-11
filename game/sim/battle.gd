@@ -29,7 +29,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 17
+const FIGHTER_STATE_SIZE := 21
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
@@ -160,6 +160,8 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 	_tick_conditions(fighter)
 	if fighter.is_fainted() or fighter.is_incapacitated():
 		fighter.followups.clear()
+		if not fighter.is_fainted():
+			_drift(fighter, foe, Vector2.ZERO)
 		return
 	for followup in fighter.followups.duplicate():
 		followup.ticks -= 1
@@ -168,26 +170,30 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			_strike(fighter, foe, followup.move)
 			if followup.last:
 				_event("multi_hit_end", fighter.side, {"move": fighter.moves[followup.move].id})
-	var to_foe := foe.position - fighter.position
-	if to_foe.length_squared() > 0.0:
-		fighter.facing = to_foe.normalized()
+	var to_foe := (foe.position - fighter.position).normalized()
 	match fighter.action:
 		Fighter.Action.DODGE:
 			_slide(fighter, foe, fighter.dodge_step)
+			fighter.velocity = fighter.dodge_step * Rules.TICK_RATE
 			fighter.action_ticks -= 1
 			if fighter.action_ticks <= 0:
 				fighter.action = Fighter.Action.READY
 		Fighter.Action.WINDUP:
+			_turn(fighter, to_foe, Rules.AIM_TURN_RATE)
 			var move := fighter.moves[fighter.action_move]
-			if move.kind == BattleMove.Kind.MELEE:
+			var gap := _gap(fighter, foe) - Rules.MELEE_REACH * 0.5
+			if move.kind == BattleMove.Kind.MELEE and gap > 0.0:
 				# Melee moves dash in during the wind-up, stopping just inside reach.
-				var gap := _gap(fighter, foe) - Rules.MELEE_REACH * 0.5
-				if gap > 0.0:
-					_slide(fighter, foe, fighter.facing * minf(gap, Rules.MELEE_DASH_SPEED / Rules.TICK_RATE))
+				fighter.velocity = Vector2.ZERO
+				_slide(fighter, foe, to_foe * minf(gap, Rules.MELEE_DASH_SPEED / Rules.TICK_RATE))
+			else:
+				_drift(fighter, foe, Vector2.ZERO)
 			fighter.action_ticks -= 1
 			if fighter.action_ticks <= 0:
 				_release(fighter, foe)
 		Fighter.Action.RECOVERY:
+			_turn(fighter, to_foe, Rules.TURN_RATE)
+			_drift(fighter, foe, Vector2.ZERO)
 			fighter.action_ticks -= 1
 			if fighter.action_ticks <= 0:
 				fighter.action = Fighter.Action.READY
@@ -212,6 +218,9 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 				_event("windup", fighter.side, {"move": move.id})
 			else:
 				_walk(fighter, foe, intent.get("move", Vector2.ZERO))
+			var walking := fighter.velocity / maxf(fighter.move_speed, 0.1)
+			_turn(fighter, to_foe + walking.limit_length(1.0) * Rules.MOVE_FACING_WEIGHT,
+				Rules.AIM_TURN_RATE if fighter.action == Fighter.Action.WINDUP else Rules.TURN_RATE)
 
 
 ## Gap between two fighters' hitboxes.
@@ -222,7 +231,24 @@ static func _gap(fighter: Fighter, foe: Fighter) -> float:
 func _walk(fighter: Fighter, foe: Fighter, direction: Vector2) -> void:
 	if direction.length_squared() > 1.0:
 		direction = direction.normalized()
-	_slide(fighter, foe, direction * (fighter.current_move_speed() / Rules.TICK_RATE))
+	_drift(fighter, foe, direction * fighter.current_move_speed())
+
+
+## Eases the fighter's velocity toward `target` (m/s) at Rules.ACCELERATION and moves it. The
+## velocity kept is what it actually moved, so walls and the foe's body stop it.
+func _drift(fighter: Fighter, foe: Fighter, target: Vector2) -> void:
+	fighter.velocity = fighter.velocity.move_toward(target, Rules.ACCELERATION / Rules.TICK_RATE)
+	var before := fighter.position
+	_slide(fighter, foe, fighter.velocity / Rules.TICK_RATE)
+	fighter.velocity = (fighter.position - before) * Rules.TICK_RATE
+
+
+## Turns the fighter's facing toward `direction` by at most `degrees_per_second` this tick.
+static func _turn(fighter: Fighter, direction: Vector2, degrees_per_second: float) -> void:
+	if direction.length_squared() < 1e-8:
+		return
+	var step := deg_to_rad(degrees_per_second) / Rules.TICK_RATE
+	fighter.facing = fighter.facing.rotated(clampf(fighter.facing.angle_to(direction), -step, step)).normalized()
 
 
 ## Moves a fighter by `delta`, kept inside the arena wall and outside the foe's hitbox
@@ -341,6 +367,8 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	if defender.is_fainted():
 		_event("faint", defender.side, {})
 	else:
+		var push := (defender.position - attacker.position).normalized()
+		defender.velocity += push * Rules.knockback_speed(float(dealt) / defender.max_hp, defender.weight_kg)
 		if defender.action == Fighter.Action.WINDUP and defender.moves[defender.action_move].kind == BattleMove.Kind.HEAL:
 			defender.action = Fighter.Action.READY
 			defender.action_ticks = 0
@@ -542,6 +570,10 @@ func _record_state() -> void:
 		_state[i + 14] = fighter.boosts.spd
 		_state[i + 15] = fighter.boosts.spe
 		_state[i + 16] = fighter.stage_ticks
+		_state[i + 17] = fighter.velocity.x
+		_state[i + 18] = fighter.velocity.y
+		_state[i + 19] = fighter.facing.x
+		_state[i + 20] = fighter.facing.y
 		i += FIGHTER_STATE_SIZE
 	for projectile in projectiles:
 		_state[i] = projectile.position.x

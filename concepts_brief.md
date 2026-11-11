@@ -420,7 +420,9 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - **HP:** the HP stat times a global HP multiplier (22 after the first tuning pass, §9.7). Tuning the multiplier sets battle length.
 - **Speed:** the Speed stat maps into a band of movement speeds. It also sets how quickly dodges recharge.
 - **Dodges:** each fighter has 2 dodge charges, each recharging in 3 s (slowest) to 1.5 s (fastest, by Speed). A dodge is a 2.5 m dash over 0.2 s, invulnerable throughout: projectiles fly on through and melee strikes whiff. A fighter can't dodge while winding up or recovering, so attacking commits it.
-- **Movement:** fighters walk at their speed, can't pass through each other (they slide around) and stay inside the wall.
+- **Movement:** fighters walk at their speed, can't pass through each other (they slide around) and stay inside the wall. Since rules version 9 they speed up and slow down (14 m/s²) rather than starting and stopping instantly, and the slide out of a dodge carries on briefly.
+- **Facing:** fighters turn at 360° a second (900° while winding up, to aim). Walking, they face between the foe and where they're going, so they turn away to run and square up to fight, instead of always staring at each other.
+- **Knockback:** a hit pushes the defender away at up to 5 m/s (at 8% of max HP or more, less for smaller hits), scaled by weight: lighter species fly further, heavier ones barely move (within ×0.5 to ×1.5 of a 50 kg species).
 - **Flying:** Flying-type species hover above the ground.
 
 All constants in this section are starting points for tuning (§9.7).
@@ -562,6 +564,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 9** (facing, acceleration, knockback, and the utility AI's wider, varied spacing; 1,000 battles): median 37.8 s, 10th–90th percentile 20.1–70.9 s, draws 2.2%, side A 50.4%, misses up from 5.7 to 10 per battle. The average gap between fighters went from 1.6 m to 3.4 m, and the share of time more than 3 m apart from 13% to 51%.
 - **Rules version 8** (self-lowering moves discounted in movesets, the AI's veto fixed, Showdown's stat overrides, 1,000 battles): median 30.2 s, 10th–90th percentile 16.8–57.9 s, draws 0.5%, type-advantaged side wins 56.1%.
 - **Stat overrides:** damage reads Showdown's `overrideOffensivePokemon`, `overrideOffensiveStat` and `overrideDefensiveStat`, so Foul Play uses the target's Attack, Body Press attacks with Defense, and Psyshock and Psystrike hit Defense. Foul Play had used the user's own Attack, which helped Kingambit to a 94% win rate.
 

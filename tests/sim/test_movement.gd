@@ -161,3 +161,50 @@ func test_ai_dodges_some_but_not_all_projectiles() -> void:
 		dodges += _events(battle, "dodge").size()
 		hits += _events(battle, "hit").size()
 	assert_true(dodges > 0 and hits > dodges, "%d dodges, %d hits" % [dodges, hits])
+
+
+func test_walking_speeds_up_and_slows_down() -> void:
+	var battle := _battle(_repeat({"move": Vector2(1, 0)}, 30), [])
+	var fighter := battle.fighters[0]
+	battle.step()
+	var top := fighter.current_move_speed()
+	assert_almost_eq(fighter.velocity.length(), Rules.ACCELERATION / Rules.TICK_RATE, 1e-4, "one tick of acceleration")
+	for i in 29:
+		battle.step()
+	assert_almost_eq(fighter.velocity.length(), top, 1e-3, "full speed after a while")
+	battle.step()
+	assert_true(fighter.velocity.length() > 0.0 and fighter.velocity.length() < top, "slows down rather than stopping dead")
+
+
+func test_facing_turns_at_a_limited_rate() -> void:
+	# Walking sideways: it turns toward between the foe and its path, a step at a time.
+	var battle := _battle(_repeat({"move": Vector2(1, 0)}, 30), [])
+	var fighter := battle.fighters[0]
+	var start := fighter.facing
+	var step := deg_to_rad(Rules.TURN_RATE) / Rules.TICK_RATE
+	battle.step()
+	assert_true(absf(start.angle_to(fighter.facing)) <= step + 1e-5, "no more than one tick's turn")
+	for i in 29:
+		battle.step()
+	assert_true(absf(start.angle_to(fighter.facing)) > deg_to_rad(20), "it has turned toward its path")
+	assert_true(fighter.facing.dot(Vector2(0, 1)) > 0.0, "while still facing the foe's side")
+
+
+func test_hits_knock_the_defender_back_by_weight() -> void:
+	assert_eq(Rules.knockback_speed(0.0, 50.0), 0.0)
+	assert_eq(Rules.knockback_speed(Rules.KNOCKBACK_FULL_SHARE * 2.0, 50.0), Rules.KNOCKBACK_SPEED, "capped at the full share")
+	assert_true(Rules.knockback_speed(0.08, 5.0) > Rules.knockback_speed(0.08, 50.0), "lighter flies further")
+	assert_true(Rules.knockback_speed(0.08, 500.0) < Rules.knockback_speed(0.08, 50.0), "heavier barely moves")
+	assert_eq(Rules.knockback_speed(0.08, 0.1), Rules.KNOCKBACK_SPEED * Rules.KNOCKBACK_WEIGHT_LIMITS.y, "within limits")
+	var battle := _battle([], [])
+	var attacker := battle.fighters[0]
+	var defender := battle.fighters[1]
+	defender.max_hp = 300
+	defender.hp = 300
+	battle._hit(attacker, defender, attacker.moves[1])
+	assert_true(defender.velocity.dot(defender.position - attacker.position) > 0.0, "pushed away from the attacker")
+	var start := defender.position
+	for i in 10:
+		battle.step()
+	assert_true(defender.position.distance_to(attacker.position) > start.distance_to(attacker.position), "and slides back")
+
