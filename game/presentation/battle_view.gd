@@ -305,7 +305,7 @@ func _next_live_frame() -> void:
 		_overlay.refresh()
 	for side in 2:
 		var fighter := battle.fighters[side]
-		_views[side].place(fighter.position, fighter.facing, fighter.ground)
+		_views[side].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
 		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
 	_hud.update_move_bar(battle.fighters[_player_side])
 	_move_fx.sync_projectiles(battle)
@@ -517,7 +517,7 @@ func _sync_views() -> void:
 			view.set_time_scale(1.0 / plan.slow[_shown_tick()])
 	for side in 2:
 		var fighter := battle.fighters[side]
-		_views[side].place(fighter.position, fighter.facing, fighter.ground)
+		_views[side].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
 		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
 	_update_sight()
 	_move_fx.sync_projectiles(battle)
