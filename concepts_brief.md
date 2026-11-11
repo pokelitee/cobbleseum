@@ -904,12 +904,36 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - The results store, the Bradley–Terry fit, the matchup matrix and the ranking report. Done: `tools/rank.gd` (§13).
 - The AI-sensitivity check. Done: `tools/rank.gd -- compare`.
 
+**M6: battle feel.** Battles should read as two creatures fighting, not two models sliding into contact and staring at each other.
+
+- **Facing and momentum:** a turn rate instead of always facing the foe (fighters face where they walk and turn to attack), acceleration and braking, and knockback scaled by damage and the defender's weight.
+- **Spacing rhythm:** the AI keeps wider, varied distances, circles in arcs, backs off after a melee exchange, and on harder profiles feints to draw a dodge.
+- **Movement styles by body:** fliers hover, swoop and dive; heavy species lumber and plant themselves; fast ones dart.
+- **Presentation-only life:** leaning into movement, head tracking, squash on landing and recoil.
+- Sim changes bump the rules version and get a balance batch and a new ranking.
+
+**M7: arenas.**
+
+- Three or four biomes (for example grassland, beach, cave, volcano, snowfield, stadium), each with its own ground, props, sky, lighting, fog and weather particles, picked at random or by the fighters' types.
+- Crowds: spectator stands with cheap animated spectators, including Cobblemon models at the edges, reacting to big hits and knockouts.
+- Cosmetic first; terrain that affects play (cover, water, elevation) only later, as a rules change the AI understands.
+- Environment art comes from openly licensed sets or is made in-house; Minecraft's own textures aren't usable.
+
+**M8: visual polish.**
+
+- Rendering: environment lighting, soft shadows, ambient occlusion, bloom, and shading that matches Cobblemon's look.
+- A designed HUD (styled HP bars, type icons, portraits, status badges), intro title cards, and a victory screen with the winner's pose.
+- Openly licensed display and body fonts, never the official Pokémon fonts or logo styling.
+- Music and crowd sound; for clips, title cards, captions and a slow-motion replay of the knockout.
+
 **Later:**
 
+- Abilities (starting with a data-driven set: type immunities and absorbs, damage modifiers, Intimidate), then items.
 - Cobblemon's move effects.
 - Guarding.
-- Field moves.
-- Abilities and items.
+- Field moves and weather.
+- Tournament mode seeded from the ranking.
+- Team battles (2v2 and up).
 - Shiny and form variants in clips.
 
 ## 18. Risks
