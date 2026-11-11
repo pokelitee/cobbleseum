@@ -61,6 +61,10 @@ func apply(camera: Camera3D, segment: Dictionary, battle: Battle, shot_seconds: 
 	var cut := new_shot and not whip
 	_last_shot = segment.shot
 	var pose := pose_for(segment, battle, shot_seconds, progress, cut)
+	# Shots are framed for the floor; lift them with the fighters' ground.
+	var lift := Vector3.UP * (battle.fighters[0].ground + battle.fighters[1].ground) * 0.5
+	pose.position += lift
+	pose.target += lift
 	var weight := 1.0 if cut else (WHIP_SMOOTHING if whip else SMOOTHING)
 	_position = pose.position if cut else _position.lerp(pose.position, weight)
 	_target = pose.target if cut else _target.lerp(pose.target, weight)

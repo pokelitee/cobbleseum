@@ -82,7 +82,7 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		return {}
 	var keep_moving: bool = _intent.get("use", -1) < 0 and _intent.get("dodge", Vector2.ZERO) == Vector2.ZERO
 	if _since_decision < profile.decision_interval_ticks and keep_moving and not _intent.is_empty():
-		return _movement_intent(me, _perceived(foe), _current)
+		return _around_terrain(battle, me, _movement_intent(me, _perceived(foe), _current))
 	_since_decision = 0
 	var seen := _perceived(foe)
 	var threat := _threat(battle, me, seen, side)
@@ -97,8 +97,16 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		Action.DODGE:
 			_intent = {"dodge": _dodge_direction(me, threat.direction)}
 		_:
-			_intent = _movement_intent(me, seen, _current)
+			_intent = _around_terrain(battle, me, _movement_intent(me, seen, _current))
 	return _intent
+
+
+## The intent's walking direction turned, if needed, so it doesn't run into ground the fighter
+## can't climb (pillars, cliffs).
+static func _around_terrain(battle: Battle, me: Fighter, intent: Dictionary) -> Dictionary:
+	if intent.has("move"):
+		intent.move = battle.terrain.steer(me.position, me.radius, me.ground, me.climb, intent.move)
+	return intent
 
 
 ## Candidate actions with their considerations and scores, best first.
@@ -115,7 +123,8 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 		any_ready = true
 		var move := me.moves[i]
 		var considerations := {
-			"in_range": 1.0 if gap <= move.reach() else 0.0,
+			# In range, and able to connect over the terrain (a clear line, a small height gap).
+			"in_range": 1.0 if gap <= move.reach() and battle.can_reach(me, foe, move) else 0.0,
 			"safe_to_commit": 1.0 - 0.6 * urgency,
 		}
 		if move.is_damaging():

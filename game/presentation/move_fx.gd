@@ -233,7 +233,7 @@ func sync_projectiles(battle: Battle) -> void:
 			var move := battle.fighters[projectile.owner].moves[projectile.move]
 			var target: Vector2 = battle.fighters[1 - int(projectile.owner)].position
 			visual = _new_projectile(projectile, move, target)
-		_update_projectile(visual, Vector3(projectile.position.x, PROJECTILE_HEIGHT, projectile.position.y))
+		_update_projectile(visual, Vector3(projectile.position.x, projectile.get("height", PROJECTILE_HEIGHT), projectile.position.y))
 		alive.append(visual)
 	for visual in _projectiles:
 		if not alive.has(visual):
@@ -392,7 +392,7 @@ func _dust(ground: Vector3, colour: Color, size: float) -> void:
 func _new_projectile(projectile: Dictionary, move: BattleMove, target: Vector2) -> Dictionary:
 	var style := style_of(move)
 	var colour := TypeColors.of(move.type)
-	var origin := Vector3(projectile.position.x, PROJECTILE_HEIGHT, projectile.position.y)
+	var origin := Vector3(projectile.position.x, projectile.get("height", PROJECTILE_HEIGHT), projectile.position.y)
 	var direction := Vector3(projectile.velocity.x, 0, projectile.velocity.y).normalized()
 	var reach := maxf(1.0, (target - (projectile.position as Vector2)).length())
 	var root := Node3D.new()

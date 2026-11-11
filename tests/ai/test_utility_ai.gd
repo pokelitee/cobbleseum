@@ -25,7 +25,7 @@ class Idle extends RefCounted:
 
 
 func _battle(ai: Object, moves: Array, foe: Object = null, foe_moves := ["jet"], seed := 1, foe_species := "blaze") -> Battle:
-	var spec := {"seed": seed, "fighters": [{"species": "squirt", "moves": moves}, {"species": foe_species, "moves": foe_moves}]}
+	var spec := {"seed": seed, "arena": "stadium", "fighters": [{"species": "squirt", "moves": moves}, {"species": foe_species, "moves": foe_moves}]}
 	var created := Battle.create(spec, BattleData.new(SPECIES, MOVES, TYPES), [ai, foe if foe != null else Idle.new()])
 	assert_false(created.has("error"), str(created.get("error", "")))
 	return created.battle
@@ -148,7 +148,7 @@ func test_dodges_a_telegraphed_projectile() -> void:
 		var foe := battle.fighters[1]
 		var toward := (me.position - foe.position).normalized()
 		battle.projectiles.append({"id": 99, "owner": 1, "move": 0, "position": foe.position + toward * foe.radius,
-			"velocity": toward * (16.0 / Rules.TICK_RATE), "travelled": 0.0})
+			"velocity": toward * (16.0 / Rules.TICK_RATE), "travelled": 0.0, "height": Rules.CHEST_HEIGHT, "rise": 0.0})
 		for i in 30:
 			battle.step()
 		var mine := battle.events.filter(func(e: Dictionary) -> bool: return e.side == 0 and e.type == "dodge")
@@ -168,7 +168,7 @@ func test_easy_misses_more_dodges_than_hard() -> void:
 			var foe := battle.fighters[1]
 			var toward := (me.position - foe.position).normalized()
 			battle.projectiles.append({"id": 99, "owner": 1, "move": 0, "position": foe.position + toward * foe.radius,
-				"velocity": toward * (16.0 / Rules.TICK_RATE), "travelled": 0.0})
+				"velocity": toward * (16.0 / Rules.TICK_RATE), "travelled": 0.0, "height": Rules.CHEST_HEIGHT, "rise": 0.0})
 			for i in 30:
 				battle.step()
 			if battle.events.any(func(e: Dictionary) -> bool: return e.type == "dodge"):

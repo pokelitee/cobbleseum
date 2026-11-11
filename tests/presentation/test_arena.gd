@@ -12,22 +12,22 @@ func _arc_vertices(arena: Arena) -> Array:
 
 
 func test_a_requested_biome_wins() -> void:
-	for name in ArenaBiomes.NAMES:
-		assert_eq(ArenaBiomes.choose(name, ["Fire"], 3), name)
+	for name in Terrain.BIOMES:
+		assert_eq(Terrain.choose_biome(name, ["Fire"], 3), name)
 
 
 func test_otherwise_the_seed_picks_from_biomes_that_suit_the_types() -> void:
 	var picked := {}
 	for seed in 20:
-		picked[ArenaBiomes.choose("", ["Fire", "Ice"], seed)] = true
+		picked[Terrain.choose_biome("", ["Fire", "Ice"], seed)] = true
 	assert_eq(picked.keys().size(), 4, "grassland, stadium, volcano and snowfield: %s" % [picked.keys()])
 	assert_true(picked.has("volcano") and picked.has("snowfield"))
-	assert_eq(ArenaBiomes.choose("", ["Fire"], 5), ArenaBiomes.choose("", ["Fire"], 5), "same seed, same arena")
-	assert_eq(ArenaBiomes.choose("nowhere", ["Normal"], 0), ArenaBiomes.choose("", ["Normal"], 0), "unknown names are ignored")
+	assert_eq(Terrain.choose_biome("", ["Fire"], 5), Terrain.choose_biome("", ["Fire"], 5), "same seed, same arena")
+	assert_eq(Terrain.choose_biome("nowhere", ["Normal"], 0), Terrain.choose_biome("", ["Normal"], 0), "unknown names are ignored")
 
 
 func test_every_biome_builds_the_same_way_twice_with_seats() -> void:
-	for name in ArenaBiomes.NAMES:
+	for name in Terrain.BIOMES:
 		var first := Arena.create(name, 9)
 		var second := Arena.create(name, 9)
 		assert_eq(first._blocks.size(), second._blocks.size(), name)
@@ -88,5 +88,22 @@ func test_ring_segments_meet_without_gaps() -> void:
 			area += (b - a).cross(c - a).length() * 0.5
 			top += 1
 	assert_almost_eq(area, PI * (36.0 - 25.0), 0.05, "the top covers the ring exactly")
+	arena.free()
+
+
+func test_the_floor_follows_the_battle_terrain() -> void:
+	var terrain := Terrain.generate("volcano", SimRandom.new(11))
+	var arena := Arena.create("volcano", 11, [], terrain)
+	var raised := terrain.cells().filter(func(c: Vector2) -> bool: return terrain.height_at(c) > 0.0)
+	assert_true(raised.size() > 0, "volcanoes have plateaus and spires")
+	var cell: Vector2 = raised[0]
+	var tops := arena._blocks.filter(func(e: Array) -> bool:
+		var at: Vector3 = (e[0] as Transform3D).origin
+		return is_equal_approx(at.x, cell.x) and is_equal_approx(at.z, cell.y))
+	var top := 0.0
+	for entry: Array in tops:
+		var t: Transform3D = entry[0]
+		top = maxf(top, t.origin.y + t.basis.get_scale().y * 0.5)
+	assert_almost_eq(top, terrain.height_at(cell), 1e-4, "the blocks reach the ground's height")
 	arena.free()
 
