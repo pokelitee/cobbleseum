@@ -798,6 +798,23 @@ The camera director picks from a set of shot types based on battle events:
    - `battle.json`;
    - `credits.txt`.
 
+### 12.7 Arenas
+
+Battles take place in one of six biomes: grassland, beach, volcano, snowfield, cave and stadium (`game/presentation/arena/`). Arenas are presentation only; the battle is always the flat round arena of §9.1.
+
+- **Style:** everything is unit blocks in the voxel style of Cobblemon's models, built procedurally and drawn through a few MultiMeshes. No outside art is needed, so there are no further licences.
+- **Layout:**
+  - the battle floor (checkered, with a centre circle and ring in the stadium) and a raised rim at the wall;
+  - terrain that stays within a block of the floor for 6.5 m, where the camera roams, then rises into hills;
+  - props beyond that: trees, pines, palms, rocks, flowers, lava pools, spires, ice and glowing crystals, by biome;
+  - stepped stands in the stadium, the sea around the beach.
+
+  Distances are measured from the floor's edge, so the world follows the arena's size.
+- **Look:** each biome sets its sky, sun angle and colour, ambient light, fog and weather particles (petals, blown sand, rising embers, snow, cave dust).
+- **Choice:** `"arena"` in a battle spec or `--arena=<biome>` picks one. Otherwise the battle seed picks from grassland, stadium and the biomes the fighters' types suit (Fire → volcano, Ice → snowfield, Water → beach, Rock, Ground, Ghost and Dark → cave, and so on).
+- **Seats:** the arena offers seats facing the floor (on the stands, else on low terrain nearby) for spectators.
+- **Determinism:** everything, the weather included (fixed particle seeds), comes from the biome and the battle seed, so every render of a battle is identical.
+
 ## 13. Ranking
 
 - **Storage:** raw battle records go into an append-only JSON Lines store under `results/`, which is git-ignored. Ratings are always derived from the records, never stored on their own.
@@ -935,7 +952,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **Presentation-only life:** leaning into movement, head tracking, squash on landing and recoil.
 - Sim changes bump the rules version and get a balance batch and a new ranking.
 
-**M7: arenas.**
+**M7: arenas.** Six procedural voxel biomes are done (§12.7).
 
 - Three or four biomes (for example grassland, beach, cave, volcano, snowfield, stadium), each with its own ground, props, sky, lighting, fog and weather particles, picked at random or by the fighters' types.
 - Crowds: spectator stands with cheap animated spectators, including Cobblemon models at the edges, reacting to big hits and knockouts.

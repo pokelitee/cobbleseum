@@ -4,10 +4,10 @@ extends RefCounted
 ## (concepts_brief.md §10). Shared by the battle view and tools/record.gd.
 ## - --play=<species>: the player against --vs, which --ai controls.
 ## - --watch=<species>: AI against AI; --ai controls it and --vs-ai (default: --ai) its foe.
-## --vs defaults to DEFAULT_FOE and --seed to one from the clock.
+## --vs defaults to DEFAULT_FOE and --seed to one from the clock; --arena picks the arena.
 
 const DEFAULT_FOE := "blastoise"
-const KEYS: Array[String] = ["play", "watch", "vs", "ai", "vs-ai", "seed"]
+const KEYS: Array[String] = ["play", "watch", "vs", "ai", "vs-ai", "seed", "arena"]
 
 
 ## Splits `args` into these flags {key: value} and every other argument.
@@ -37,10 +37,13 @@ static func to_spec(flags: Dictionary) -> Dictionary:
 	var seed := str(flags.get("seed", ""))
 	var ai: String = flags.get("ai", Controllers.DEFAULT_AI)
 	var foe: String = flags.get("vs", DEFAULT_FOE)
-	return {"seed": seed.to_int() if seed.is_valid_int() else int(Time.get_ticks_usec() % 1000000), "fighters": [
+	var spec := {"seed": seed.to_int() if seed.is_valid_int() else int(Time.get_ticks_usec() % 1000000), "fighters": [
 		{"species": play if watch.is_empty() else watch, "ai": "player" if watch.is_empty() else ai},
 		{"species": foe, "ai": ai if watch.is_empty() else flags.get("vs-ai", ai)},
 	]}
+	if flags.has("arena"):
+		spec.arena = flags.arena
+	return spec
 
 
 ## Flags that describe `spec` exactly (seed included), for passing a battle on to another process.
@@ -51,4 +54,5 @@ static func from_spec(spec: Dictionary) -> PackedStringArray:
 		"--%s=%s" % ["play" if playing else "watch", fighters[0].species],
 		"--vs=%s" % fighters[1].species,
 		"--ai=%s" % (fighters[1].ai if playing else fighters[0].ai),
-	] + ([] if playing else ["--vs-ai=%s" % fighters[1].ai]) + ["--seed=%d" % int(spec.seed)])
+	] + ([] if playing else ["--vs-ai=%s" % fighters[1].ai]) + ["--seed=%d" % int(spec.seed)]
+		+ (["--arena=%s" % spec.arena] if spec.has("arena") else []))

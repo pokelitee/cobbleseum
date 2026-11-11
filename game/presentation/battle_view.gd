@@ -5,7 +5,9 @@ extends Node3D
 ## AI debug overlay from the start; F3 toggles it in the window.
 ##
 ## Instead of a spec file, SpecFlags can describe the battle: --watch=<species> [--vs=<species>]
-## [--ai=<profile>] [--vs-ai=<profile>] [--seed=N] for AI against AI.
+## [--ai=<profile>] [--vs-ai=<profile>] [--seed=N] for AI against AI. --arena=<biome> (or a
+## spec's "arena") picks the arena (ArenaBiomes.NAMES); otherwise the seed picks one that
+## suits the fighters' types.
 ##
 ## Play mode (--play=<species> [--vs=<species>] [--ai=<profile>] [--seed=N], or a spec with
 ## "ai": "player"): the battle runs live, one tick per 1/30 s, since a player's choices can't
@@ -74,6 +76,7 @@ var _frames_shown := 0
 var _clip_mode := false
 var _expected_checksum := ""
 var _accumulator := 0.0
+var _arena: Arena
 ## Play mode state.
 var _live := false
 var _player_side := -1
@@ -117,7 +120,8 @@ func _ready() -> void:
 
 	var size := get_viewport().get_visible_rect().size
 	_portrait = VideoFormat.is_portrait(size)
-	_build_stage()
+	_build_stage(ArenaBiomes.choose(str(spec.get("arena", "")),
+		battle.fighters[0].types + battle.fighters[1].types, int(spec.seed)))
 	for side in 2:
 		var entry: Dictionary = loaded.data.roster[battle.fighters[side].species_id]
 		var view := FighterView.from_model(MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
@@ -509,30 +513,12 @@ func _sync_views() -> void:
 		_frames_shown / float(Rules.TICK_RATE), _segment_frames == 0)
 
 
-func _build_stage() -> void:
-	var arena := MeshInstance3D.new()
-	var disc := CylinderMesh.new()
-	disc.top_radius = Rules.ARENA_RADIUS
-	disc.bottom_radius = Rules.ARENA_RADIUS
-	disc.height = 0.2
-	arena.mesh = disc
-	arena.position.y = -0.1
-	var floor_material := StandardMaterial3D.new()
-	floor_material.albedo_color = Color(0.42, 0.55, 0.38)
-	arena.material_override = floor_material
-	add_child(arena)
-	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-55, 30, 0)
-	light.shadow_enabled = true
-	add_child(light)
-	var environment := WorldEnvironment.new()
-	environment.environment = Environment.new()
-	environment.environment.background_mode = Environment.BG_COLOR
-	environment.environment.background_color = Color(0.53, 0.72, 0.9)
-	environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.environment.ambient_light_color = Color(0.65, 0.65, 0.7)
-	add_child(environment)
+## The arena (its own sky, sun and weather) and the camera.
+func _build_stage(biome: String) -> void:
+	_arena = Arena.create(biome, int(battle.spec.seed))
+	add_child(_arena)
 	_camera = Camera3D.new()
+	_camera.far = Arena.OUTER_RADIUS * 3.0
 	add_child(_camera)
 
 
