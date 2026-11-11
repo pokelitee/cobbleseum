@@ -32,3 +32,17 @@ func test_shake_is_frame_based_and_settles() -> void:
 
 func test_big_hit_shows_damage_crit_and_effectiveness() -> void:
 	assert_eq(_run_effects()[1], 3)
+
+
+func test_speed_lines_fade_in_and_out() -> void:
+	var camera := Camera3D.new()
+	var fx := ImpactFX.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(fx)
+	fx.setup(camera, Vector2(1920, 1080), Vector2(170, 80))
+	for i in 3:
+		fx.set_speed_lines(true)
+	assert_almost_eq(fx._speed_lines.material.get_shader_parameter("intensity"), 0.6, 1e-6)
+	fx.set_speed_lines(false)
+	assert_almost_eq(fx._speed_lines.material.get_shader_parameter("intensity"), 0.4, 1e-6)
+	fx.free()
+	camera.free()
