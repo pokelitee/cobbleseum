@@ -1,35 +1,34 @@
 class_name Arena
 extends Node3D
-## A blocky arena around the battle floor (concepts_brief.md §12.7): the floor and its rim,
-## terrain that stays flat near the floor (room for the camera) and rises into hills further
-## out, props, stands, sky, sun, fog and weather, all from one biome (ArenaBiomes) and seeded
-## by the battle, so every render of a battle is identical. Presentation only: the battle
-## itself is always the flat round arena of §9.1.
+## The world around the battle (concepts_brief.md §12.7): the battle's own landscape
+## (Terrain, §9.8) out to Terrain.WORLD_RADIUS, with its features, small details, props on the
+## hills, sky, sun, fog and weather, all from one biome (ArenaBiomes) and seeded by the battle,
+## so every render of a battle is identical. The stadium has a builder of its own (Stadium).
 ##
 ## Everything is blocks in the voxel style of Cobblemon's models: boxes drawn through
 ## MultiMeshes, and curved blocks (ring segments) built as exact meshes so rings have no gaps
 ## or overlaps. A surface shader (arena_surface.gdshader) adds pixel grain lined up with each
-## face, and grime, so no outside art is needed. The stadium has a builder of its own (Stadium).
+## face, and grime, so no outside art is needed.
 
-## The floor reaches just past the simulation's wall, with a raised rim around it.
+## The battle floor's edge (the stadium's field), just past the simulation's wall.
 const FLOOR_RADIUS := Rules.ARENA_RADIUS + 0.5
-const RIM_WIDTH := 1.0
-const RIM_HEIGHT := 0.4
-## Distances below are from the floor's edge, so the world follows the arena's size.
-## Terrain stays within a block of the floor out to CLEAR_RADIUS, where the camera roams.
-const CLEAR_RADIUS := FLOOR_RADIUS + 6.5
-const OUTER_RADIUS := FLOOR_RADIUS + 31.5
-## Props stand beyond this; only low ones (flowers) come closer.
-const PROP_RADIUS := FLOOR_RADIUS + 9.5
-const LOW_PROP_RADIUS := FLOOR_RADIUS + 2.5
-## Where spectators may sit outside a stadium: terrain this far out, at most this high.
-const SEAT_RANGE := Vector2(FLOOR_RADIUS + 5.5, FLOOR_RADIUS + 13.5)
+## Props on the land beyond the arena start just past its wall, densest in EDGE_BAND (they mark
+## the edge, like a treeline), thinner further out.
+const PROP_RADIUS := Rules.ARENA_RADIUS + 1.5
+const EDGE_BAND := 3.0
+const EDGE_DENSITY := 3.0
+## Patch noise above this gives the patch colour (paths, gravel, ash).
+const PATCH_THRESHOLD := 0.3
+## Where spectators may sit outside a stadium: ground this far out, at most this high.
+const SEAT_RANGE := Vector2(FLOOR_RADIUS + 3.0, FLOOR_RADIUS + 12.0)
 const SEAT_MAX_HEIGHT := 3.0
 const WATER_SIZE := 240.0
-const PARTICLE_AREA := Vector3(FLOOR_RADIUS * 3.5, 8, FLOOR_RADIUS * 3.5)
+const PARTICLE_AREA := Vector3(FLOOR_RADIUS * 3.0, 8, FLOOR_RADIUS * 3.0)
 const SURFACE_SHADER := preload("res://game/presentation/arena/arena_surface.gdshader")
-## Cameras stay this far inside where the world rises (Stadium's wall, or the clear ground).
+## Cameras stay this far inside the stadium's wall; elsewhere they may go CAMERA_OVERHANG past
+## the arena's (see-through keeps the fighters in view if the land is in the way).
 const CAMERA_MARGIN := 1.0
+const CAMERA_OVERHANG := 2.0
 ## Curved faces are split every this many metres along the arc, so they look round.
 const ARC_STEP := 0.25
 ## Ring blocks are about this long.
@@ -39,7 +38,7 @@ var biome_name := ""
 ## Places a spectator can stand, facing the floor's centre (world transforms).
 var seats: Array[Transform3D] = []
 ## How far from the centre a camera may go before it would be inside the scenery.
-var camera_limit := CLEAR_RADIUS - CAMERA_MARGIN
+var camera_limit := Rules.ARENA_RADIUS + CAMERA_OVERHANG
 
 var _biome: Dictionary
 ## The battle's ground: the floor is built at its heights.
@@ -53,7 +52,7 @@ var _glowing: Array = []
 var _arcs := {}
 ## The surface shader's materials, for see-through updates.
 var _surfaces: Array[ShaderMaterial] = []
-## Terrain height by cell, so props sit on top.
+## Ground height by cell beyond the arena, so props sit on top.
 var _heights := {}
 
 
@@ -68,6 +67,7 @@ static func create(name: String, seed: int, names: Array = [], terrain: Terrain 
 	arena._noise.seed = seed
 	arena._noise.frequency = 0.06
 	arena._terrain = terrain if terrain != null else Terrain.flat(name)
+	arena._terrain.fill_world()
 	arena._build(names)
 	return arena
 
@@ -77,8 +77,7 @@ func _build(names: Array) -> void:
 		Stadium.build(self, _rng, names)
 		camera_limit = Stadium.wall_radius() - CAMERA_MARGIN
 	else:
-		_build_floor()
-		_build_terrain()
+		_build_landscape()
 		_build_props()
 	_add_blocks(_blocks, false)
 	_add_blocks(_glowing, true)
@@ -199,60 +198,107 @@ func add_box(centre: Vector2, bottom: float, top: float, colour: Color, size := 
 	(_glowing if glow else _blocks).append(entry)
 
 
-func _build_floor() -> void:
-	for cell in cells(FLOOR_RADIUS + RIM_WIDTH):
+func _build_landscape() -> void:
+	var water: float = _biome.get("water", -INF)
+	for cell in _terrain.world_cells(Terrain.WORLD_RADIUS):
+		var ground := _terrain.ground_at(cell)
+		var steep := _steepness(cell, ground)
+		var side := _colour(2) if steep >= 1.0 else _colour(4)
+		add_box(cell, -4.0, ground - 0.25, vary(side, 0.05))
+		add_box(cell, ground - 0.25, ground, vary(_surface(cell, ground, steep, water), 0.04))
+		var kind := _terrain.kind_at(cell)
+		if kind != Terrain.Kind.GROUND:
+			_feature(kind, cell, ground, _terrain.height_at(cell))
+		elif ground > water:
+			_decorate(cell, ground, steep)
 		var distance := cell.length()
-		if distance > FLOOR_RADIUS:
-			add_box(cell, -1.0, RIM_HEIGHT, vary(_colour(2)))
-			continue
-		var checker := (int(floor(cell.x)) + int(floor(cell.y))) % 2 == 0
-		var floor_colour := _colour(0) if checker else _colour(1)
-		var height := _terrain.height_at(cell)
-		if height <= 0.0:
-			add_box(cell, -1.0, 0.0, vary(floor_colour, 0.02))
-		elif _is_pillar(cell, height):
-			# Cover: a pillar of the biome's rock, with a cap.
-			add_box(cell, -1.0, height - 0.25, vary(_colour(4), 0.06))
-			add_box(cell, height - 0.25, height, vary(_colour(2), 0.06))
-		else:
-			# Raised ground: earth sides, the floor's own surface on top.
-			add_box(cell, -1.0, height - 0.25, vary(_colour(4), 0.04))
-			add_box(cell, height - 0.25, height, vary(_colour(3), 0.03))
+		if distance > Rules.ARENA_RADIUS + 1.0:
+			_heights[cell] = ground
+			if ground >= maxf(water, 0.0) and distance >= SEAT_RANGE.x and distance <= SEAT_RANGE.y and ground <= SEAT_MAX_HEIGHT and steep < 1.0:
+				add_seat(cell, ground)
 
 
-## A cell standing well above all four neighbours is a pillar of cover, not raised ground.
-func _is_pillar(cell: Vector2, height: float) -> bool:
+## The largest height difference to a neighbouring cell's ground.
+func _steepness(cell: Vector2, ground: float) -> float:
+	var steep := 0.0
 	for side in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
-		if _terrain.height_at(cell + side) > height - 1.0:
-			return false
-	return true
+		steep = maxf(steep, absf(ground - _terrain.ground_at(cell + side)))
+	return steep
 
 
-func _build_terrain() -> void:
-	var hills := float(_biome.hills)
-	var under_water := _biome.has("water")
-	for cell in cells(OUTER_RADIUS):
-		var distance := cell.length()
-		if distance <= FLOOR_RADIUS + RIM_WIDTH:
-			continue
-		var bump := _noise.get_noise_2d(cell.x, cell.y)
-		var rise := clampf((distance - CLEAR_RADIUS) / (OUTER_RADIUS - CLEAR_RADIUS), 0.0, 1.0)
-		var height := 0.0
-		if under_water:
-			# Sand slopes down into the sea beyond the clear ring, with a few sandbars.
-			height = roundf(bump * 1.2 - rise * 4.0)
-		elif distance < CLEAR_RADIUS:
-			height = maxf(0.0, roundf(bump * 1.2)) if distance > LOW_PROP_RADIUS else 0.0
-		else:
-			height = roundf(rise * rise * hills + (bump * 0.5 + 0.5) * (1.0 + rise * hills * 0.6))
-		_heights[cell] = height
-		var top := _colour(3)
-		if under_water and height <= -1.0:
-			top = _colour(4)
-		add_box(cell, -3.0, height - 0.25, vary(_colour(4)))
-		add_box(cell, height - 0.25, height, vary(top))
-		if height >= 0.0 and distance >= SEAT_RANGE.x and distance <= SEAT_RANGE.y and height <= SEAT_MAX_HEIGHT:
-			add_seat(cell, height)
+## A cell's top: bare stone on steep ground, patches (paths, gravel, ash, trampled snow) where
+## the patch noise is high, the higher-ground colour above a metre, else the biome's ground;
+## darker under water.
+func _surface(cell: Vector2, ground: float, steep: float, water: float) -> Color:
+	if ground <= water:
+		return _colour(4).darkened(0.25)
+	if steep >= 1.0:
+		return _colour(2)
+	if _noise.get_noise_2d(cell.x * 1.7 + 100.0, cell.y * 1.7) > PATCH_THRESHOLD:
+		return _colour(1)
+	return _colour(3) if ground >= 1.0 else _colour(0)
+
+
+## What stands on a cell, drawn within its footprint and up to the battle's height for it (so
+## shots stop where the rock is seen), plus canopies above the trunks.
+func _feature(kind: Terrain.Kind, at: Vector2, ground: float, top: float) -> void:
+	var stone := _colour(2)
+	match kind:
+		Terrain.Kind.ROCK:
+			add_box(at, ground, top - 0.5, vary(stone, 0.1), Vector2(1.0, 1.0))
+			add_box(at, top - 0.5, top, vary(stone.lightened(0.12), 0.08), Vector2(0.8, 0.8))
+		Terrain.Kind.TREE:
+			add_box(at, ground, top, vary(Color(0.42, 0.29, 0.18)), Vector2(0.7, 0.7))
+			add_box(at, top - 0.6, top + 1.4, vary(Color(0.27, 0.5, 0.22), 0.08), Vector2(3, 3))
+			add_box(at, top + 1.4, top + 2.2, vary(Color(0.3, 0.55, 0.24), 0.08), Vector2(1.8, 1.8))
+		Terrain.Kind.PINE:
+			add_box(at, ground, ground + 1.2, Color(0.35, 0.25, 0.17), Vector2(0.6, 0.6))
+			for layer in 3:
+				var width := 2.6 - layer * 0.8
+				var bottom := ground + 1.0 + layer * 1.1
+				add_box(at, bottom, bottom + 1.1, vary(Color(0.16, 0.34, 0.24)), Vector2(width, width))
+				add_box(at, bottom + 1.1, bottom + 1.25, Color(0.95, 0.97, 1.0), Vector2(width * 0.7, width * 0.7))
+		Terrain.Kind.PALM:
+			var lean := Vector2(_rng.randf_range(-0.25, 0.25), _rng.randf_range(-0.25, 0.25))
+			var height := top - ground
+			for i in int(height):
+				add_box(at + lean * (float(i) / height), ground + i, ground + i + 1, Color(0.55, 0.42, 0.27), Vector2(0.5, 0.5))
+			var crown := at + lean
+			add_box(crown, top, top + 0.3, vary(Color(0.24, 0.55, 0.22)), Vector2(3.6, 0.8))
+			add_box(crown, top, top + 0.3, vary(Color(0.24, 0.55, 0.22)), Vector2(0.8, 3.6))
+		Terrain.Kind.LOG:
+			add_box(at, ground, top, vary(Color(0.45, 0.32, 0.2), 0.06), Vector2(1.0, 0.8))
+		Terrain.Kind.BASALT:
+			add_box(at, ground, top - 0.15, vary(stone, 0.06), Vector2(0.92, 0.92))
+			add_box(at, top - 0.15, top, vary(stone.lightened(0.2), 0.05), Vector2(0.8, 0.8))
+		Terrain.Kind.STALAGMITE:
+			var height := top - ground
+			add_box(at, ground, ground + height * 0.45, vary(stone, 0.08), Vector2(0.95, 0.95))
+			add_box(at, ground + height * 0.45, ground + height * 0.8, vary(stone, 0.08), Vector2(0.7, 0.7))
+			add_box(at, ground + height * 0.8, top, vary(stone.lightened(0.1), 0.08), Vector2(0.45, 0.45))
+		Terrain.Kind.ICE:
+			var height := top - ground
+			add_box(at, ground, ground + height * 0.6, Color(0.7, 0.85, 0.95), Vector2(0.95, 0.95))
+			add_box(at, ground + height * 0.6, top, Color(0.8, 0.92, 1.0), Vector2(0.6, 0.6))
+		Terrain.Kind.CRYSTAL:
+			var colour: Color = [Color(0.4, 0.85, 1.0), Color(0.75, 0.45, 1.0)][_rng.randi() % 2]
+			add_box(at, ground, top, colour, Vector2(0.5, 0.5), true)
+			add_box(at + Vector2(0.25, 0.2), ground, ground + (top - ground) * 0.6, colour, Vector2(0.35, 0.35), true)
+
+
+## Small things on level ground that the battle ignores: grass tufts and flowers, pebbles,
+## shells, mushrooms, glowing cracks in the volcano.
+func _decorate(at: Vector2, ground: float, steep: float) -> void:
+	if steep > 0.0 or _rng.randf() > float(_biome.get("detail", 0.0)):
+		return
+	var spot := at + Vector2(_rng.randf_range(-0.35, 0.35), _rng.randf_range(-0.35, 0.35))
+	var bits: Array = _biome.get("details", [])
+	if bits.is_empty():
+		return
+	var bit: Array = bits[_rng.randi() % bits.size()]
+	var size: Vector2 = bit[1]
+	var glow: bool = bit.size() > 2 and bit[2]
+	add_box(spot, ground, ground + size.y, vary(bit[0], 0.06), Vector2(size.x, size.x * _rng.randf_range(0.6, 1.4)), glow)
 
 
 func add_seat(cell: Vector2, height: float) -> void:
@@ -270,11 +316,11 @@ func _build_props() -> void:
 		var ground: float = _heights[cell]
 		if _biome.has("water") and ground < 0.0:
 			continue
+		if distance < PROP_RADIUS:
+			continue
+		var density := EDGE_DENSITY if distance < PROP_RADIUS + EDGE_BAND else 1.0
 		for kind: String in kinds:
-			var low := kind == "flowers" or kind == "lava"
-			if distance < (LOW_PROP_RADIUS if low else PROP_RADIUS):
-				continue
-			if _rng.randf() < float(props[kind]):
+			if _rng.randf() < float(props[kind]) * density:
 				_prop(kind, cell, ground)
 				break
 

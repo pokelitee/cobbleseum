@@ -35,18 +35,24 @@ func test_every_biome_builds_the_same_way_twice_with_seats() -> void:
 		assert_eq(_arc_vertices(first), _arc_vertices(second), name)
 		assert_true(first.seats.size() > 20, "%s has room for spectators" % name)
 		for seat in first.seats:
-			assert_true(Vector2(seat.origin.x, seat.origin.z).length() > Arena.FLOOR_RADIUS + Arena.RIM_WIDTH, name)
+			assert_true(Vector2(seat.origin.x, seat.origin.z).length() > Rules.ARENA_RADIUS + 1.0, name)
 		first.free()
 		second.free()
 
 
-func test_nothing_stands_on_the_battle_floor() -> void:
-	var arena := Arena.create("grassland", 4)
-	for entry: Array in arena._blocks + arena._glowing:
-		var at: Vector3 = (entry[0] as Transform3D).origin
-		var top := at.y + (entry[0] as Transform3D).basis.get_scale().y * 0.5
-		if Vector2(at.x, at.z).length() <= Arena.FLOOR_RADIUS:
-			assert_true(top <= 0.001, "floor blocks end at the floor: %s" % at)
+func test_bare_ground_is_built_at_the_terrain_height() -> void:
+	var terrain := Terrain.generate("grassland", SimRandom.new(4))
+	var arena := Arena.create("grassland", 4, [], terrain)
+	var checked := 0
+	for entry: Array in arena._blocks:
+		var t: Transform3D = entry[0]
+		var cell := Vector2(t.origin.x, t.origin.z)
+		var size := t.basis.get_scale()
+		# The ground's top layer: a full cell, a quarter of a metre deep.
+		if cell.length() <= Rules.ARENA_RADIUS and is_equal_approx(size.x, 1.0) and is_equal_approx(size.y, 0.25):
+			assert_almost_eq(t.origin.y + 0.125, terrain.ground_at(cell), 1e-4, "ground at %s" % cell)
+			checked += 1
+	assert_true(checked > 300, "checked %d cells" % checked)
 	arena.free()
 
 

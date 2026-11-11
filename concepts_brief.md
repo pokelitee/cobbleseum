@@ -584,6 +584,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 14** (the continuous landscape and features; 1,000 battles): median 40.4 s, 10th–90th percentile 20.9–76.0 s, draws 3.0%, side A 48.8%.
 - **Rules version 13** (a 14 m arena, more cover, the utility AI's terrain tactics; 1,000 battles): median 40.3 s, 10th–90th percentile 20.1–74.9 s, draws 3.0%, side A 48.0%.
 - **Rules version 12** (terrain, §9.8; 1,000 battles): median 40.3 s, draws 2.6%, side A 48.6%. Over 100 battles across biomes, 3% of shots were blocked and fighters spent 3% of the time on raised ground; terrain is mild until the AI uses cover on purpose.
 - **Rules version 11** (an 11 m arena, fighters starting 10 m apart; 1,000 battles): median 39.7 s, 10th–90th percentile 20.7–72.9 s, draws 2.2%, side A 48.8%, melee 38% and projectiles 40% of move uses (unchanged). The average gap went from 3.5 m to 3.8 m.
@@ -596,13 +597,16 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 
 Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.gd`). The battle is still played on the floor plane, with a height for every 1 m cell on top:
 
-- **Generation:** from the battle seed for the arena's biome. Plateaus rise 0.5–1.5 m with a ramp of 0.5 m steps down one side and cliffs elsewhere; pillars of cover stand 1.5–4 m tall, at least 3 m apart and clear of the wall. Each fighter's starting spot is kept flat and open for 2.5 m. The stadium is flat; caves and volcanoes have the most relief.
+- **Generation** (since rules version 14): one continuous landscape from the battle seed for the arena's biome, a height per 1 m cell in 0.5 m steps. Inside the arena, noise mounds (half the ground stays low, the rest rises up to about 2 m by biome) whose contours become terraces: walkable where neighbouring cells differ by a step, cliffs where they differ more. Beyond the wall the land eases into hills over 14 m (into the sea at the beach), so the battle area is part of the world, not a disc cut out of it.
+- **Features** stand on the ground, by biome: rock clusters (a 2–3 m centre with lower stones around it), trees, pines and palms (trunks block), fallen logs (low enough to step onto), basalt column clusters, stalagmites, ice spikes and crystals; 5–17 per arena, at least 2.5 m apart.
+- **Fairness:** each starting spot is level and open for 2.5 m, blending back into the land over 2 m, and the two starts are always connected by walkable ground (checked both ways; otherwise the land and features are toned down and regenerated, falling back to flat ground). The stadium is flat.
+- **Cost:** the battle only generates the arena and a 5 m margin; the presentation extends the same noise to the rest of the world. Creating a battle takes about 25 ms.
 - **Biome:** the arena is chosen in the simulation (the spec's `"arena"`, else the seed from biomes that suit the fighters' types), since it decides the terrain.
 - **Moving:** a fighter stands at the height of the cell under its centre and can step up 0.5 m (fliers 1.5 m); stepping down is free. Higher ground is a wall it slides along.
 - **Projectiles** leave from and aim at chest height (0.8 m above the ground), rising or falling to reach the foe, and stop where the ground rises above them. They hit within 1 m of the target's chest height.
 - **Melee and area moves** only reach across height differences of 1 m and 1.5 m.
 - **AI:** both AIs only use a move that can connect (a clear line for projectiles and status moves, a small enough height difference otherwise), and steer around ground they can't climb. The utility AI also has two terrain tactics where the ground rises at least 1 m somewhere: with no attack ready while the foe can see it and has a ranged attack coming, it heads for the nearest spot out of sight; with a ranged move ready and in range but no clear line, it heads for the nearest spot with one (spots are tried 16 ways at 1.5 and 3 m). They're chosen about 3–4% of the time in caves; their main effect is not getting stuck without a line of sight.
-- **Amount:** since rules version 13, cover scales with the 14 m arena: 2–4 plateaus and 4–13 pillars by biome. In 100 cave battles, 7% of shots hit rock and the fighters were out of each other's sight 10% of the time; in grassland 4% and 6%. Fighters fight 3–6 m apart, so what counts is cover near them, not the total.
+- **Effect** (rules version 14, 60 battles per biome): 6% (beach) to 14% (cave) of shots hit rock, the fighters are out of each other's sight 10–26% of the time and on raised ground 14–20% of it.
 - **See-through:** in the view, anything between the camera and a fighter (above that fighter's ground) dissolves with a screen-door dither, so cover never hides the battle.
 - **Cost:** each cell keeps the highest ground within 3 cells, so collision and sight checks stop early where nothing rises; battles take about 20% longer to simulate.
 
@@ -822,12 +826,12 @@ Battles take place in one of six biomes: grassland, beach, volcano, snowfield, c
 
 - **Style:** everything is blocks in the voxel style of Cobblemon's models, built procedurally: boxes through MultiMeshes, and curved blocks as exact ring segments (meshes with their own top, underside, curved faces and ends), so rings meet without gaps or overlaps. A surface shader breaks up each block's colour the way Cobblemon's textures are: pixel grain at 16 pixels per metre, laid out on each face so the pixels line up with its edges, and grime toward the ground on upright faces (moss in the stadium). Cobblemon's own pixels are 16 per block before the roster's scale, which puts the models at 15–27 pixels per metre (20 at the median scale of 0.8), close to the arenas'. No outside art is needed, so there are no further licences.
 - **Layout:**
-  - the battle floor (checkered, with a centre circle and ring in the stadium) and a raised rim at the wall;
-  - terrain that stays within a block of the floor for 6.5 m, where the camera roams, then rises into hills;
-  - props beyond that: trees, pines, palms, rocks, flowers, lava pools, spires, ice and glowing crystals, by biome;
+  - the battle's own landscape (§9.8) out to 44 m, with its features: no floor or kerb, the arena is part of the land;
+  - the ground coloured by slope (bare stone on steep ground), height and patches (paths, gravel, ash, trampled snow), with small details the battle ignores (grass tufts, flowers, pebbles, shells, mushrooms, glowing cracks);
+  - props on the land beyond the wall, three times as dense in the first 3 m, so a treeline or ring of rocks marks the edge;
   - the sea around the beach.
 
-  Distances are measured from the floor's edge, so the world follows the arena's size.
+  Cameras may go 2 m past the wall; see-through keeps the fighters in view if the land is in the way.
 - **Look:** each biome sets its sky, sun angle and colour, ambient light, fog and weather particles (petals, blown sand, rising embers, snow, cave dust).
 - **Choice:** `"arena"` in a battle spec or `--arena=<biome>` picks one. Otherwise the battle seed picks from grassland, stadium and the biomes the fighters' types suit (Fire → volcano, Ice → snowfield, Water → beach, Rock, Ground, Ghost and Dark → cave, and so on). The choice is the simulation's, since each biome's terrain is part of the battle (§9.8); the floor, plateaus and pillars are built from that terrain, and fighters stand at its height.
 - **The stadium** (`Stadium`) is a coliseum rather than terrain, about 15 m tall and 75 m across:
