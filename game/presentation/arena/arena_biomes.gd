@@ -61,15 +61,18 @@ const BIOMES := {
 		"props": {"crystal": 0.03, "spire": 0.04},
 		"particles": "dust",
 	},
+	# A cool, slightly dim day under thin haze, so the moves' colours stand out; the
+	# coliseum itself comes from Stadium.
 	"stadium": {
-		"colours": [Color(0.6, 0.58, 0.55), Color(0.55, 0.53, 0.5), Color(0.85, 0.85, 0.85), Color(0.42, 0.58, 0.32), Color(0.45, 0.35, 0.25)],
-		"sky": [Color(0.3, 0.52, 0.88), Color(0.78, 0.86, 0.95)],
-		"sun": {"angle": Vector3(-55, 30, 0), "colour": Color(1.0, 0.97, 0.9), "energy": 1.1},
-		"ambient": [Color(0.65, 0.68, 0.75), 0.9],
-		"fog": [Color(0.78, 0.86, 0.95), 0.003],
-		"hills": 3.0,
-		"stands": true,
-		"props": {"tree": 0.015},
+		"colours": [Color(0.78, 0.71, 0.58), Color(0.73, 0.66, 0.53), Color(0.62, 0.63, 0.6), Color(0.36, 0.48, 0.3), Color(0.45, 0.47, 0.44)],
+		"sky": [Color(0.32, 0.5, 0.78), Color(0.72, 0.8, 0.88)],
+		"sun": {"angle": Vector3(-56, 35, 0), "colour": Color(0.98, 0.95, 0.9), "energy": 0.9},
+		"ambient": [Color(0.6, 0.66, 0.76), 0.75],
+		"fog": [Color(0.72, 0.78, 0.85), 0.0012],
+		"hills": 0.0,
+		"stadium": true,
+		"moss": 0.35,
+		"props": {},
 		"particles": "",
 	},
 }
