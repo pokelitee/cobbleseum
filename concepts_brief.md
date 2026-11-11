@@ -832,7 +832,7 @@ Battles take place in one of six biomes: grassland, beach, volcano, snowfield, c
   - **Light:** screen-space ambient occlusion, so creases and the bases of rocks read.
 - **Layout:**
   - the battle's own landscape (§9.8) out to 44 m, with its features: no floor or kerb, the arena is part of the land;
-  - the ground coloured by slope (bare stone on steep ground), height and patches (paths, gravel, ash, trampled snow), with small details the battle ignores (grass tufts, flowers, pebbles, shells, mushrooms, glowing cracks);
+  - the ground coloured by slope (bare stone on steep ground), height and patches (paths, gravel, ash, trampled snow), with small low-poly details the battle ignores, gathered in patches as clusters on the visible ground: grass tufts (a low mound with a few lighter blades, since thin blades shade dark), flowers on stems, faceted pebbles, shells, snow drifts, jagged glowing cracks and glowing mushrooms;
   - props on the land beyond the wall, three times as dense in the first 3 m, so a treeline or ring of rocks marks the edge;
   - the sea around the beach.
 

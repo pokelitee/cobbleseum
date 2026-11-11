@@ -31,7 +31,8 @@ func test_every_biome_builds_the_same_way_twice_with_seats() -> void:
 		var first := Arena.create(name, 9)
 		var second := Arena.create(name, 9)
 		assert_eq(first._blocks.size(), second._blocks.size(), name)
-		assert_eq(first._blocks[first._blocks.size() / 2], second._blocks[second._blocks.size() / 2], name)
+		if not first._blocks.is_empty():
+			assert_eq(first._blocks[first._blocks.size() / 2], second._blocks[second._blocks.size() / 2], name)
 		assert_eq(_arc_vertices(first), _arc_vertices(second), name)
 		assert_true(first.seats.size() > 20, "%s has room for spectators" % name)
 		for seat in first.seats:

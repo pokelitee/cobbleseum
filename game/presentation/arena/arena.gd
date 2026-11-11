@@ -19,6 +19,8 @@ const EDGE_BAND := 3.0
 const EDGE_DENSITY := 3.0
 ## Patch noise above this gives the patch colour (paths, gravel, ash).
 const PATCH_THRESHOLD := 0.3
+## Details grow where their own noise is above this (about half the ground), in patches.
+const DETAIL_PATCH := 0.0
 ## Ground corners are nudged off the grid by up to this much, so it doesn't read as squares.
 const CORNER_JITTER := 0.18
 ## Features' bases sink this far, so they sit in the faceted ground rather than on a corner.
@@ -413,19 +415,80 @@ func _palm(base: Vector3, height: float) -> void:
 		LowPoly.log_(tool, vary(Color(0.24, 0.55, 0.22), 0.08), crown + direction * 1.0, direction, 2.0, 0.12, 4)
 
 
-## Small things on level ground that the battle ignores: grass tufts and flowers, pebbles,
-## shells, mushrooms, glowing cracks in the volcano.
+## Small things on level ground that the battle ignores, in low-poly shapes: clumps of grass,
+## flowers, pebbles, shells, snow drifts, glowing cracks and mushrooms. They gather in patches
+## (where the detail noise is high) as small clusters, and sit on the visible ground.
 func _decorate(at: Vector2, ground: float, steep: float) -> void:
-	if steep > 0.0 or _rng.randf() > float(_biome.get("detail", 0.0)):
+	var kinds: Dictionary = _biome.get("details", {})
+	if steep > 0.0 or kinds.is_empty():
 		return
-	var spot := at + Vector2(_rng.randf_range(-0.35, 0.35), _rng.randf_range(-0.35, 0.35))
-	var bits: Array = _biome.get("details", [])
-	if bits.is_empty():
+	if _noise.get_noise_2d(at.x * 0.8 - 300.0, at.y * 0.8) < DETAIL_PATCH:
 		return
-	var bit: Array = bits[_rng.randi() % bits.size()]
-	var size: Vector2 = bit[1]
-	var glow: bool = bit.size() > 2 and bit[2]
-	add_box(spot, ground, ground + size.y, vary(bit[0], 0.06), Vector2(size.x, size.x * _rng.randf_range(0.6, 1.4)), glow)
+	if _rng.randf() > float(_biome.get("detail", 0.0)):
+		return
+	var kind := _pick_detail(kinds)
+	for n in _rng.randi_range(2, 5):
+		var spot := at + Vector2(_rng.randf_range(-0.4, 0.4), _rng.randf_range(-0.4, 0.4))
+		_detail(kind, Vector3(spot.x, surface_at(spot, ground), spot.y))
+
+
+func _pick_detail(kinds: Dictionary) -> String:
+	var names: Array = kinds.keys()
+	names.sort()
+	var total := 0.0
+	for name: String in names:
+		total += float(kinds[name])
+	var roll := _rng.randf() * total
+	for name: String in names:
+		roll -= float(kinds[name])
+		if roll <= 0.0:
+			return name
+	return names[-1]
+
+
+func _detail(kind: String, at: Vector3) -> void:
+	var tool := _mesh_tool(false)
+	var turn := _rng.randf() * TAU
+	match kind:
+		"grass":
+			# A tuft: a low mound with a few blades poking out. Thin blades face away from the
+			# light and shade dark, so they're lighter than the meadow and the mound carries most
+			# of the clump's colour; on their own they read as black spikes.
+			var green := _colour(0)
+			LowPoly.frustum(tool, vary(green.lightened(0.06), 0.05), at - Vector3.UP * 0.03, 0.14, 0.05, 0.12, 6, turn, 0.2, _rng)
+			for blade in _rng.randi_range(2, 4):
+				var offset := Vector3(_rng.randf_range(-0.08, 0.08), 0, _rng.randf_range(-0.08, 0.08))
+				LowPoly.frustum(tool, vary(green.lightened(0.28), 0.06), at + offset, 0.035, 0.0,
+					_rng.randf_range(0.14, 0.22), 3, _rng.randf() * TAU)
+		"flower":
+			var colour: Color = [Color(0.95, 0.35, 0.35), Color(1.0, 0.85, 0.3), Color(0.96, 0.96, 1.0), Color(0.72, 0.52, 0.96)][_rng.randi() % 4]
+			var height := _rng.randf_range(0.13, 0.2)
+			LowPoly.frustum(tool, _colour(0).darkened(0.1), at - Vector3.UP * 0.02, 0.014, 0.01, height, 4, turn)
+			LowPoly.ball(tool, colour, at + Vector3.UP * (height + 0.02), 0.045, 0.045, 5, turn, _rng)
+		"pebble":
+			var size := _rng.randf_range(0.06, 0.13)
+			LowPoly.frustum(tool, vary(_colour(2), 0.12), at - Vector3.UP * 0.02, size, size * 0.6, size * 0.7, 5, turn, 0.25, _rng)
+		"shell":
+			var colour: Color = [Color(0.96, 0.9, 0.84), Color(0.95, 0.72, 0.66)][_rng.randi() % 2]
+			LowPoly.frustum(tool, colour, at - Vector3.UP * 0.01, 0.08, 0.0, 0.05, 5, turn)
+		"drift":
+			LowPoly.frustum(tool, vary(_colour(3), 0.02), at - Vector3.UP * 0.05, _rng.randf_range(0.25, 0.45), 0.12, 0.12, 6, turn, 0.2, _rng)
+		"crack":
+			# A short jagged line of glowing segments, flush with the ground.
+			var point := at
+			var heading := turn
+			for segment in _rng.randi_range(2, 4):
+				var length := _rng.randf_range(0.15, 0.35)
+				var middle := point + Vector3(cos(heading), 0, sin(heading)) * length * 0.5
+				var basis := Basis(Vector3.UP, -heading) * Basis.from_scale(Vector3(length, 0.02, 0.04))
+				add_block(Transform3D(basis, middle + Vector3.UP * 0.005), Color(1.0, 0.5, 0.12), true)
+				point += Vector3(cos(heading), 0, sin(heading)) * length
+				heading += _rng.randf_range(-0.9, 0.9)
+		"mushroom":
+			var colour: Color = [Color(0.6, 0.85, 0.95), Color(0.85, 0.55, 0.85)][_rng.randi() % 2]
+			var height := _rng.randf_range(0.1, 0.2)
+			LowPoly.frustum(tool, Color(0.8, 0.78, 0.72), at - Vector3.UP * 0.02, 0.025, 0.02, height, 5, turn)
+			LowPoly.frustum(_mesh_tool(true), colour, at + Vector3.UP * height, 0.08, 0.0, 0.06, 6, turn)
 
 
 func add_seat(cell: Vector2, height: float) -> void:
@@ -611,7 +674,7 @@ func _add_particles(kind: String) -> void:
 	particles.mesh = quad
 	match kind:
 		"petals":
-			_weather(particles, 90, 9.0, Vector3(0.4, -0.35, 0.1), 0.14, Color(1.0, 0.8, 0.88, 0.9))
+			_weather(particles, 70, 9.0, Vector3(0.4, -0.35, 0.1), 0.07, Color(1.0, 0.8, 0.88, 0.9))
 		"sand":
 			_weather(particles, 120, 4.0, Vector3(2.0, -0.05, 0.4), 0.07, Color(0.95, 0.88, 0.7, 0.6))
 		"embers":
