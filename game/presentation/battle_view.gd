@@ -532,7 +532,7 @@ func _build_stage(biome: String) -> void:
 	_arena = Arena.create(biome, int(battle.spec.seed), [battle.fighters[0].name, battle.fighters[1].name], battle.terrain)
 	add_child(_arena)
 	_camera = Camera3D.new()
-	_camera.far = Arena.OUTER_RADIUS * 3.0
+	_camera.far = Terrain.WORLD_RADIUS * 3.0
 	add_child(_camera)
 
 

@@ -42,10 +42,13 @@ func test_generation_is_repeatable_and_keeps_the_starts_clear() -> void:
 		var first := Terrain.generate(biome, SimRandom.new(5))
 		var second := Terrain.generate(biome, SimRandom.new(5))
 		assert_eq(first._heights, second._heights, biome)
-		for start in [Vector2(0, -0.5 * Rules.START_DISTANCE), Vector2(0, 0.5 * Rules.START_DISTANCE)]:
+		for start in Terrain.starts():
+			var level := first.height_at(start)
 			for cell in first.cells():
 				if cell.distance_to(start) < Terrain.START_CLEAR:
-					assert_eq(first.height_at(cell), 0.0, "%s start clear at %s" % [biome, cell])
+					assert_eq(first.height_at(cell), level, "%s start level at %s" % [biome, cell])
+					assert_eq(first.kind_at(cell), Terrain.Kind.GROUND, "%s start open at %s" % [biome, cell])
+		assert_true(first.starts_connected(), "%s: the starts can walk to each other" % biome)
 		for cell in first.cells():
 			assert_eq(fmod(first.height_at(cell), Terrain.STEP), 0.0, "heights come in steps")
 	assert_eq(Terrain.generate("stadium", SimRandom.new(5)).highest(), 0.0, "the stadium is flat")

@@ -1,15 +1,22 @@
 class_name Terrain
 extends RefCounted
-## Battle terrain (concepts_brief.md §9.8): a ground height for every 1 m cell of the arena,
-## in 0.5 m steps, generated from the battle seed for its biome. Plateaus rise from the floor
-## with a ramp of 0.5 m steps down one side and cliffs elsewhere; pillars of cover stand on
-## the ground. Each fighter's starting spot is kept flat and open.
+## Battle terrain (concepts_brief.md §9.8): one continuous landscape, a ground height for every
+## 1 m cell in 0.5 m steps, generated from the battle seed for its biome. Inside the arena it
+## stays gentle: noise mounds whose contours become terraces, walkable where neighbouring cells
+## differ by a step and cliffs where they differ more. Beyond the arena's wall it rises into
+## hills (or, at the beach, falls into the sea), so the battle area is part of the world rather
+## than a disc cut out of it. Features stand on the ground: rock clusters, trees, logs, basalt
+## columns, stalagmites, ice spikes and crystals. Each fighter's starting spot is kept level and
+## open, and the two starts are always connected by walkable ground.
 ##
 ## The battle is still played on the floor plane, with heights on top:
 ## - a fighter stands at the height of the cell under its centre, and can't step up onto a
 ##   cell more than Rules.CLIMB higher (fliers Rules.FLY_CLIMB); stepping down is free;
-## - projectiles fly in 3D and stop when the ground or a pillar rises above them;
+## - projectiles fly in 3D and stop when the ground or a feature rises above them;
 ## - melee and area moves only reach across small height differences.
+## The battle only generates the arena and a margin around it (BATTLE_RADIUS); the
+## presentation calls fill_world() for the rest of the land out to WORLD_RADIUS, from the same
+## noise, and builds the world from the same heights and kinds.
 
 ## Which arena a battle is in (the biome's look and its terrain).
 const BIOMES: Array[String] = ["grassland", "beach", "volcano", "snowfield", "cave", "stadium"]
@@ -19,28 +26,40 @@ const BY_TYPE := {
 	"Ghost": "cave", "Dark": "cave", "Grass": "grassland", "Bug": "grassland", "Flying": "grassland",
 	"Steel": "stadium", "Fighting": "stadium", "Normal": "stadium",
 }
-## Per biome: plateau count and height (metres, in STEP multiples), pillar count and height.
-## The stadium is the flat classic.
+## What stands in a cell, for the presentation (the battle only uses heights).
+enum Kind { GROUND, ROCK, TREE, PINE, PALM, LOG, BASALT, STALAGMITE, ICE, CRYSTAL }
+## Per biome: how high the arena's mounds rise (metres, before snapping to STEP), how high the
+## hills beyond the wall rise, and how many of each feature stand inside the arena. A feature
+## count is a range. The stadium is the flat classic.
 const SHAPES := {
-	"grassland": {"plateaus": Vector2i(2, 3), "plateau_height": Vector2(0.5, 1.0), "pillars": Vector2i(6, 9), "pillar_height": Vector2(2.0, 3.0)},
-	"beach": {"plateaus": Vector2i(2, 3), "plateau_height": Vector2(0.5, 0.5), "pillars": Vector2i(4, 6), "pillar_height": Vector2(1.5, 2.0)},
-	"volcano": {"plateaus": Vector2i(3, 4), "plateau_height": Vector2(1.0, 1.5), "pillars": Vector2i(8, 11), "pillar_height": Vector2(2.5, 4.0)},
-	"snowfield": {"plateaus": Vector2i(2, 3), "plateau_height": Vector2(0.5, 1.0), "pillars": Vector2i(6, 9), "pillar_height": Vector2(2.0, 2.5)},
-	"cave": {"plateaus": Vector2i(3, 4), "plateau_height": Vector2(0.5, 1.5), "pillars": Vector2i(10, 13), "pillar_height": Vector2(3.0, 4.0)},
-	"stadium": {"plateaus": Vector2i(0, 0), "plateau_height": Vector2(0.0, 0.0), "pillars": Vector2i(0, 0), "pillar_height": Vector2(0.0, 0.0)},
+	"grassland": {"mounds": 1.6, "hills": 8.0, "features": {"tree": Vector2i(5, 8), "rock": Vector2i(3, 5), "log": Vector2i(1, 2)}},
+	"beach": {"mounds": 1.1, "hills": -5.0, "features": {"palm": Vector2i(3, 5), "rock": Vector2i(2, 4), "log": Vector2i(2, 3)}},
+	"volcano": {"mounds": 2.2, "hills": 10.0, "features": {"basalt": Vector2i(4, 6), "rock": Vector2i(3, 4)}},
+	"snowfield": {"mounds": 1.6, "hills": 9.0, "features": {"pine": Vector2i(5, 8), "ice": Vector2i(3, 5), "rock": Vector2i(2, 3)}},
+	"cave": {"mounds": 2.2, "hills": 15.0, "features": {"stalagmite": Vector2i(9, 13), "crystal": Vector2i(3, 5), "rock": Vector2i(2, 3)}},
+	"stadium": {"mounds": 0.0, "hills": 0.0, "features": {}},
 }
 const STEP := 0.5
-## Kept flat and open around each starting spot.
+## How far the generated world reaches (the presentation's terrain).
+const WORLD_RADIUS := Rules.ARENA_RADIUS + 30.0
+const BATTLE_RADIUS := Rules.ARENA_RADIUS + NEAR_CELLS + 2.0
+## The hills rise over this distance beyond the wall.
+const HILL_RISE := 14.0
+## Noise frequencies: the arena's mounds and the hills beyond.
+const MOUND_FREQUENCY := 0.075
+const HILL_FREQUENCY := 0.045
+## Kept level and open around each starting spot, blending back into the land over START_BLEND.
 const START_CLEAR := 2.5
-const PLATEAU_RADIUS := Vector2(2.0, 3.5)
-## The share of a plateau's edge, around a random direction, that steps down as a ramp.
-const RAMP_SHARE := 0.3
-## Pillars keep this far from the wall and from each other.
-const PILLAR_WALL_MARGIN := 1.5
-const PILLAR_SPACING := 3.0
+const START_BLEND := 2.0
+## Features keep this far from the wall and from each other's centres.
+const FEATURE_WALL_MARGIN := 1.5
+const FEATURE_SPACING := 2.5
+## If the starts aren't connected, try again with the land and features toned down this much,
+## up to RETRIES times, then fall back to flat ground.
+const RETRY_SCALE := 0.7
+const RETRIES := 4
 ## Projectile and sight lines are checked every this many metres.
 const LINE_STEP := 0.25
-
 ## Cells within this many of another count as near it (see _nearby_top).
 const NEAR_CELLS := 3
 
@@ -48,10 +67,18 @@ var biome := "stadium"
 var _reach := 0
 var _size := 0
 var _heights := PackedFloat32Array()
-## For each cell, the highest ground within NEAR_CELLS of it, and the highest anywhere, so the
-## checks that run every tick can stop early where nothing nearby rises.
+## The ground under any feature, and what stands in each cell (Kind).
+var _ground := PackedFloat32Array()
+var _kinds := PackedByteArray()
+## For each cell in the arena, the highest ground within NEAR_CELLS of it, and the highest in
+## the arena, so the checks that run every tick can stop early where nothing nearby rises.
 var _nearby_top := PackedFloat32Array()
 var _highest := 0.0
+## How the land was shaped, so fill_world() can extend it.
+var _shape := {}
+var _noise_seed := 0
+var _scale := 1.0
+var _filled_to := 0.0
 
 
 ## The arena for a battle: `requested` if it names a biome, else one picked by `seed` from the
@@ -68,54 +95,204 @@ static func choose_biome(requested: String, types: Array, seed: int) -> String:
 	return options[posmod(seed, options.size())]
 
 
-## A flat arena (tests, and the stadium).
+## A flat world (tests, and the stadium).
 static func flat(biome_name := "stadium") -> Terrain:
 	var terrain := Terrain.new()
 	terrain.biome = biome_name
-	terrain._reach = ceili(Rules.ARENA_RADIUS) + 1
+	terrain._reach = ceili(WORLD_RADIUS) + 1
 	terrain._size = terrain._reach * 2
-	terrain._heights.resize(terrain._size * terrain._size)
-	terrain._nearby_top.resize(terrain._size * terrain._size)
+	var cells := terrain._size * terrain._size
+	terrain._heights.resize(cells)
+	terrain._ground.resize(cells)
+	terrain._kinds.resize(cells)
+	terrain._nearby_top.resize(cells)
 	return terrain
 
 
 ## The terrain of `biome_name`, from the battle's terrain stream.
 static func generate(biome_name: String, random: SimRandom) -> Terrain:
-	var terrain := flat(biome_name)
 	var shape: Dictionary = SHAPES.get(biome_name, SHAPES.stadium)
-	var starts: Array[Vector2] = [Vector2(0, -0.5 * Rules.START_DISTANCE), Vector2(0, 0.5 * Rules.START_DISTANCE)]
-	var plateaus := _pick(random, shape.plateaus)
-	for p in plateaus:
-		for attempt in 20:
-			var radius := lerpf(PLATEAU_RADIUS.x, PLATEAU_RADIUS.y, random.next_float())
-			var centre := _random_point(random, Rules.ARENA_RADIUS - radius - 1.0)
-			if starts.any(func(s: Vector2) -> bool: return s.distance_to(centre) < START_CLEAR + radius + 2.0):
+	var noise_seed := int(random.next_u32() & 0x7fffffff)
+	var scale := 1.0
+	for attempt in RETRIES + 1:
+		var terrain := flat(biome_name)
+		terrain._shape = shape
+		terrain._noise_seed = noise_seed
+		terrain._scale = scale
+		if shape.mounds > 0.0 or shape.hills != 0.0:
+			terrain._shape_land(BATTLE_RADIUS, 0.0)
+			terrain._place_features(shape.features, random, scale)
+		terrain._summarise()
+		if terrain.starts_connected():
+			return terrain
+		scale *= RETRY_SCALE
+	var fallback := flat(biome_name)
+	fallback._summarise()
+	return fallback
+
+
+static func starts() -> Array[Vector2]:
+	return [Vector2(0, -0.5 * Rules.START_DISTANCE), Vector2(0, 0.5 * Rules.START_DISTANCE)]
+
+
+## Extends the land beyond the battle's part out to WORLD_RADIUS (the presentation's world).
+## The battle never looks there, so it only costs a battle that's shown.
+func fill_world() -> void:
+	if _filled_to < WORLD_RADIUS and (_shape.get("mounds", 0.0) > 0.0 or _shape.get("hills", 0.0) != 0.0):
+		_shape_land(WORLD_RADIUS, _filled_to)
+
+
+## Shapes the land in the ring from `inside` to `radius` (cells already shaped are kept).
+func _shape_land(radius: float, inside: float) -> void:
+	var shape := _shape
+	var scale := _scale
+	var mounds := FastNoiseLite.new()
+	mounds.seed = _noise_seed
+	mounds.frequency = MOUND_FREQUENCY
+	var hills := FastNoiseLite.new()
+	hills.seed = _noise_seed + 1
+	hills.frequency = HILL_FREQUENCY
+	var level := []
+	for start in starts():
+		level.append(_raw_height(start, shape, mounds, hills, scale))
+	_filled_to = radius
+	for cell in world_cells(radius):
+		if cell.length() <= inside:
+			continue
+		var raw := _raw_height(cell, shape, mounds, hills, scale)
+		# Level the starting spots, blending back into the land around them.
+		for s in 2:
+			var distance := cell.distance_to(starts()[s])
+			if distance < START_CLEAR + START_BLEND:
+				var keep := clampf((distance - START_CLEAR) / START_BLEND, 0.0, 1.0)
+				raw = lerpf(snappedf(level[s], STEP), raw, keep)
+		var height := snappedf(raw, STEP)
+		_put(cell, height)
+		_put_ground(cell, height)
+
+
+## The land's height at `point` before snapping: mounds inside the arena (half of the ground
+## stays low, the rest rises in mounds), easing into hills beyond the wall.
+static func _raw_height(point: Vector2, shape: Dictionary, mounds: FastNoiseLite, hills: FastNoiseLite, scale: float) -> float:
+	var inner := float(shape.mounds) * scale * maxf(0.0, mounds.get_noise_2d(point.x, point.y)) * 2.0
+	var distance := point.length()
+	if distance <= Rules.ARENA_RADIUS:
+		return inner
+	var rise := smoothstep(0.0, 1.0, (distance - Rules.ARENA_RADIUS) / HILL_RISE)
+	var hill := float(shape.hills) * (0.55 + 0.45 * hills.get_noise_2d(point.x, point.y))
+	return lerpf(inner, hill, rise)
+
+
+func _place_features(counts: Dictionary, random: SimRandom, scale: float) -> void:
+	var kinds: Array = counts.keys()
+	kinds.sort()
+	var centres: Array[Vector2] = []
+	for kind: String in kinds:
+		var range_: Vector2i = counts[kind]
+		var wanted := roundi((range_.x + int(random.next_u32() % (range_.y - range_.x + 1))) * scale)
+		for n in wanted:
+			for attempt in 30:
+				var angle := random.next_float() * TAU
+				var reach := (Rules.ARENA_RADIUS - FEATURE_WALL_MARGIN) * sqrt(random.next_float())
+				var at := Vector2(cos(angle), sin(angle)) * reach
+				var cell := Vector2(floorf(at.x) + 0.5, floorf(at.y) + 0.5)
+				if starts().any(func(s: Vector2) -> bool: return s.distance_to(cell) < START_CLEAR + 1.5):
+					continue
+				if centres.any(func(c: Vector2) -> bool: return c.distance_to(cell) < FEATURE_SPACING):
+					continue
+				_stamp(kind, cell, random)
+				centres.append(cell)
+				break
+
+
+## Raises one feature of `kind` at `cell`, on top of the ground.
+func _stamp(kind: String, cell: Vector2, random: SimRandom) -> void:
+	match kind:
+		"rock":
+			# A cluster: a tall centre and a few lower stones around it.
+			var top := snappedf(lerpf(2.0, 3.0, random.next_float()), STEP)
+			_raise(cell, top, Kind.ROCK)
+			for n in 2 + int(random.next_u32() % 4):
+				var side := _neighbour(cell, random)
+				_raise(side, maxf(1.0, snappedf(top - lerpf(0.5, 1.5, random.next_float()), STEP)), Kind.ROCK)
+		"tree":
+			_raise(cell, 3.5, Kind.TREE)
+		"pine":
+			_raise(cell, 4.0, Kind.PINE)
+		"palm":
+			_raise(cell, 4.0, Kind.PALM)
+		"log":
+			# A fallen log two or three cells long, low enough to step onto.
+			var along := Vector2(1, 0) if random.chance(0.5) else Vector2(0, 1)
+			for i in 2 + int(random.next_u32() % 2):
+				_raise(cell + along * i, STEP, Kind.LOG)
+		"basalt":
+			# A cluster of columns of stepped heights.
+			var top := snappedf(lerpf(2.5, 4.0, random.next_float()), STEP)
+			_raise(cell, top, Kind.BASALT)
+			for n in 3 + int(random.next_u32() % 3):
+				_raise(_neighbour(cell, random), maxf(1.0, snappedf(top - lerpf(0.5, 2.0, random.next_float()), STEP)), Kind.BASALT)
+		"stalagmite":
+			var top := snappedf(lerpf(2.5, 4.5, random.next_float()), STEP)
+			_raise(cell, top, Kind.STALAGMITE)
+			if random.chance(0.5):
+				_raise(_neighbour(cell, random), snappedf(top * 0.5, STEP), Kind.STALAGMITE)
+		"ice":
+			_raise(cell, snappedf(lerpf(2.0, 3.5, random.next_float()), STEP), Kind.ICE)
+			if random.chance(0.5):
+				_raise(_neighbour(cell, random), 1.5, Kind.ICE)
+		"crystal":
+			_raise(cell, snappedf(lerpf(1.5, 2.5, random.next_float()), STEP), Kind.CRYSTAL)
+
+
+func _neighbour(cell: Vector2, random: SimRandom) -> Vector2:
+	var sides := [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN, Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]
+	return cell + sides[random.next_u32() % sides.size()]
+
+
+## Puts a feature `height` above the ground at `cell` (inside the arena only).
+func _raise(cell: Vector2, height: float, kind: Kind) -> void:
+	if cell.length() > Rules.ARENA_RADIUS - 0.5:
+		return
+	var top := ground_at(cell) + height
+	if top > height_at(cell):
+		_put(cell, top)
+		var index := _index(cell)
+		if index >= 0:
+			_kinds[index] = kind
+
+
+## Whether each start can walk to the other (up at most Rules.CLIMB per cell, down freely).
+func starts_connected() -> bool:
+	var ends := starts()
+	return _reachable(ends[0], ends[1]) and _reachable(ends[1], ends[0])
+
+
+func _reachable(from: Vector2, to: Vector2) -> bool:
+	var start := Vector2(floorf(from.x) + 0.5, floorf(from.y) + 0.5)
+	var goal := Vector2(floorf(to.x) + 0.5, floorf(to.y) + 0.5)
+	var seen := {start: true}
+	var queue: Array[Vector2] = [start]
+	while not queue.is_empty():
+		var cell: Vector2 = queue.pop_front()
+		if cell == goal:
+			return true
+		for side in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
+			var next: Vector2 = cell + side
+			if seen.has(next) or next.length() > Rules.ARENA_RADIUS - 0.5:
 				continue
-			var height := snappedf(lerpf(shape.plateau_height.x, shape.plateau_height.y, random.next_float()), STEP)
-			terrain._raise_plateau(centre, radius, maxf(height, STEP), random.next_float() * TAU)
-			break
-	var pillars: Array[Vector2] = []
-	for p in _pick(random, shape.pillars):
-		for attempt in 30:
-			var at := _random_point(random, Rules.ARENA_RADIUS - PILLAR_WALL_MARGIN)
-			var cell := Vector2(floorf(at.x) + 0.5, floorf(at.y) + 0.5)
-			if starts.any(func(s: Vector2) -> bool: return s.distance_to(cell) < START_CLEAR + 1.0):
+			if height_at(next) - height_at(cell) > Rules.CLIMB + 1e-4:
 				continue
-			if pillars.any(func(q: Vector2) -> bool: return q.distance_to(cell) < PILLAR_SPACING):
-				continue
-			var height := snappedf(lerpf(shape.pillar_height.x, shape.pillar_height.y, random.next_float()), STEP)
-			terrain._put(cell, terrain.height_at(cell) + height)
-			pillars.append(cell)
-			break
-	terrain._summarise()
-	return terrain
+			seen[next] = true
+			queue.append(next)
+	return false
 
 
 func _summarise() -> void:
-	_nearby_top.resize(_heights.size())
 	_highest = 0.0
-	for i in _size:
-		for j in _size:
+	var arena := ceili(Rules.ARENA_RADIUS) + NEAR_CELLS + 1
+	for i in range(_reach - arena, _reach + arena):
+		for j in range(_reach - arena, _reach + arena):
 			var top := 0.0
 			for di in range(-NEAR_CELLS, NEAR_CELLS + 1):
 				for dj in range(-NEAR_CELLS, NEAR_CELLS + 1):
@@ -124,40 +301,23 @@ func _summarise() -> void:
 					if a >= 0 and b >= 0 and a < _size and b < _size:
 						top = maxf(top, _heights[a * _size + b])
 			_nearby_top[i * _size + j] = top
-			_highest = maxf(_highest, _heights[i * _size + j])
-
-
-static func _pick(random: SimRandom, range_: Vector2i) -> int:
-	return range_.x + int(random.next_u32() % (range_.y - range_.x + 1))
-
-
-static func _random_point(random: SimRandom, within: float) -> Vector2:
-	var angle := random.next_float() * TAU
-	return Vector2(cos(angle), sin(angle)) * within * sqrt(random.next_float())
-
-
-func _raise_plateau(centre: Vector2, radius: float, height: float, ramp_angle: float) -> void:
-	var ramp_cells := int(height / STEP)
-	for cell in cells():
-		var distance := cell.distance_to(centre)
-		var level := 0.0
-		if distance <= radius:
-			level = height
-		elif distance <= radius + ramp_cells:
-			var off := absf(angle_difference((cell - centre).angle(), ramp_angle))
-			if off <= RAMP_SHARE * PI:
-				level = height - ceilf(distance - radius) * STEP
-		if level > height_at(cell):
-			_put(cell, level)
+			if Vector2(i - _reach + 0.5, j - _reach + 0.5).length() <= Rules.ARENA_RADIUS + 0.5:
+				_highest = maxf(_highest, _heights[i * _size + j])
 
 
 ## Every cell's centre inside the arena.
 func cells() -> Array[Vector2]:
+	return world_cells(Rules.ARENA_RADIUS + 0.5)
+
+
+## Every cell's centre within `radius` of the middle.
+func world_cells(radius: float) -> Array[Vector2]:
 	var found: Array[Vector2] = []
-	for i in range(-_reach, _reach):
-		for j in range(-_reach, _reach):
+	var reach := mini(_reach, ceili(radius) + 1)
+	for i in range(-reach, reach):
+		for j in range(-reach, reach):
 			var centre := Vector2(i + 0.5, j + 0.5)
-			if centre.length() <= Rules.ARENA_RADIUS + 0.5:
+			if centre.length() <= radius:
 				found.append(centre)
 	return found
 
@@ -176,14 +336,32 @@ func _put(point: Vector2, height: float) -> void:
 		_heights[index] = height
 
 
-## The ground height under `point` (0 outside the grid).
+func _put_ground(point: Vector2, height: float) -> void:
+	var index := _index(point)
+	if index >= 0:
+		_ground[index] = height
+
+
+## The height of whatever is under `point`, ground or feature (0 outside the world).
 func height_at(point: Vector2) -> float:
 	var index := _index(point)
 	return _heights[index] if index >= 0 else 0.0
 
 
+## The ground under any feature at `point`.
+func ground_at(point: Vector2) -> float:
+	var index := _index(point)
+	return _ground[index] if index >= 0 else 0.0
+
+
+## What stands at `point` (Kind.GROUND for bare ground).
+func kind_at(point: Vector2) -> Kind:
+	var index := _index(point)
+	return _kinds[index] as Kind if index >= 0 else Kind.GROUND
+
+
 ## `position` pushed out of every cell a fighter of `radius` standing at `ground` can't climb
-## onto (more than `climb` higher), so it slides along cliffs and pillars.
+## onto (more than `climb` higher), so it slides along cliffs and features.
 func push_out(position: Vector2, radius: float, ground: float, climb: float) -> Vector2:
 	var index := _index(position)
 	if index < 0 or _nearby_top[index] <= ground + climb + 1e-4:
@@ -235,6 +413,6 @@ func steer(position: Vector2, radius: float, ground: float, climb: float, wanted
 	return wanted
 
 
-## The highest ground in the arena (for tests and cameras).
+## The highest ground or feature in the arena (for tests and cameras).
 func highest() -> float:
 	return _highest
