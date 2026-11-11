@@ -375,7 +375,8 @@ func _movement_intent(me: Fighter, seen: Dictionary, action: String) -> Dictiona
 	_strafe_ticks -= 1
 	if _strafe_ticks <= 0:
 		_strafe = 1.0 if random.chance(0.5) else -1.0
-		_strafe_ticks = STRAFE_MIN_TICKS + int(random.next_u32() % (STRAFE_MAX_TICKS - STRAFE_MIN_TICKS + 1))
+		# Agile species switch sides sooner, so they dart rather than orbit.
+		_strafe_ticks = roundi((STRAFE_MIN_TICKS + int(random.next_u32() % (STRAFE_MAX_TICKS - STRAFE_MIN_TICKS + 1))) / me.agility)
 		_band_shift = (random.next_float() * 2.0 - 1.0) * BAND_JITTER
 	var toward: Vector2 = ((seen.position as Vector2) - me.position).normalized()
 	var side := Vector2(-toward.y, toward.x) * _strafe

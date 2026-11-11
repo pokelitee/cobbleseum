@@ -168,7 +168,7 @@ func test_walking_speeds_up_and_slows_down() -> void:
 	var fighter := battle.fighters[0]
 	battle.step()
 	var top := fighter.current_move_speed()
-	assert_almost_eq(fighter.velocity.length(), Rules.ACCELERATION / Rules.TICK_RATE, 1e-4, "one tick of acceleration")
+	assert_almost_eq(fighter.velocity.length(), Rules.ACCELERATION * fighter.agility / Rules.TICK_RATE, 1e-4, "one tick of acceleration")
 	for i in 29:
 		battle.step()
 	assert_almost_eq(fighter.velocity.length(), top, 1e-3, "full speed after a while")
@@ -207,4 +207,11 @@ func test_hits_knock_the_defender_back_by_weight() -> void:
 	for i in 10:
 		battle.step()
 	assert_true(defender.position.distance_to(attacker.position) > start.distance_to(attacker.position), "and slides back")
+
+
+func test_agility_by_speed_and_weight() -> void:
+	assert_almost_eq(Rules.agility(Rules.AGILITY_SPEED_STAT, Rules.KNOCKBACK_REFERENCE_KG), 1.0, 1e-6)
+	assert_eq(Rules.agility(40.0, 400.0), Rules.AGILITY_LIMITS.x, "slow and heavy lumbers")
+	assert_eq(Rules.agility(180.0, 3.0), Rules.AGILITY_LIMITS.y, "fast and light darts")
+	assert_true(Rules.agility(120.0, 200.0) < Rules.agility(120.0, 20.0), "weight counts")
 

@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 9
+const RULES_VERSION := 10
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -40,6 +40,15 @@ const AIM_TURN_RATE := 900.0
 const MOVE_FACING_WEIGHT := 1.2
 ## Walking speeds up and slows down at this rate (m/s²); knockback slides out at the same rate.
 const ACCELERATION := 14.0
+## Agility scales acceleration and turning by body: the square root of the Speed stat over
+## AGILITY_SPEED_STAT (a base-100 species at level 50), times (KNOCKBACK_REFERENCE_KG /
+## weight) ^ AGILITY_WEIGHT_POWER, within AGILITY_LIMITS. Heavy, slow species lumber; light,
+## fast ones dart.
+const AGILITY_SPEED_STAT := 120.0
+const AGILITY_WEIGHT_POWER := 0.15
+const AGILITY_LIMITS := Vector2(0.6, 1.5)
+## Flying types brake at this share of their acceleration, so they glide to a stop.
+const GLIDE_BRAKING := 0.5
 ## A hit taking KNOCKBACK_FULL_SHARE of the defender's max HP (or more) knocks it back at
 ## KNOCKBACK_SPEED m/s, less for smaller hits; lighter species fly further, heavier less,
 ## by the square root of KNOCKBACK_REFERENCE_KG / weight within KNOCKBACK_WEIGHT_LIMITS.
@@ -147,6 +156,11 @@ static func stat(base: int) -> int:
 
 static func hp_stat(base: int) -> int:
 	return int((2 * base + IV) * LEVEL / 100.0) + LEVEL + 10
+
+
+static func agility(speed_stat: float, weight_kg: float) -> float:
+	var value := sqrt(speed_stat / AGILITY_SPEED_STAT) * pow(KNOCKBACK_REFERENCE_KG / maxf(weight_kg, 0.1), AGILITY_WEIGHT_POWER)
+	return clampf(value, AGILITY_LIMITS.x, AGILITY_LIMITS.y)
 
 
 static func knockback_speed(damage_share: float, weight_kg: float) -> float:

@@ -24,6 +24,9 @@ var facing := Vector2.UP
 ## Metres per second: walking (with acceleration), knockback and the slide out of a dodge.
 var velocity := Vector2.ZERO
 var weight_kg := Rules.KNOCKBACK_REFERENCE_KG
+## Scales acceleration and turning (Rules.agility); flying types glide (brake gently).
+var agility := 1.0
+var glides := false
 var action := Action.READY
 var action_ticks := 0
 var action_move := -1
@@ -62,6 +65,8 @@ static func create(side_index: int, species_id_value: String, species: Dictionar
 	fighter.hp = fighter.max_hp
 	fighter.radius = radius_metres
 	fighter.weight_kg = float(species.get("weightkg", Rules.KNOCKBACK_REFERENCE_KG))
+	fighter.agility = Rules.agility(fighter.stats.spe, fighter.weight_kg)
+	fighter.glides = "Flying" in fighter.types
 	fighter.move_speed = Rules.move_speed(fighter.stats.spe)
 	fighter.dodge_recharge_total = Rules.seconds_to_ticks(Rules.dodge_recharge_seconds(fighter.stats.spe))
 	fighter.moves = battle_moves
