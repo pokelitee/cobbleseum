@@ -21,6 +21,9 @@ var moves: Array[BattleMove] = []
 var cooldowns: PackedInt32Array = []
 var position := Vector2.ZERO
 var facing := Vector2.UP
+## Metres per second: walking (with acceleration), knockback and the slide out of a dodge.
+var velocity := Vector2.ZERO
+var weight_kg := Rules.KNOCKBACK_REFERENCE_KG
 var action := Action.READY
 var action_ticks := 0
 var action_move := -1
@@ -58,6 +61,7 @@ static func create(side_index: int, species_id_value: String, species: Dictionar
 	fighter.max_hp = roundi(Rules.hp_stat(base.hp) * Rules.HP_MULTIPLIER)
 	fighter.hp = fighter.max_hp
 	fighter.radius = radius_metres
+	fighter.weight_kg = float(species.get("weightkg", Rules.KNOCKBACK_REFERENCE_KG))
 	fighter.move_speed = Rules.move_speed(fighter.stats.spe)
 	fighter.dodge_recharge_total = Rules.seconds_to_ticks(Rules.dodge_recharge_seconds(fighter.stats.spe))
 	fighter.moves = battle_moves

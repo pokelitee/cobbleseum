@@ -26,11 +26,15 @@ const CIRCLE_SCORE := 0.15
 const WAITING_CIRCLE_BONUS := 0.2
 ## Move value (SimpleAI.move_score, in move-power units) at which it saturates.
 const VALUE_SCALE := 150.0
-## Ticks ahead a projectile is checked for a hit, and the gap bands kept while ranged moves
-## are ready and while waiting on cooldowns.
+## Ticks ahead a projectile is checked for a hit, and the gap bands kept: with a melee move
+## ready (just outside the foe's reach, inside dash range, so it closes only to strike), with
+## ranged moves ready, and while waiting on cooldowns (out of the way).
 const THREAT_HORIZON := 12
-const RANGED_GAP := Vector2(3.0, 5.5)
-const WAITING_GAP := Vector2(1.5, 3.0)
+const MELEE_GAP := Vector2(1.8, 2.8)
+const RANGED_GAP := Vector2(3.5, 6.0)
+const WAITING_GAP := Vector2(3.0, 5.0)
+## Each new strafe direction also shifts the band by up to this much, so distances vary.
+const BAND_JITTER := 0.5
 const STRAFE_MIN_TICKS := 30
 const STRAFE_MAX_TICKS := 75
 const STRAFE_WEIGHT := 0.8
@@ -57,6 +61,7 @@ var _judged := {}
 var _dodge_allowed := {}
 var _strafe := 1.0
 var _strafe_ticks := 0
+var _band_shift := 0.0
 
 static var _curves := {}
 
@@ -360,11 +365,10 @@ func _band(me: Fighter, _gap: float) -> Vector2:
 			ranged = true
 		else:
 			melee = true
+	var band := (MELEE_GAP if melee else (RANGED_GAP if ranged else WAITING_GAP)) + Vector2.ONE * _band_shift
 	if melee:
-		return Vector2(0.0, Rules.MELEE_DASH_RANGE * 0.8)
-	if ranged:
-		return RANGED_GAP
-	return WAITING_GAP
+		band.y = minf(band.y, Rules.MELEE_DASH_RANGE - 0.2)
+	return band
 
 
 func _movement_intent(me: Fighter, seen: Dictionary, action: String) -> Dictionary:
@@ -372,6 +376,7 @@ func _movement_intent(me: Fighter, seen: Dictionary, action: String) -> Dictiona
 	if _strafe_ticks <= 0:
 		_strafe = 1.0 if random.chance(0.5) else -1.0
 		_strafe_ticks = STRAFE_MIN_TICKS + int(random.next_u32() % (STRAFE_MAX_TICKS - STRAFE_MIN_TICKS + 1))
+		_band_shift = (random.next_float() * 2.0 - 1.0) * BAND_JITTER
 	var toward: Vector2 = ((seen.position as Vector2) - me.position).normalized()
 	var side := Vector2(-toward.y, toward.x) * _strafe
 	var direction := Vector2.ZERO
