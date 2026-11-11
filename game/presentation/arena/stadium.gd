@@ -4,15 +4,17 @@ extends RefCounted
 ## battle floor, big enough to read as a stadium rather than a low wall.
 ##
 ## From the centre out:
-## - the field: pale stone slabs with painted lines (boundary, halfway line, centre circle);
+## - the field: rings of pale stone paving with painted lines (boundary, halfway line,
+##   centre circle);
 ## - an apron of grey-green paving with a trainer's box at each end;
 ## - a stone wall with a coping;
 ## - the lower stands, a concourse, the upper stands and a parapet, split into SECTIONS by
 ##   pillars, with a tunnel into the lower rows of every other section;
 ## - a roof ring on posts with a floodlight bank along its inner edge;
 ## - banners on the parapet in each side's colour (side 0 on the -z half, side 1 on +z);
-## - a scoreboard tower behind the far stands with the fighters' names.
-## Rings are built from blocks about a metre long, like Cobblemon's voxels.
+## - a big screen set into the upper stands at each end (behind each side's starting
+##   point), showing the fighters' names where the battle's cameras see it.
+## Rings are exact ring segments about a metre long, like Cobblemon's voxels.
 
 const APRON_WIDTH := 3.5
 const WALL_THICKNESS := 0.8
@@ -32,6 +34,10 @@ const ROOF_THICKNESS := 0.6
 const ROOF_CLEARANCE := 4.5
 const LINE_WIDTH := 0.14
 const GROUND_RADIUS := 70.0
+## The screens: width along the upper stands, and their angles (behind each side's start).
+const SCREEN_WIDTH := 15.0
+const SCREEN_ANGLES: Array[float] = [-PI * 0.5, PI * 0.5]
+const SCREEN_RISE := 2.0
 
 const STONE := Color(0.62, 0.63, 0.6)
 const STONE_DARK := Color(0.48, 0.5, 0.47)
@@ -85,15 +91,17 @@ static func build(arena: Arena, rng: RandomNumberGenerator, names: Array) -> voi
 	_stands(arena, rng)
 	_roof(arena, rng)
 	_banners(arena)
-	_scoreboard(arena, names)
+	_screens(arena, names)
 	arena.add_arc_ring(outer_radius(), GROUND_RADIUS, -1.0, -0.05, GROUND, rng, 0.06)
 
 
 static func _field(arena: Arena, rng: RandomNumberGenerator) -> void:
 	var radius := field_radius()
-	for cell in arena.cells(radius):
-		var checker := (int(floor(cell.x)) + int(floor(cell.y))) % 2 == 0
-		arena.add_box(cell, -1.0, 0.0, arena.vary(SLAB if checker else SLAB_DARK, 0.03))
+	var ring := 0.0
+	while ring < radius:
+		var next := minf(ring + 1.0, radius)
+		arena.add_arc_ring(ring, next, -1.0, 0.0, SLAB, rng, 0.03, SLAB_DARK)
+		ring = next
 	# Painted lines a hair above the slabs.
 	var lift := 0.012
 	arena.add_arc_ring(radius - 0.45, radius - 0.45 + LINE_WIDTH, -0.01, lift, LINE, rng, 0.0)
@@ -132,6 +140,15 @@ static func _in_tunnel(angle: float, radius: float) -> bool:
 	return absf(angle_difference(angle, centre)) * radius < TUNNEL_WIDTH * 0.5
 
 
+## Whether `angle` is behind one of the screens (no upper rows, pillars or banners there).
+static func _behind_screen(angle: float) -> bool:
+	var half := SCREEN_WIDTH * 0.5 / row(LOWER_ROWS).x
+	for centre in SCREEN_ANGLES:
+		if absf(angle_difference(angle, centre)) < half:
+			return true
+	return false
+
+
 static func _near_pillar(angle: float, radius: float) -> bool:
 	var to_pillar := fposmod(angle, TAU / SECTIONS)
 	var distance := minf(to_pillar, TAU / SECTIONS - to_pillar) * radius
@@ -143,16 +160,20 @@ static func _stands(arena: Arena, rng: RandomNumberGenerator) -> void:
 	for index in rows:
 		var at := row(index)
 		var colour := SEATS if index % 2 == 0 else SEATS_ALT
-		var segments := ceili(TAU * at.x / 1.0)
+		var segments := ceili(TAU * at.x / Arena.RING_BLOCK)
 		for s in segments:
-			var angle := (s + 0.5) * TAU / segments
+			var from := s * TAU / segments
+			var to := (s + 1) * TAU / segments
+			var angle := (from + to) * 0.5
 			var top := at.y
+			if index >= LOWER_ROWS and _behind_screen(angle):
+				continue
 			if index < TUNNEL_ROWS and _in_tunnel(angle, at.x):
 				# The tunnel: a dark opening under the rows above.
-				arena.add_arc(angle, at.x, at.x + ROW_DEPTH, -1.0, WALL_HEIGHT * 0.9, TUNNEL, TAU * at.x / segments * 1.02)
-				arena.add_arc(angle, at.x, at.x + ROW_DEPTH, WALL_HEIGHT * 0.9, top, arena.vary(STONE_DARK), TAU * at.x / segments * 1.02)
+				arena.add_sector(from, to, at.x, at.x + ROW_DEPTH, -1.0, WALL_HEIGHT * 0.9, TUNNEL)
+				arena.add_sector(from, to, at.x, at.x + ROW_DEPTH, WALL_HEIGHT * 0.9, top, arena.vary(STONE_DARK))
 				continue
-			arena.add_arc(angle, at.x, at.x + ROW_DEPTH, -1.0, top, arena.vary(colour, 0.04), TAU * at.x / segments * 1.02)
+			arena.add_sector(from, to, at.x, at.x + ROW_DEPTH, -1.0, top, arena.vary(colour, 0.04))
 			if not _near_pillar(angle, at.x):
 				arena.add_seat(Vector2(cos(angle), sin(angle)) * (at.x + ROW_DEPTH * 0.5), top)
 	# The concourse between the tiers.
@@ -161,12 +182,16 @@ static func _stands(arena: Arena, rng: RandomNumberGenerator) -> void:
 	# The parapet behind the top row.
 	var back := outer_radius()
 	arena.add_arc_ring(back, back + 0.6, -1.0, top_height(), STONE, rng, 0.07, STONE_DARK)
-	# Pillars between sections, a little proud of the rows, from the wall to the parapet.
+	# Pillars between sections, a little proud of the rows, stepping up from the wall to the
+	# parapet without a break.
 	for section in SECTIONS:
 		var angle := section * TAU / SECTIONS
-		for index in range(0, rows, 2):
+		var shade := arena.vary(STONE_DARK, 0.05)
+		for index in rows:
 			var at := row(index)
-			arena.add_arc(angle, at.x, at.x + ROW_DEPTH * 2.0, at.y - 1.0, at.y + 0.35, arena.vary(STONE_DARK, 0.05), PILLAR_WIDTH)
+			if index >= LOWER_ROWS and _behind_screen(angle):
+				continue
+			arena.add_arc(angle, at.x, at.x + ROW_DEPTH, at.y - ROW_RISE - 0.05, at.y + 0.35, shade, PILLAR_WIDTH)
 
 
 static func _roof(arena: Arena, rng: RandomNumberGenerator) -> void:
@@ -186,28 +211,39 @@ static func _banners(arena: Arena) -> void:
 	for section in SECTIONS:
 		var angle := (section + 0.5) * TAU / SECTIONS
 		var side := 0 if sin(angle) < 0.0 else 1
+		if _behind_screen(angle):
+			continue
 		arena.add_arc(angle, radius - 0.08, radius, top_height() - 5.5, top_height() - 0.2, SIDE_COLOURS[side], 2.4)
 
 
-static func _scoreboard(arena: Arena, names: Array) -> void:
-	var distance := outer_radius() + 6.0
-	# The screen sits above the roof ring, which would otherwise hide its lower half.
-	var screen_bottom := top_height() + ROOF_CLEARANCE + ROOF_THICKNESS + 0.8
-	var height := screen_bottom + 7.0
-	var width := 16.0
-	for x in [-width * 0.5 - 1.0, width * 0.5 + 1.0]:
-		arena.add_block(Transform3D(Basis.from_scale(Vector3(2.0, height + 1.0, 2.0)), Vector3(x, (height + 1.0) * 0.5 - 1.0, distance)), STONE_DARK)
-	arena.add_block(Transform3D(Basis.from_scale(Vector3(width + 4.0, 1.2, 1.6)), Vector3(0, height + 0.6, distance)), BRONZE)
-	arena.add_block(Transform3D(Basis.from_scale(Vector3(width, height - screen_bottom, 0.4)),
-		Vector3(0, (height + screen_bottom) * 0.5, distance - 0.6)), SCREEN, true)
-	if names.size() == 2:
+## A screen at each end, set into the upper stands where the rows are left out: a stone
+## frame filling the tier, the glowing screen on its face, and the fighters' names on it.
+static func _screens(arena: Arena, names: Array) -> void:
+	var front := row(LOWER_ROWS).x
+	var bottom := row(LOWER_ROWS - 1).y
+	var half := SCREEN_WIDTH * 0.5 / front
+	# The screen rises a little above the stands, so it reads from the field.
+	var screen_bottom := bottom + 0.6
+	var screen_top := top_height() + SCREEN_RISE
+	for centre in SCREEN_ANGLES:
+		arena.add_sector(centre - half, centre + half, front, outer_radius(), -1.0, screen_top + 0.5, STONE_DARK)
+		var inset := 0.25 / front
+		arena.add_sector(centre - half + inset, centre + half - inset, front - 0.12, front,
+			screen_bottom, screen_top, SCREEN, true)
+		if names.size() != 2:
+			continue
 		var label := Label3D.new()
 		label.text = "%s\nVS\n%s" % [str(names[0]).to_upper(), str(names[1]).to_upper()]
-		label.font_size = 200
-		label.pixel_size = 0.009
+		label.font_size = 180
+		# Three lines filling about four fifths of the screen's height.
+		label.pixel_size = (screen_top - screen_bottom) * 0.8 / (3.0 * 1.3 * label.font_size)
 		label.outline_size = 0
 		label.modulate = Color(1.0, 0.92, 0.6)
 		label.shaded = false
-		label.position = Vector3(0, (height + screen_bottom) * 0.5, distance - 0.85)
-		label.rotation.y = PI
+		var direction := Vector3(cos(centre), 0, sin(centre))
+		# In front of the screen's curve: a flat label close to it would dip behind its edges.
+		var bulge := pow(SCREEN_WIDTH * 0.5, 2.0) / (2.0 * front)
+		label.position = direction * (front - 0.15 - bulge) + Vector3.UP * (screen_bottom + screen_top) * 0.5
+		# Label3D reads from +Z; turn that toward the centre.
+		label.rotation.y = atan2(-direction.x, -direction.z)
 		arena.add_child(label)
