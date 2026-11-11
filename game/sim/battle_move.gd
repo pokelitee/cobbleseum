@@ -44,6 +44,12 @@ var name: String
 var kind: Kind
 var type: String
 var physical: bool
+## The stats damage is computed from: Attack/Defense or Special Attack/Special Defense, unless
+## Showdown's data overrides them (Body Press attacks with Defense, Psyshock hits Defense,
+## Foul Play uses the target's Attack: `target_attacks`).
+var offensive_stat := "atk"
+var defensive_stat := "def"
+var target_attacks := false
 var power: int
 var windup_ticks: int
 var recovery_ticks: int
@@ -73,6 +79,17 @@ var fixed_damage := 0
 var self_destructs := false
 ## Secondary effects rolled on hit: {"chance": 0-100, "status"?, "confuses"?, "boosts"?, "self_boosts"?}.
 var secondaries: Array[Dictionary] = []
+
+
+## The attacking stat this move's damage uses, after stages (and burn for Attack).
+func attack_stat(attacker: Fighter, defender: Fighter) -> float:
+	return (defender if target_attacks else attacker).stat(offensive_stat)
+
+
+## Stages the user's own drop takes off the stat its damage comes from (Draco Meteor: -2), as a
+## negative number; 0 for none.
+func own_stat_drop() -> int:
+	return mini(0, int(self_boosts.get(offensive_stat, 0))) if not target_attacks else 0
 
 
 ## Returns {"move": BattleMove} or {"error": String} for moves the rules can't play yet.
@@ -129,6 +146,9 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 	move.drain_share = _share(data.get("drain"))
 	move.recoil_share = _share(data.get("recoil"))
 	move.self_boosts = _stat_changes(data.get("self", {}).get("boosts", data.get("selfBoost", {}).get("boosts", {})))
+	move.offensive_stat = data.get("overrideOffensiveStat", "atk" if move.physical else "spa")
+	move.defensive_stat = data.get("overrideDefensiveStat", "def" if move.physical else "spd")
+	move.target_attacks = data.get("overrideOffensivePokemon") == "target"
 	var secondaries: Array = data.get("secondaries", [])
 	if data.get("secondary") is Dictionary:
 		secondaries = [data.secondary]

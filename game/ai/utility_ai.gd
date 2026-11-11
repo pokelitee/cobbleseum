@@ -119,8 +119,12 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			# self-lowering moves.
 			var expected := expected_damage(me, foe, move, battle.data())
 			var adjusted := SimpleAI.move_score(me, foe, move) / maxf(move.power * move.expected_hits(), 1.0) if move.fixed_damage == 0 else 1.0
-			considerations.damage = _sample("damage", expected * adjusted / maxf(foe.max_hp, 1.0))
+			# The stand-in's value of 0 is a veto (self-destructing early, sinking a stat below -2);
+			# the damage curve's floor would otherwise turn it into a usable score.
+			considerations.damage = _sample("damage", expected * adjusted / maxf(foe.max_hp, 1.0)) if adjusted > 0.0 else 0.0
 			considerations.finisher = _sample("finisher", expected / maxf(foe.hp, 1.0))
+			if move.own_stat_drop() < 0 and _other_attack_on(me, i):
+				considerations.stage_cost = stage_cost(me, move)
 		else:
 			considerations.value = _sample("value", SimpleAI.move_score(me, foe, move) / VALUE_SCALE)
 			if move.kind == BattleMove.Kind.HEAL:
@@ -188,6 +192,23 @@ static func combine(values: Array) -> float:
 	return score
 
 
+## What a self-lowering move's drop costs the user's other attacks on that stat: the share of
+## their power left after it (a boost thrown away counts in full).
+static func stage_cost(me: Fighter, move: BattleMove) -> float:
+	var stage: int = me.boosts[move.offensive_stat]
+	return Rules.stage_multiplier(stage + move.own_stat_drop()) / Rules.stage_multiplier(stage)
+
+
+## Whether the user has another damaging move that attacks with the same stat as move `index`.
+static func _other_attack_on(me: Fighter, index: int) -> bool:
+	var stat := me.moves[index].offensive_stat
+	for i in me.moves.size():
+		var other := me.moves[i]
+		if i != index and other.is_damaging() and other.fixed_damage == 0 and not other.target_attacks and other.offensive_stat == stat:
+			return true
+	return false
+
+
 ## 1 if the opponent (as seen) can't land a hit within `channel` ticks, else EXPOSED: an
 ## incoming attack, or a damaging move it could ready, wind up and land in time.
 static func heal_cover(me: Fighter, foe: Fighter, seen: Dictionary, threat: Dictionary, channel: int) -> float:
@@ -214,8 +235,8 @@ static func heal_cover(me: Fighter, foe: Fighter, seen: Dictionary, threat: Dict
 static func expected_damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData) -> float:
 	if move.fixed_damage > 0:
 		return move.fixed_damage * move.expected_hits()
-	var attack := attacker.stat("atk" if move.physical else "spa")
-	var defense := defender.stat("def" if move.physical else "spd")
+	var attack := move.attack_stat(attacker, defender)
+	var defense := defender.stat(move.defensive_stat)
 	var base := floorf(floorf(floorf(2.0 * Rules.LEVEL / 5.0 + 2.0) * move.power * attack / defense) / 50.0) + 2.0
 	var stab := Rules.STAB if move.type in attacker.types else 1.0
 	var effectiveness := Rules.compressed_effectiveness(data.effectiveness(move.type, defender.types))
