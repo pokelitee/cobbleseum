@@ -3,7 +3,7 @@ extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
 ## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
 
-const RULES_VERSION := 10
+const RULES_VERSION := 11
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -15,8 +15,8 @@ const OVERTIME_RAMP := 0.1
 ## Multiplies the HP stat to set how long battles last (target 30-45 s).
 const HP_MULTIPLIER := 22.0
 
-const ARENA_RADIUS := 8.0
-const START_DISTANCE := 8.0
+const ARENA_RADIUS := 11.0
+const START_DISTANCE := 10.0
 ## Movement speed in metres per second, mapped from the Speed stat.
 const MIN_MOVE_SPEED := 2.0
 const MAX_MOVE_SPEED := 5.0

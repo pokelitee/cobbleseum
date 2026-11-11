@@ -422,7 +422,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 
 ### 9.1 Format
 
-- One-on-one, in a round arena with walls (no ring-outs).
+- One-on-one, in a round arena with walls (no ring-outs), 11 m in radius since rules version 11 (8 m before), with fighters starting 10 m apart. Once fighters kept their distance (version 9), 8 m was cramped: they spent 11% of the time within a metre of the wall, 6% at 11 m. Rankings use this one size.
 - The simulation runs at a fixed 30 ticks per second.
 - **Length:** battles should last 30–45 seconds. From 60 seconds, **overtime** raises hit damage by 10% per second (×4 by the cap), so slow matchups finish. At 90 seconds the battle ends in a draw.
 - **Controls:** both fighters are controlled through the same intents:
@@ -583,6 +583,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 11** (an 11 m arena, fighters starting 10 m apart; 1,000 battles): median 39.7 s, 10th–90th percentile 20.7–72.9 s, draws 2.2%, side A 48.8%, melee 38% and projectiles 40% of move uses (unchanged). The average gap went from 3.5 m to 3.8 m.
 - **Rules version 10** (agility and gliding, 1,000 battles): median 38.0 s, 10th–90th percentile 20.2–71.9 s, draws 1.8%, side A 48.8%.
 - **Rules version 9** (facing, acceleration, knockback, and the utility AI's wider, varied spacing; 1,000 battles): median 37.8 s, 10th–90th percentile 20.1–70.9 s, draws 2.2%, side A 50.4%, misses up from 5.7 to 10 per battle. The average gap between fighters went from 1.6 m to 3.4 m, and the share of time more than 3 m apart from 13% to 51%.
 - **Rules version 8** (self-lowering moves discounted in movesets, the AI's veto fixed, Showdown's stat overrides, 1,000 battles): median 30.2 s, 10th–90th percentile 16.8–57.9 s, draws 0.5%, type-advantaged side wins 56.1%.
