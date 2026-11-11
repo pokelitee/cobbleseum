@@ -56,7 +56,7 @@ godot --headless --path . --script res://tools/rank.gd -- run --jobs=8 --profile
 godot --headless --path . --script res://tools/rank.gd -- compare --against=hard
 ```
 
-Record a battle as video clips (needs a display and ffmpeg; output goes to `recordings/`). The clip is the most exciting stretch of about `--seconds` (usually ending on the knockout), with hit-stop, slow motion and camera shots planned from the battle's events. `--format` is `vertical` (1080×1920, the default), `landscape` (1920×1080) or `both`; every format shows the same battle:
+Record a battle as video clips (needs a display and ffmpeg; output goes to `recordings/`). The clip is the most exciting stretch of about `--seconds` (usually ending on the knockout), with hit-stop, slow motion and camera shots planned from the battle's events. `--format` is `vertical` (1080×1920, the default), `landscape` (1920×1080) or `both`; every format shows the same battle. A render fails if it doesn't match the headless run or logs a script error:
 
 ```bash
 godot --headless --path . --script res://tools/record.gd -- game/data/battles/showcase.json --seconds=10 --format=both
