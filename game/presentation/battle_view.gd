@@ -4,6 +4,9 @@ extends Node3D
 ## <spec.json> [--clip-seconds=S] [--expect-checksum=HEX] [--ai-debug]. --ai-debug shows the
 ## AI debug overlay from the start; F3 toggles it in the window.
 ##
+## Instead of a spec file, SpecFlags can describe the battle: --watch=<species> [--vs=<species>]
+## [--ai=<profile>] [--vs-ai=<profile>] [--seed=N] for AI against AI.
+##
 ## Play mode (--play=<species> [--vs=<species>] [--ai=<profile>] [--seed=N], or a spec with
 ## "ai": "player"): the battle runs live, one tick per 1/30 s, since a player's choices can't
 ## be planned ahead. A camera follows the player's fighter, heavy hits freeze play briefly,
@@ -18,7 +21,6 @@ extends Node3D
 ## exits with code 2 if the battle's checksum doesn't match --expect-checksum.
 
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
-const DEFAULT_FOE := "blastoise"
 const REPLAYS_DIR := "res://recordings/replays"
 ## Play mode: frames the controls hint stays up, and frames after the knockout before the
 ## replay is saved and the rematch hint shows.
@@ -83,8 +85,10 @@ var _end_frames := 0
 
 func _ready() -> void:
 	var options := _parse_args(OS.get_cmdline_user_args())
-	var spec: Variant = _play_spec(options) if not options.play.is_empty() \
+	var spec: Variant = options.flag_spec if not options.flag_spec.is_empty() \
 		else JSON.parse_string(FileAccess.get_file_as_string(options.spec))
+	if spec is Dictionary and spec.has("error"):
+		return _fail(spec.error)
 	if not spec is Dictionary:
 		return _fail("cannot read battle spec %s" % options.spec)
 	var loaded := BattleData.load_all()
@@ -312,16 +316,6 @@ func _save_replay() -> void:
 	file.store_string(JSON.stringify(replay, "", false, true))
 	file.close()
 	print("replay saved to %s" % path)
-
-
-## The spec for --play: the player's species against --vs, controlled by --ai, with --seed or
-## a seed from the clock.
-static func _play_spec(options: Dictionary) -> Dictionary:
-	var seed: int = options.seed if options.seed >= 0 else int(Time.get_ticks_usec() % 1000000)
-	return {"seed": seed, "fighters": [
-		{"species": options.play, "ai": "player"},
-		{"species": options.vs if not options.vs.is_empty() else DEFAULT_FOE, "ai": options.ai},
-	]}
 
 
 ## Sets how long the tick just shown is held and how fast animations play meanwhile:
@@ -553,20 +547,13 @@ func _is_recording() -> bool:
 
 
 func _parse_args(args: PackedStringArray) -> Dictionary:
+	var parsed := SpecFlags.parse(args)
 	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": "", "ai_debug": false,
-		"play": "", "vs": "", "ai": Controllers.DEFAULT_AI, "seed": -1}
-	for arg in args:
+		"flag_spec": SpecFlags.to_spec(parsed.flags)}
+	for arg: String in parsed.rest:
 		if arg == "--ai-debug":
 			options.ai_debug = true
-			continue
-		for key in ["play", "vs", "ai"]:
-			if arg.begins_with("--%s=" % key):
-				options[key] = arg.get_slice("=", 1)
-		if arg.begins_with("--seed="):
-			options.seed = arg.get_slice("=", 1).to_int()
-		if arg.begins_with("--play=") or arg.begins_with("--vs=") or arg.begins_with("--ai=") or arg.begins_with("--seed="):
-			continue
-		if arg.begins_with("--clip-seconds="):
+		elif arg.begins_with("--clip-seconds="):
 			options.clip_seconds = arg.get_slice("=", 1).to_float()
 		elif arg.begins_with("--expect-checksum="):
 			options.expect_checksum = arg.get_slice("=", 1)

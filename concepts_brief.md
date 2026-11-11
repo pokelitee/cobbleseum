@@ -897,7 +897,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 **M4: AI and play.**
 
 - The utility AI, with profiles and a debug overlay. The AI, profiles and overlay are done.
-- Player-vs-AI controls (keyboard and gamepad) and a player camera. Done: `--play=<species> --vs=<species> --ai=<profile>` runs the battle live (no pre-planned presentation, since a player's choices can't be known ahead), with a camera over the player's shoulder, live hit-stop that pauses the battle itself, a move bar with keys and cooldowns, and a replay saved per battle (the spec plus every tick's intents, played back by `ReplayController` and renderable by `tools/record.gd`).
+- Player-vs-AI controls (keyboard and gamepad) and a player camera. Done: `--play=<species> --vs=<species> --ai=<profile>` runs the battle live (no pre-planned presentation, since a player's choices can't be known ahead), with a camera over the player's shoulder, live hit-stop that pauses the battle itself, a move bar with keys and cooldowns, and a replay saved per battle (the spec plus every tick's intents, played back by `ReplayController` and renderable by `tools/record.gd`). AI-vs-AI battles start the same way with `--watch=<species> --vs=<species> --ai=<profile> --vs-ai=<profile>` (`SpecFlags`), in the window and in `tools/record.gd`, without a spec file.
 
 **M5: rankings.**
 

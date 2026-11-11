@@ -2,6 +2,8 @@ extends SceneTree
 ## Records a battle as video clips (concepts_brief.md §12).
 ## Usage: godot --headless --path . --script res://tools/record.gd -- <spec.json>
 ##        [--seconds=10] [--format=vertical|landscape|both] [--ai-debug]
+## Instead of <spec.json>, --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=] (SpecFlags)
+## describes an AI-against-AI battle.
 ## --ai-debug records the AI debug overlay on top (for reviewing AI behaviour, not posting).
 ##
 ## 1. Runs the battle headless to find where it ends and its checksum.
@@ -35,7 +37,13 @@ func _initialize() -> void:
 	var spec_path := ""
 	var seconds := DEFAULT_SECONDS
 	var format := DEFAULT_FORMAT
-	for arg in OS.get_cmdline_user_args():
+	var parsed := SpecFlags.parse(OS.get_cmdline_user_args())
+	var flag_spec := SpecFlags.to_spec(parsed.flags)
+	if flag_spec.has("error"):
+		return _fail(flag_spec.error)
+	if not flag_spec.is_empty() and flag_spec.fighters[0].ai == "player":
+		return _fail("--play needs a player; record its replay instead (recordings/replays/)")
+	for arg: String in parsed.rest:
 		if arg.begins_with("--seconds="):
 			seconds = maxf(1.0, arg.get_slice("=", 1).to_float())
 		elif arg.begins_with("--format="):
@@ -44,15 +52,16 @@ func _initialize() -> void:
 			_view_args.append(arg)
 		else:
 			spec_path = arg
-	if spec_path.is_empty():
-		return _fail("usage: -- <spec.json> [--seconds=10] [--format=vertical|landscape|both] [--ai-debug]")
+	if spec_path.is_empty() and flag_spec.is_empty():
+		return _fail("usage: -- <spec.json> | --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=]" +
+			" [--seconds=10] [--format=vertical|landscape|both] [--ai-debug]")
 	var formats: Array = VideoFormat.SIZES.keys() if format == "both" else [format]
 	if not VideoFormat.SIZES.has(formats[0]):
 		return _fail("unknown format '%s' (use vertical, landscape or both)" % format)
 	if FileAccess.file_exists(OVERRIDE_FILE):
 		return _fail("%s exists, perhaps left by an interrupted recording; delete it and retry" % ProjectSettings.globalize_path(OVERRIDE_FILE))
 	spec_path = ProjectSettings.globalize_path(spec_path) if spec_path.begins_with("res://") else spec_path
-	var spec: Variant = JSON.parse_string(FileAccess.get_file_as_string(spec_path))
+	var spec: Variant = flag_spec if not flag_spec.is_empty() else JSON.parse_string(FileAccess.get_file_as_string(spec_path))
 	if not spec is Dictionary:
 		return _fail("cannot read battle spec %s" % spec_path)
 	var loaded := BattleData.load_all()
@@ -79,7 +88,9 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	print("battle: %s after %d ticks, checksum %s" % [Battle.Result.keys()[battle.result], end_tick, battle.checksum().left(12)])
 	for clip_format: String in formats:
-		var err := _render(spec_path, clip_format, out_dir, seconds, battle.checksum())
+		# A battle from flags goes to the view as flags, its seed fixed so both runs match.
+		var source := SpecFlags.from_spec(spec) if not flag_spec.is_empty() else PackedStringArray([spec_path])
+		var err := _render(source, clip_format, out_dir, seconds, battle.checksum())
 		if not err.is_empty():
 			return _fail(err)
 
@@ -95,7 +106,7 @@ func _initialize() -> void:
 
 
 ## Renders one format to <out_dir>/clip_<format>.mp4. Returns an error message or "".
-func _render(spec_path: String, format: String, out_dir: String, seconds: float, checksum: String) -> String:
+func _render(source: PackedStringArray, format: String, out_dir: String, seconds: float, checksum: String) -> String:
 	var movie := out_dir.path_join("clip_%s.ogv" % format)
 	var clip := out_dir.path_join("clip_%s.mp4" % format)
 	print("rendering %s..." % format)
@@ -107,7 +118,8 @@ func _render(spec_path: String, format: String, out_dir: String, seconds: float,
 		"--write-movie", movie, "--fixed-fps", str(Rules.TICK_RATE),
 		"--quit-after", str(roundi(seconds * Rules.TICK_RATE) + SAFETY_FRAMES),
 		VIEW_SCENE, "--",
-		spec_path, "--clip-seconds=%s" % seconds,
+	] + Array(source) + [
+		"--clip-seconds=%s" % seconds,
 		"--expect-checksum=%s" % checksum,
 	] + Array(_view_args), output, true)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(OVERRIDE_FILE))
