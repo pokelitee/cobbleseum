@@ -291,6 +291,7 @@ The geometry header gives the texture size.
   - Locators become marker transforms, for example as spawn points for projectiles.
 - **Materials:**
   - Nearest-neighbour filtering, no mipmaps, and alpha-scissor cut-outs.
+  - Back faces are culled. A zero-thickness plane's two faces face opposite ways, so each side shows its own texture (Charizard's wings: orange outside, teal inside); drawing both sides of every face put the two in the same place, and they flickered as they fought over each pixel. Inverted (negative-size) cubes, such as the inside of a cap, face inward and show from inside. The roster has about 33,000 zero-thickness cubes and 425 inverted ones.
   - Glowing and translucent layers come from the resolver.
   - Animated layers (a list of texture frames plus a frame rate) become flipbooks.
 

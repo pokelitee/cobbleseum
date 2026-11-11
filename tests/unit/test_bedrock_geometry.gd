@@ -50,7 +50,27 @@ func test_inflate_grows_every_side() -> void:
 
 func test_zero_thickness_cube_keeps_two_faces() -> void:
 	var scene := _build([{"name": "b", "cubes": [{"origin": [0, 0, 0], "size": [2, 2, 0], "uv": [0, 0]}]}])
-	assert_eq(_vertices(scene).size(), 12)
+	var vertices := _vertices(scene)
+	assert_eq(vertices.size(), 12)
+	var first := (vertices[1] - vertices[0]).cross(vertices[2] - vertices[0])
+	var second := (vertices[7] - vertices[6]).cross(vertices[8] - vertices[6])
+	assert_true(first.dot(second) < 0.0, "the two faces face opposite ways, one shown from each side")
+	scene.free()
+
+
+func test_faces_show_from_outside_with_back_faces_culled() -> void:
+	var scene := _build([{"name": "b", "cubes": [{"origin": [0, 0, 0], "size": [4, 4, 4], "uv": [0, 0]}]}])
+	var mesh: MeshInstance3D = scene.get_node("Skeleton/Mesh")
+	assert_eq((mesh.mesh.surface_get_material(0) as BaseMaterial3D).cull_mode, BaseMaterial3D.CULL_BACK,
+		"two-sided drawing made coincident plane faces flicker")
+	var vertices := _vertices(scene)
+	var centre := _bounds(vertices).get_center()
+	for i in range(0, vertices.size(), 3):
+		var a := vertices[i]
+		var winding := (vertices[i + 1] - a).cross(vertices[i + 2] - a)
+		var outward := (a + vertices[i + 1] + vertices[i + 2]) / 3.0 - centre
+		# Godot draws a face whose corners run clockwise as seen from the front.
+		assert_true(winding.dot(outward) < 0.0, "triangle %d faces outward" % (i / 3))
 	scene.free()
 
 

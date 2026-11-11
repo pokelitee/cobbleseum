@@ -74,15 +74,19 @@ static func build(geo_json: Dictionary, texture: Texture2D, name: String) -> Dic
 	return {"scene": root}
 
 
-## Pixel-art material: nearest filtering, no mipmaps, alpha-tested cut-outs. Both sides render
-## because many models use zero-thickness planes for eyes, fins and wings.
+## Pixel-art material: nearest filtering, no mipmaps, alpha-tested cut-outs. Only front faces
+## render. Zero-thickness planes (wings, fins, ears; tens of thousands across the roster) keep
+## both of their faces, one facing each way, so each side shows its own texture; drawing both
+## sides of every face put two faces in the same place and they flickered as they fought over
+## each pixel. Inverted (negative-size) cubes, such as the inside of a cap, face inward and so
+## show from inside, as intended.
 static func material(texture: Texture2D) -> StandardMaterial3D:
 	var result := StandardMaterial3D.new()
 	result.albedo_texture = texture
 	result.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	result.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	result.alpha_scissor_threshold = 0.5
-	result.cull_mode = BaseMaterial3D.CULL_DISABLED
+	result.cull_mode = BaseMaterial3D.CULL_BACK
 	result.roughness = 1.0
 	return result
 
