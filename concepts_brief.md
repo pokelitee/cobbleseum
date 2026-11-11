@@ -803,7 +803,7 @@ The camera director picks from a set of shot types based on battle events:
 
 Battles take place in one of six biomes: grassland, beach, volcano, snowfield, cave and stadium (`game/presentation/arena/`). Arenas are presentation only; the battle is always the flat round arena of §9.1.
 
-- **Style:** everything is blocks in the voxel style of Cobblemon's models, built procedurally and drawn through a few MultiMeshes. A surface shader breaks up each block's colour the way Cobblemon's textures are: pixel grain at 16 pixels per metre (their texture density), a slow change of tone over metres, grime toward the ground on upright faces, and moss in the stadium. No outside art is needed, so there are no further licences.
+- **Style:** everything is blocks in the voxel style of Cobblemon's models, built procedurally: boxes through MultiMeshes, and curved blocks as exact ring segments (meshes with their own top, underside, curved faces and ends), so rings meet without gaps or overlaps. A surface shader breaks up each block's colour the way Cobblemon's textures are: pixel grain at 16 pixels per metre, laid out on each face so the pixels line up with its edges, and grime toward the ground on upright faces (moss in the stadium). Cobblemon's own pixels are 16 per block before the roster's scale, which puts the models at 15–27 pixels per metre (20 at the median scale of 0.8), close to the arenas'. No outside art is needed, so there are no further licences.
 - **Layout:**
   - the battle floor (checkered, with a centre circle and ring in the stadium) and a raised rim at the wall;
   - terrain that stays within a block of the floor for 6.5 m, where the camera roams, then rises into hills;
@@ -814,10 +814,11 @@ Battles take place in one of six biomes: grassland, beach, volcano, snowfield, c
 - **Look:** each biome sets its sky, sun angle and colour, ambient light, fog and weather particles (petals, blown sand, rising embers, snow, cave dust).
 - **Choice:** `"arena"` in a battle spec or `--arena=<biome>` picks one. Otherwise the battle seed picks from grassland, stadium and the biomes the fighters' types suit (Fire → volcano, Ice → snowfield, Water → beach, Rock, Ground, Ghost and Dark → cave, and so on).
 - **The stadium** (`Stadium`) is a coliseum rather than terrain, about 15 m tall and 75 m across:
-  - the field of pale slabs with painted lines (boundary, halfway line, centre circle), then an apron of grey-green paving with a trainer's box at each end;
+  - the field of concentric rings of pale paving with painted lines (boundary, halfway line, centre circle), then an apron of grey-green paving with a trainer's box at each end;
   - a 2.4 m stone wall with a coping;
   - lower stands, a concourse, upper stands and a parapet, split into 16 sections by pillars, with a tunnel into the lower rows of every other section;
-  - a roof ring on posts with a floodlight bank, banners on the parapet in each side's colour, and a scoreboard tower above the roof with the fighters' names;
+  - a roof ring on posts with a floodlight bank, and banners on the parapet in each side's colour;
+  - a big screen set into the upper stands at each end, behind each side's starting point, rising a little above them, with the fighters' names, where the battle's cameras see it;
   - a cool, slightly dim day, so the moves' colours stand out.
 - **Cameras** stay inside a limit each arena sets (just inside the stadium's wall, or where the ground starts to rise elsewhere), so they never end up inside the scenery.
 - **Seats:** the arena offers seats facing the floor (on the stands' rows, else on low terrain nearby) for spectators.

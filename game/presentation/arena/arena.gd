@@ -6,9 +6,10 @@ extends Node3D
 ## by the battle, so every render of a battle is identical. Presentation only: the battle
 ## itself is always the flat round arena of §9.1.
 ##
-## Everything is blocks drawn through a few MultiMeshes, in the voxel style of Cobblemon's
-## models, with a surface shader (arena_surface.gdshader) adding pixel grain, tone and grime,
-## so no outside art is needed. The stadium has a builder of its own (Stadium).
+## Everything is blocks in the voxel style of Cobblemon's models: boxes drawn through
+## MultiMeshes, and curved blocks (ring segments) built as exact meshes so rings have no gaps
+## or overlaps. A surface shader (arena_surface.gdshader) adds pixel grain lined up with each
+## face, and grime, so no outside art is needed. The stadium has a builder of its own (Stadium).
 
 ## The floor reaches just past the simulation's wall, with a raised rim around it.
 const FLOOR_RADIUS := Rules.ARENA_RADIUS + 0.5
@@ -29,6 +30,10 @@ const PARTICLE_AREA := Vector3(FLOOR_RADIUS * 3.5, 8, FLOOR_RADIUS * 3.5)
 const SURFACE_SHADER := preload("res://game/presentation/arena/arena_surface.gdshader")
 ## Cameras stay this far inside where the world rises (Stadium's wall, or the clear ground).
 const CAMERA_MARGIN := 1.0
+## Curved faces are split every this many metres along the arc, so they look round.
+const ARC_STEP := 0.25
+## Ring blocks are about this long.
+const RING_BLOCK := 1.0
 
 var biome_name := ""
 ## Places a spectator can stand, facing the floor's centre (world transforms).
@@ -42,6 +47,8 @@ var _noise := FastNoiseLite.new()
 ## Blocks to draw: [Transform3D, Color], plain and glowing.
 var _blocks: Array = []
 var _glowing: Array = []
+## Ring segments, built straight into meshes: {glow: SurfaceTool}.
+var _arcs := {}
 ## Terrain height by cell, so props sit on top.
 var _heights := {}
 
@@ -70,6 +77,9 @@ func _build(names: Array) -> void:
 		_build_props()
 	_add_blocks(_blocks, false)
 	_add_blocks(_glowing, true)
+	for glow: bool in [false, true]:
+		if _arcs.has(glow):
+			_add_arc_mesh(_arcs[glow], glow)
 	if _biome.has("water"):
 		_add_water(float(_biome.water))
 	_add_environment()
@@ -102,27 +112,78 @@ func add_block(transform: Transform3D, colour: Color, glow := false) -> void:
 	(_glowing if glow else _blocks).append([transform, colour])
 
 
-## A block on a ring: at `angle` (radians, from +x toward +z), from `inner` to `outer` metres
-## out and `bottom` to `top` high, `width` long along the ring.
+## A block on a ring centred at `angle` (radians, from +x toward +z), from `inner` to
+## `outer` metres out and `bottom` to `top` high, `width` long along the ring's middle.
 func add_arc(angle: float, inner: float, outer: float, bottom: float, top: float, colour: Color, width: float, glow := false) -> void:
-	var middle := (inner + outer) * 0.5
-	var height := maxf(top - bottom, 0.01)
-	# Turning about +Y by (PI/2 - angle) points the block's +Z outward.
-	var basis := Basis(Vector3.UP, PI * 0.5 - angle) * Basis.from_scale(Vector3(width, height, outer - inner))
-	add_block(Transform3D(basis, Vector3(cos(angle) * middle, bottom + height * 0.5, sin(angle) * middle)), colour, glow)
+	var span := width / maxf((inner + outer) * 0.5, 0.01)
+	add_sector(angle - span * 0.5, angle + span * 0.5, inner, outer, bottom, top, colour, glow)
 
 
-## A whole ring of blocks about a metre long, shaded slightly block by block, alternating
-## with `alternate` if one is given.
+## A whole ring of blocks about RING_BLOCK long, shaded slightly block by block, alternating
+## with `alternate` if one is given. The blocks meet exactly.
 func add_arc_ring(inner: float, outer: float, bottom: float, top: float, colour: Color, rng: RandomNumberGenerator,
 		variation: float, alternate := Color(0, 0, 0, 0)) -> void:
-	var middle := (inner + outer) * 0.5
-	var segments := maxi(8, ceili(TAU * middle))
+	var segments := maxi(8, ceili(TAU * (inner + outer) * 0.5 / RING_BLOCK))
 	for s in segments:
 		var base := alternate if alternate.a > 0.0 and s % 2 == 1 else colour
 		var shade := 1.0 + rng.randf_range(-variation, variation)
-		add_arc((s + 0.5) * TAU / segments, inner, outer, bottom, top,
-			Color(base.r * shade, base.g * shade, base.b * shade), TAU * middle / segments * 1.02)
+		add_sector(s * TAU / segments, (s + 1) * TAU / segments, inner, outer, bottom, top,
+			Color(base.r * shade, base.g * shade, base.b * shade))
+
+
+## A ring segment between angles `from` and `to`: its top and underside, its inner and
+## outer faces (split every ARC_STEP so they look round) and its two ends. UV holds each
+## face's metres, for the surface shader's pixel grid. The underside matters for what floats
+## (the roof); with `inner` at 0 the segment is a wedge.
+func add_sector(from: float, to: float, inner: float, outer: float, bottom: float, top: float, colour: Color, glow := false) -> void:
+	var tool: SurfaceTool = _arcs.get(glow)
+	if tool == null:
+		tool = SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		_arcs[glow] = tool
+	var steps := maxi(1, ceili((to - from) * maxf(outer, 0.01) / ARC_STEP))
+	var up_top := Vector3.UP * top
+	var up_bottom := Vector3.UP * bottom
+	for i in steps:
+		var a := lerpf(from, to, float(i) / steps)
+		var b := lerpf(from, to, float(i + 1) / steps)
+		var da := Vector3(cos(a), 0, sin(a))
+		var db := Vector3(cos(b), 0, sin(b))
+		var along_a := a - from
+		var along_b := b - from
+		var flat_uvs := [Vector2(along_a * inner, 0), Vector2(along_b * inner, 0),
+			Vector2(along_b * outer, outer - inner), Vector2(along_a * outer, outer - inner)]
+		for level: Array in [[up_top, Vector3.UP], [up_bottom, Vector3.DOWN]]:
+			_quad(tool, colour, level[1],
+				[da * inner + level[0], db * inner + level[0], db * outer + level[0], da * outer + level[0]], flat_uvs)
+		var out := (da + db).normalized()
+		for face: Array in [[outer, out], [inner, -out]]:
+			var r: float = face[0]
+			if r <= 0.0:
+				continue
+			_quad(tool, colour, face[1],
+				[da * r + up_bottom, db * r + up_bottom, db * r + up_top, da * r + up_top],
+				[Vector2(along_a * r, 0), Vector2(along_b * r, 0), Vector2(along_b * r, top - bottom), Vector2(along_a * r, top - bottom)])
+	for end: Array in [[from, -1.0], [to, 1.0]]:
+		var d := Vector3(cos(end[0]), 0, sin(end[0]))
+		var tangent := Vector3(-d.z, 0, d.x) * float(end[1])
+		_quad(tool, colour, tangent,
+			[d * inner + up_bottom, d * outer + up_bottom, d * outer + up_top, d * inner + up_top],
+			[Vector2(0, 0), Vector2(outer - inner, 0), Vector2(outer - inner, top - bottom), Vector2(0, top - bottom)])
+
+
+## Two triangles facing `normal`, wound to match it whatever order the corners come in.
+static func _quad(tool: SurfaceTool, colour: Color, normal: Vector3, corners: Array, uvs: Array) -> void:
+	var order := [0, 1, 2, 0, 2, 3]
+	# Godot's front faces wind clockwise as seen from the front. The diagonals give the
+	# quad's facing even when two corners meet (a wedge's point).
+	if (corners[2] - corners[0]).cross(corners[3] - corners[1]).dot(normal) > 0.0:
+		order = [0, 2, 1, 0, 3, 2]
+	for i: int in order:
+		tool.set_color(colour)
+		tool.set_normal(normal)
+		tool.set_uv(uvs[i])
+		tool.add_vertex(corners[i])
 
 
 ## A box from `bottom` to `top` over the cell at `centre`, `size` wide.
@@ -253,22 +314,35 @@ func _add_blocks(blocks: Array, glow: bool) -> void:
 	for i in blocks.size():
 		multimesh.set_instance_transform(i, blocks[i][0])
 		multimesh.set_instance_color(i, blocks[i][1])
-	var material: Material
-	if glow:
-		var unshaded := StandardMaterial3D.new()
-		unshaded.vertex_color_use_as_albedo = true
-		unshaded.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		material = unshaded
-	else:
-		var surface := ShaderMaterial.new()
-		surface.shader = SURFACE_SHADER
-		surface.set_shader_parameter("MOSS", float(_biome.get("moss", 0.0)))
-		material = surface
+	var material := _material(glow, false)
 	var instance := MultiMeshInstance3D.new()
 	instance.multimesh = multimesh
 	instance.material_override = material
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if glow else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	add_child(instance)
+
+
+func _add_arc_mesh(tool: SurfaceTool, glow: bool) -> void:
+	var instance := MeshInstance3D.new()
+	instance.mesh = tool.commit()
+	instance.material_override = _material(glow, true)
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if glow else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	add_child(instance)
+
+
+## Glowing blocks are unshaded; the rest get the surface shader, reading face metres from UV
+## for ring segments (`face_uv`) or from the box's size for MultiMesh boxes.
+func _material(glow: bool, face_uv: bool) -> Material:
+	if glow:
+		var unshaded := StandardMaterial3D.new()
+		unshaded.vertex_color_use_as_albedo = true
+		unshaded.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		return unshaded
+	var surface := ShaderMaterial.new()
+	surface.shader = SURFACE_SHADER
+	surface.set_shader_parameter("MOSS", float(_biome.get("moss", 0.0)))
+	surface.set_shader_parameter("FACE_UV", face_uv)
+	return surface
 
 
 func _add_water(level: float) -> void:
