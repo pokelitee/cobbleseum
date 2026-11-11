@@ -6,8 +6,9 @@ extends Node3D
 ## by the battle, so every render of a battle is identical. Presentation only: the battle
 ## itself is always the flat round arena of §9.1.
 ##
-## Everything is unit blocks drawn through a few MultiMeshes, in the voxel style of
-## Cobblemon's models, so no outside art is needed.
+## Everything is blocks drawn through a few MultiMeshes, in the voxel style of Cobblemon's
+## models, with a surface shader (arena_surface.gdshader) adding pixel grain, tone and grime,
+## so no outside art is needed. The stadium has a builder of its own (Stadium).
 
 ## The floor reaches just past the simulation's wall, with a raised rim around it.
 const FLOOR_RADIUS := Rules.ARENA_RADIUS + 0.5
@@ -20,19 +21,20 @@ const OUTER_RADIUS := FLOOR_RADIUS + 31.5
 ## Props stand beyond this; only low ones (flowers) come closer.
 const PROP_RADIUS := FLOOR_RADIUS + 9.5
 const LOW_PROP_RADIUS := FLOOR_RADIUS + 2.5
-## Stadium stands: rings of steps from STANDS_FROM, each STEP_HEIGHT higher.
-const STANDS_FROM := int(FLOOR_RADIUS) + 5
-const STAND_STEPS := 6
-const STEP_HEIGHT := 0.6
 ## Where spectators may sit outside a stadium: terrain this far out, at most this high.
 const SEAT_RANGE := Vector2(FLOOR_RADIUS + 5.5, FLOOR_RADIUS + 13.5)
 const SEAT_MAX_HEIGHT := 3.0
 const WATER_SIZE := 240.0
 const PARTICLE_AREA := Vector3(FLOOR_RADIUS * 3.5, 8, FLOOR_RADIUS * 3.5)
+const SURFACE_SHADER := preload("res://game/presentation/arena/arena_surface.gdshader")
+## Cameras stay this far inside where the world rises (Stadium's wall, or the clear ground).
+const CAMERA_MARGIN := 1.0
 
 var biome_name := ""
 ## Places a spectator can stand, facing the floor's centre (world transforms).
 var seats: Array[Transform3D] = []
+## How far from the centre a camera may go before it would be inside the scenery.
+var camera_limit := CLEAR_RADIUS - CAMERA_MARGIN
 
 var _biome: Dictionary
 var _rng := RandomNumberGenerator.new()
@@ -44,8 +46,9 @@ var _glowing: Array = []
 var _heights := {}
 
 
-## Builds the arena for `name` (one of ArenaBiomes.NAMES) seeded by `seed`.
-static func create(name: String, seed: int) -> Arena:
+## Builds the arena for `name` (one of ArenaBiomes.NAMES) seeded by `seed`. `names` are the
+## fighters' names, shown on the stadium's scoreboard.
+static func create(name: String, seed: int, names: Array = []) -> Arena:
 	var arena := Arena.new()
 	arena.name = "Arena"
 	arena.biome_name = name
@@ -53,16 +56,18 @@ static func create(name: String, seed: int) -> Arena:
 	arena._rng.seed = hash("%s|%d" % [name, seed])
 	arena._noise.seed = seed
 	arena._noise.frequency = 0.06
-	arena._build()
+	arena._build(names)
 	return arena
 
 
-func _build() -> void:
-	_build_floor()
-	_build_terrain()
-	if _biome.get("stands", false):
-		_build_stands()
-	_build_props()
+func _build(names: Array) -> void:
+	if _biome.get("stadium", false):
+		Stadium.build(self, _rng, names)
+		camera_limit = Stadium.wall_radius() - CAMERA_MARGIN
+	else:
+		_build_floor()
+		_build_terrain()
+		_build_props()
 	_add_blocks(_blocks, false)
 	_add_blocks(_glowing, true)
 	if _biome.has("water"):
@@ -76,12 +81,12 @@ func _colour(index: int) -> Color:
 
 
 ## Slight per-block shade variation, so flat areas don't look painted on.
-func _vary(colour: Color, amount := 0.04) -> Color:
+func vary(colour: Color, amount := 0.04) -> Color:
 	var shade := 1.0 + _rng.randf_range(-amount, amount)
 	return Color(colour.r * shade, colour.g * shade, colour.b * shade)
 
 
-func _cells(radius: float) -> Array[Vector2]:
+func cells(radius: float) -> Array[Vector2]:
 	var cells: Array[Vector2] = []
 	var reach := ceili(radius)
 	for i in range(-reach, reach):
@@ -92,8 +97,36 @@ func _cells(radius: float) -> Array[Vector2]:
 	return cells
 
 
+## A block with any transform (a unit box scaled, rotated and placed by `transform`).
+func add_block(transform: Transform3D, colour: Color, glow := false) -> void:
+	(_glowing if glow else _blocks).append([transform, colour])
+
+
+## A block on a ring: at `angle` (radians, from +x toward +z), from `inner` to `outer` metres
+## out and `bottom` to `top` high, `width` long along the ring.
+func add_arc(angle: float, inner: float, outer: float, bottom: float, top: float, colour: Color, width: float, glow := false) -> void:
+	var middle := (inner + outer) * 0.5
+	var height := maxf(top - bottom, 0.01)
+	# Turning about +Y by (PI/2 - angle) points the block's +Z outward.
+	var basis := Basis(Vector3.UP, PI * 0.5 - angle) * Basis.from_scale(Vector3(width, height, outer - inner))
+	add_block(Transform3D(basis, Vector3(cos(angle) * middle, bottom + height * 0.5, sin(angle) * middle)), colour, glow)
+
+
+## A whole ring of blocks about a metre long, shaded slightly block by block, alternating
+## with `alternate` if one is given.
+func add_arc_ring(inner: float, outer: float, bottom: float, top: float, colour: Color, rng: RandomNumberGenerator,
+		variation: float, alternate := Color(0, 0, 0, 0)) -> void:
+	var middle := (inner + outer) * 0.5
+	var segments := maxi(8, ceili(TAU * middle))
+	for s in segments:
+		var base := alternate if alternate.a > 0.0 and s % 2 == 1 else colour
+		var shade := 1.0 + rng.randf_range(-variation, variation)
+		add_arc((s + 0.5) * TAU / segments, inner, outer, bottom, top,
+			Color(base.r * shade, base.g * shade, base.b * shade), TAU * middle / segments * 1.02)
+
+
 ## A box from `bottom` to `top` over the cell at `centre`, `size` wide.
-func _box(centre: Vector2, bottom: float, top: float, colour: Color, size := Vector2.ONE, glow := false) -> void:
+func add_box(centre: Vector2, bottom: float, top: float, colour: Color, size := Vector2.ONE, glow := false) -> void:
 	var height := maxf(top - bottom, 0.01)
 	var basis := Basis.from_scale(Vector3(size.x, height, size.y))
 	var entry := [Transform3D(basis, Vector3(centre.x, bottom + height * 0.5, centre.y)), colour]
@@ -101,24 +134,19 @@ func _box(centre: Vector2, bottom: float, top: float, colour: Color, size := Vec
 
 
 func _build_floor() -> void:
-	var stadium: bool = _biome.get("stands", false)
-	for cell in _cells(FLOOR_RADIUS + RIM_WIDTH):
+	for cell in cells(FLOOR_RADIUS + RIM_WIDTH):
 		var distance := cell.length()
 		if distance > FLOOR_RADIUS:
-			_box(cell, -1.0, RIM_HEIGHT, _vary(_colour(2)))
+			add_box(cell, -1.0, RIM_HEIGHT, vary(_colour(2)))
 			continue
 		var checker := (int(floor(cell.x)) + int(floor(cell.y))) % 2 == 0
-		var colour := _colour(0) if checker else _colour(1)
-		# A painted centre circle and ring in the stadium.
-		if stadium and (distance < 1.2 or absf(distance - 5.5) < 0.5):
-			colour = _colour(2)
-		_box(cell, -1.0, 0.0, _vary(colour, 0.02))
+		add_box(cell, -1.0, 0.0, vary(_colour(0) if checker else _colour(1), 0.02))
 
 
 func _build_terrain() -> void:
 	var hills := float(_biome.hills)
 	var under_water := _biome.has("water")
-	for cell in _cells(OUTER_RADIUS):
+	for cell in cells(OUTER_RADIUS):
 		var distance := cell.length()
 		if distance <= FLOOR_RADIUS + RIM_WIDTH:
 			continue
@@ -136,26 +164,13 @@ func _build_terrain() -> void:
 		var top := _colour(3)
 		if under_water and height <= -1.0:
 			top = _colour(4)
-		_box(cell, -3.0, height - 0.25, _vary(_colour(4)))
-		_box(cell, height - 0.25, height, _vary(top))
+		add_box(cell, -3.0, height - 0.25, vary(_colour(4)))
+		add_box(cell, height - 0.25, height, vary(top))
 		if height >= 0.0 and distance >= SEAT_RANGE.x and distance <= SEAT_RANGE.y and height <= SEAT_MAX_HEIGHT:
-			_add_seat(cell, height)
+			add_seat(cell, height)
 
 
-func _build_stands() -> void:
-	seats.clear()
-	for cell in _cells(STANDS_FROM + STAND_STEPS):
-		var distance := cell.length()
-		if distance < STANDS_FROM:
-			continue
-		var step := int(distance) - STANDS_FROM + 1
-		var top := step * STEP_HEIGHT
-		_heights[cell] = top
-		_box(cell, -1.0, top, _vary(_colour(2) if step % 2 == 0 else _colour(0), 0.03))
-		_add_seat(cell, top)
-
-
-func _add_seat(cell: Vector2, height: float) -> void:
+func add_seat(cell: Vector2, height: float) -> void:
 	var position := Vector3(cell.x, height, cell.y)
 	var facing := Basis.looking_at(Vector3(-cell.x, 0, -cell.y).normalized(), Vector3.UP)
 	seats.append(Transform3D(facing, position))
@@ -183,48 +198,48 @@ func _prop(kind: String, at: Vector2, ground: float) -> void:
 	match kind:
 		"tree":
 			var trunk := _rng.randi_range(2, 4)
-			_box(at, ground, ground + trunk, _vary(Color(0.42, 0.29, 0.18)), Vector2(0.8, 0.8))
-			_box(at, ground + trunk - 0.5, ground + trunk + 2.0, _vary(Color(0.27, 0.5, 0.22), 0.08), Vector2(3, 3))
-			_box(at, ground + trunk + 2.0, ground + trunk + 3.0, _vary(Color(0.3, 0.55, 0.24), 0.08), Vector2(1.6, 1.6))
+			add_box(at, ground, ground + trunk, vary(Color(0.42, 0.29, 0.18)), Vector2(0.8, 0.8))
+			add_box(at, ground + trunk - 0.5, ground + trunk + 2.0, vary(Color(0.27, 0.5, 0.22), 0.08), Vector2(3, 3))
+			add_box(at, ground + trunk + 2.0, ground + trunk + 3.0, vary(Color(0.3, 0.55, 0.24), 0.08), Vector2(1.6, 1.6))
 		"pine":
 			var trunk := _rng.randi_range(1, 2)
-			_box(at, ground, ground + trunk, Color(0.35, 0.25, 0.17), Vector2(0.7, 0.7))
+			add_box(at, ground, ground + trunk, Color(0.35, 0.25, 0.17), Vector2(0.7, 0.7))
 			for layer in 3:
 				var width := 3.0 - layer
 				var bottom := ground + trunk + layer * 1.2
-				_box(at, bottom, bottom + 1.2, _vary(Color(0.16, 0.34, 0.24)), Vector2(width, width))
-				_box(at, bottom + 1.2, bottom + 1.4, Color(0.95, 0.97, 1.0), Vector2(width * 0.7, width * 0.7))
+				add_box(at, bottom, bottom + 1.2, vary(Color(0.16, 0.34, 0.24)), Vector2(width, width))
+				add_box(at, bottom + 1.2, bottom + 1.4, Color(0.95, 0.97, 1.0), Vector2(width * 0.7, width * 0.7))
 		"palm":
 			var height := _rng.randi_range(4, 6)
 			var lean := Vector2(_rng.randf_range(-0.6, 0.6), _rng.randf_range(-0.6, 0.6))
 			for i in height:
-				_box(at + lean * (float(i) / height), ground + i, ground + i + 1, Color(0.55, 0.42, 0.27), Vector2(0.5, 0.5))
+				add_box(at + lean * (float(i) / height), ground + i, ground + i + 1, Color(0.55, 0.42, 0.27), Vector2(0.5, 0.5))
 			var crown := at + lean
-			_box(crown, ground + height, ground + height + 0.3, _vary(Color(0.24, 0.55, 0.22)), Vector2(4.0, 0.8))
-			_box(crown, ground + height, ground + height + 0.3, _vary(Color(0.24, 0.55, 0.22)), Vector2(0.8, 4.0))
+			add_box(crown, ground + height, ground + height + 0.3, vary(Color(0.24, 0.55, 0.22)), Vector2(4.0, 0.8))
+			add_box(crown, ground + height, ground + height + 0.3, vary(Color(0.24, 0.55, 0.22)), Vector2(0.8, 4.0))
 		"rock":
 			var size := _rng.randf_range(0.8, 1.8)
-			_box(at, ground, ground + size * 0.8, _vary(Color(0.5, 0.5, 0.52), 0.1), Vector2(size, size * 0.9))
+			add_box(at, ground, ground + size * 0.8, vary(Color(0.5, 0.5, 0.52), 0.1), Vector2(size, size * 0.9))
 		"flowers":
 			var colours := [Color(0.95, 0.35, 0.35), Color(1.0, 0.85, 0.3), Color(0.95, 0.95, 1.0), Color(0.7, 0.5, 0.95)]
 			for i in 3:
 				var spot := at + Vector2(_rng.randf_range(-0.4, 0.4), _rng.randf_range(-0.4, 0.4))
-				_box(spot, ground, ground + 0.25, colours[_rng.randi() % colours.size()], Vector2(0.2, 0.2))
+				add_box(spot, ground, ground + 0.25, colours[_rng.randi() % colours.size()], Vector2(0.2, 0.2))
 		"lava":
-			_box(at, ground - 0.2, ground + 0.05, Color(1.0, 0.45, 0.1), Vector2(_rng.randf_range(1.5, 3.0), _rng.randf_range(1.5, 3.0)), true)
+			add_box(at, ground - 0.2, ground + 0.05, Color(1.0, 0.45, 0.1), Vector2(_rng.randf_range(1.5, 3.0), _rng.randf_range(1.5, 3.0)), true)
 		"spire":
 			var height := _rng.randi_range(3, 8)
 			var width := _rng.randf_range(0.8, 1.6)
-			_box(at, ground, ground + height, _vary(_colour(4), 0.08), Vector2(width, width))
-			_box(at, ground + height, ground + height + 1.0, _vary(_colour(4), 0.08), Vector2(width * 0.5, width * 0.5))
+			add_box(at, ground, ground + height, vary(_colour(4), 0.08), Vector2(width, width))
+			add_box(at, ground + height, ground + height + 1.0, vary(_colour(4), 0.08), Vector2(width * 0.5, width * 0.5))
 		"ice":
 			var size := _rng.randf_range(1.0, 2.2)
-			_box(at, ground, ground + size * 1.5, Color(0.7, 0.85, 0.95), Vector2(size, size))
+			add_box(at, ground, ground + size * 1.5, Color(0.7, 0.85, 0.95), Vector2(size, size))
 		"crystal":
 			var colour: Color = [Color(0.4, 0.85, 1.0), Color(0.75, 0.45, 1.0)][_rng.randi() % 2]
 			var height := _rng.randf_range(1.0, 2.5)
-			_box(at, ground, ground + height, colour, Vector2(0.5, 0.5), true)
-			_box(at + Vector2(0.4, 0.2), ground, ground + height * 0.6, colour, Vector2(0.35, 0.35), true)
+			add_box(at, ground, ground + height, colour, Vector2(0.5, 0.5), true)
+			add_box(at + Vector2(0.4, 0.2), ground, ground + height * 0.6, colour, Vector2(0.35, 0.35), true)
 
 
 func _add_blocks(blocks: Array, glow: bool) -> void:
@@ -238,10 +253,17 @@ func _add_blocks(blocks: Array, glow: bool) -> void:
 	for i in blocks.size():
 		multimesh.set_instance_transform(i, blocks[i][0])
 		multimesh.set_instance_color(i, blocks[i][1])
-	var material := StandardMaterial3D.new()
-	material.vertex_color_use_as_albedo = true
+	var material: Material
 	if glow:
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		var unshaded := StandardMaterial3D.new()
+		unshaded.vertex_color_use_as_albedo = true
+		unshaded.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material = unshaded
+	else:
+		var surface := ShaderMaterial.new()
+		surface.shader = SURFACE_SHADER
+		surface.set_shader_parameter("MOSS", float(_biome.get("moss", 0.0)))
+		material = surface
 	var instance := MultiMeshInstance3D.new()
 	instance.multimesh = multimesh
 	instance.material_override = material

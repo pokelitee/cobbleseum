@@ -14,6 +14,8 @@ const LOOK_SHARE := 0.5
 const EASE := 0.15
 
 var eye := Vector3.ZERO
+## See CameraRig.limit.
+var limit := INF
 var target := Vector3.ZERO
 var _placed := false
 
@@ -40,7 +42,7 @@ func apply(camera: Camera3D, player: FighterView, foe: FighterView) -> void:
 		eye = eye.lerp(wanted.eye, EASE)
 		target = target.lerp(wanted.target, EASE)
 	camera.fov = FOV
-	camera.look_at_from_position(eye, target, Vector3.UP)
+	camera.look_at_from_position(CameraRig.keep_inside(eye, limit), target, Vector3.UP)
 
 
 ## The camera's forward direction on the floor, in simulation coordinates (x, z).

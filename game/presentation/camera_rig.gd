@@ -39,6 +39,9 @@ var _axis := Vector2(0, 1)
 var _position := Vector3.ZERO
 var _target := Vector3.ZERO
 var _fov := 50.0
+## The arena's camera limit: the eye never goes further than this from the centre, so it
+## can't end up inside the stands or hills (Arena.camera_limit).
+var limit := INF
 var _last_shot := -1
 
 
@@ -65,12 +68,21 @@ func apply(camera: Camera3D, segment: Dictionary, battle: Battle, shot_seconds: 
 	var k := _scale()
 	var wobble := _wobble(seconds) * float(WOBBLE.get(segment.shot, 0.05)) * k
 	camera.fov = _fov
-	var eye := _position + wobble
+	var eye := keep_inside(_position + wobble, limit)
 	var look := _target + wobble * 0.5
 	if eye.is_equal_approx(look):
 		camera.position = eye
 	else:
 		camera.look_at_from_position(eye, look, Vector3.UP)
+
+
+## `eye` pulled in toward the centre, if needed, to at most `radius` from it on the floor.
+static func keep_inside(eye: Vector3, radius: float) -> Vector3:
+	var flat := Vector2(eye.x, eye.z)
+	if flat.length() <= radius:
+		return eye
+	flat = flat.normalized() * radius
+	return Vector3(flat.x, eye.y, flat.y)
 
 
 func pose_for(segment: Dictionary, battle: Battle, shot_seconds: float, progress: float, cut: bool) -> Dictionary:

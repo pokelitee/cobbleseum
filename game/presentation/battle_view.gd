@@ -122,6 +122,8 @@ func _ready() -> void:
 	_portrait = VideoFormat.is_portrait(size)
 	_build_stage(ArenaBiomes.choose(str(spec.get("arena", "")),
 		battle.fighters[0].types + battle.fighters[1].types, int(spec.seed)))
+	if _player_camera != null:
+		_player_camera.limit = _arena.camera_limit
 	for side in 2:
 		var entry: Dictionary = loaded.data.roster[battle.fighters[side].species_id]
 		var view := FighterView.from_model(MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
@@ -158,6 +160,7 @@ func _ready() -> void:
 	# The wobble gets its own stream so it can't change the director's choices.
 	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height],
 		SimRandom.stream(int(spec.seed), CAMERA_WOBBLE_STREAM))
+	_rig.limit = _arena.camera_limit
 
 	if _live:
 		var player := battle.fighters[_player_side]
@@ -515,7 +518,7 @@ func _sync_views() -> void:
 
 ## The arena (its own sky, sun and weather) and the camera.
 func _build_stage(biome: String) -> void:
-	_arena = Arena.create(biome, int(battle.spec.seed))
+	_arena = Arena.create(biome, int(battle.spec.seed), [battle.fighters[0].name, battle.fighters[1].name])
 	add_child(_arena)
 	_camera = Camera3D.new()
 	_camera.far = Arena.OUTER_RADIUS * 3.0
