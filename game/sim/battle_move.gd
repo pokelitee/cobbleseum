@@ -24,7 +24,7 @@ const SELF_TARGETS: Array[String] = ["self", "adjacentAllyOrSelf"]
 const STATS: Array[String] = ["atk", "def", "spa", "spd", "spe"]
 const STATUSES: Array[String] = ["brn", "par", "psn", "tox", "slp", "frz"]
 ## Status moves whose real behaviour lives in Showdown's code (an HP cost, a charge turn,
-## fainting the user, a gender check), so their data alone would play wrong.
+## knocking out the user, a gender check), so their data alone would play wrong.
 const EXCLUDED: Array[String] = ["clangoroussoul", "filletaway", "geomancy", "memento", "captivate"]
 ## Damaging moves whose condition or cost lives in Showdown's code, so they'd play as free
 ## strong hits: Focus Punch fails if the user is hit, Last Resort needs its other moves used
@@ -75,7 +75,7 @@ var recharges := false
 ## Rules.HP_MULTIPLIER, like every other move's damage, so it keeps its main-series balance
 ## against them.
 var fixed_damage := 0
-## The user faints after using it (Explosion).
+## The user is knocked out after using it (Explosion).
 var self_destructs := false
 ## Secondary effects rolled on hit: {"chance": 0-100, "status"?, "confuses"?, "boosts"?, "self_boosts"?}.
 var secondaries: Array[Dictionary] = []

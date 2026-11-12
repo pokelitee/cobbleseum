@@ -84,11 +84,11 @@ func refresh() -> void:
 			panel.position.x = _size.x - MARGIN * _scale - panel.get_combined_minimum_size().x
 
 
-## "simple" or the profile's name.
+## "stand_in" or the profile's name.
 static func describe_controller(controller: Object) -> String:
 	if controller is UtilityAI:
 		return "AI %s" % (controller as UtilityAI).profile.resource_path.get_file().get_basename()
-	return "AI simple"
+	return "AI stand_in"
 
 
 ## One candidate as a row: action, a ten-step score bar, the score and its considerations.

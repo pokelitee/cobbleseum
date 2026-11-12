@@ -15,7 +15,7 @@ func _events() -> Array:
 		{"tick": 280, "type": "windup", "side": 0, "move": "cannon"},
 		{"tick": 295, "type": "fire", "side": 0, "move": "cannon"},
 		{"tick": 300, "type": "hit", "side": 0, "move": "cannon", "damage": 380, "crit": false, "effectiveness": 1.3, "hp": 0},
-		{"tick": 300, "type": "faint", "side": 1},
+		{"tick": 300, "type": "knockout", "side": 1},
 	]
 
 
@@ -47,7 +47,7 @@ func test_knockout_slow_motion_starts_at_the_final_windup() -> void:
 	assert_eq(plan.slow[301 + Director.KNOCKOUT_LINGER_TICKS - 1], Director.KNOCKOUT_FRAMES_PER_TICK)
 	var knockout := Director.shot_for(plan.shots, 290)
 	assert_eq(knockout.shot, Director.Shot.KNOCKOUT)
-	assert_eq(knockout.side, 1, "the camera orbits the fighter who fainted")
+	assert_eq(knockout.side, 1, "the camera orbits the fighter who was knocked out")
 
 
 func test_the_winner_gets_a_victory_shot_at_normal_speed() -> void:
@@ -62,7 +62,7 @@ func test_the_winner_gets_a_victory_shot_at_normal_speed() -> void:
 
 
 func test_no_victory_without_a_knockout() -> void:
-	var events := _events().filter(func(e: Dictionary) -> bool: return e.type != "faint")
+	var events := _events().filter(func(e: Dictionary) -> bool: return e.type != "knockout")
 	var plan := Director.plan(events, 301, MAX_HP, MOVE_POWER, SimRandom.new(1))
 	assert_eq(plan.victory, {})
 	assert_eq(plan.slow.size(), 301 + Director.KNOCKOUT_LINGER_TICKS)

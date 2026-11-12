@@ -6,7 +6,7 @@ const MOVES := {"hit": {"name": "Hit", "category": "Physical", "type": "Normal",
 
 func _battle() -> Battle:
 	var spec := {"seed": 3, "arena": "stadium", "fighters": [{"species": "mon", "moves": ["hit"]}, {"species": "mon", "moves": ["hit"]}]}
-	return Battle.create(spec, BattleData.new(SPECIES, MOVES, {}), SimpleAI.pair(3)).battle
+	return Battle.create(spec, BattleData.new(SPECIES, MOVES, {}), StandInAI.pair(3)).battle
 
 
 func _poses(seed: int) -> Array:

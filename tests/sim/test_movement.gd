@@ -152,10 +152,10 @@ func test_ai_sees_an_incoming_projectile() -> void:
 	for i in 12:
 		battle.step()
 	assert_false(battle.projectiles.is_empty())
-	var threat := SimpleAI.incoming_threat(battle, 1)
+	var threat := StandInAI.incoming_threat(battle, 1)
 	if battle.projectiles[0].position.distance_to(battle.fighters[1].position) < 5.0:
 		assert_false(threat.is_empty(), "a projectile on course is a threat")
-	assert_true(SimpleAI.incoming_threat(battle, 0).is_empty(), "your own projectile isn't")
+	assert_true(StandInAI.incoming_threat(battle, 0).is_empty(), "your own projectile isn't")
 
 
 func test_ai_dodges_some_but_not_all_projectiles() -> void:
@@ -163,7 +163,7 @@ func test_ai_dodges_some_but_not_all_projectiles() -> void:
 	var hits := 0
 	for seed in 30:
 		var spec := {"seed": seed, "arena": "stadium", "fighters": [{"species": "squirt", "moves": ["jet"]}, {"species": "squirt", "moves": ["jet"]}]}
-		var battle: Battle = Battle.create(spec, BattleData.new(SPECIES, MOVES, {}), SimpleAI.pair(seed)).battle
+		var battle: Battle = Battle.create(spec, BattleData.new(SPECIES, MOVES, {}), StandInAI.pair(seed)).battle
 		for i in 300:
 			battle.step()
 		dodges += _events(battle, "dodge").size()

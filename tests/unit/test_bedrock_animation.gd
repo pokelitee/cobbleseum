@@ -1,5 +1,5 @@
 extends TestCase
-## Uses small hand-written clips, never Cobblemon files.
+## Uses small hand-written animations, never Cobblemon files.
 
 
 func _keys(raw: Variant) -> Array:
@@ -53,12 +53,12 @@ func _skeleton() -> Skeleton3D:
 
 func test_build_adds_rest_rotation_and_position() -> void:
 	var skeleton := _skeleton()
-	var clip := {"animation_length": 1.0, "loop": true, "bones": {"arm": {
+	var source := {"animation_length": 1.0, "loop": true, "bones": {"arm": {
 		"rotation": {"0.0": [0, 0, 0], "1.0": [0, 0, 90]},
 		"position": [16, 0, 0],
 	}, "ghost": {"rotation": [1, 0, 0]}}}
 	var report := {}
-	var animation := BedrockAnimation.build(clip, "test.clip", skeleton, {"arm": [0, 0, 0]}, "Skeleton", report)
+	var animation := BedrockAnimation.build(source, "test.wave", skeleton, {"arm": [0, 0, 0]}, "Skeleton", report)
 	assert_eq(animation.loop_mode, Animation.LOOP_LINEAR)
 	assert_almost_eq(animation.length, 1.0, 1e-9)
 	assert_eq(report.get("unknown_bones", {}).keys(), ["ghost"])
@@ -73,14 +73,14 @@ func test_build_adds_rest_rotation_and_position() -> void:
 
 func test_hold_on_last_frame_does_not_loop() -> void:
 	var skeleton := _skeleton()
-	var clip := {"loop": "hold_on_last_frame", "bones": {"arm": {"rotation": {"0.0": [0, 0, 0], "0.5": [10, 0, 0]}}}}
-	var animation := BedrockAnimation.build(clip, "test.clip", skeleton, {}, "Skeleton", {})
+	var source := {"loop": "hold_on_last_frame", "bones": {"arm": {"rotation": {"0.0": [0, 0, 0], "0.5": [10, 0, 0]}}}}
+	var animation := BedrockAnimation.build(source, "test.wave", skeleton, {}, "Skeleton", {})
 	assert_eq(animation.loop_mode, Animation.LOOP_NONE)
 	assert_almost_eq(animation.length, 0.5, 1e-9, "length falls back to the last key")
 	skeleton.free()
 
 
-func test_choose_clips_prefers_poser_then_names() -> void:
+func test_choose_animations_prefers_poser_then_names() -> void:
 	var poser := {
 		"poses": {"battle-standing": {"isBattle": true, "poseTypes": ["STAND"],
 			"animations": ["q.look('head')", "q.bedrock('mon', 'fight_idle')"],
@@ -88,27 +88,27 @@ func test_choose_clips_prefers_poser_then_names() -> void:
 		"animations": {"physical": "q.bedrock_primary('mon', 'punch', q.curve('one'))", "special": "q.bedrock('mon', 'missing')"},
 	}
 	var available := ["mon.fight_idle", "mon.battle_cry", "mon.punch", "mon.special", "mon.ground_walk", "mon.battle_idle"]
-	var roles := CobblemonModel.choose_clips(poser, available, ["mon"] as Array[String])
+	var roles := CobblemonModel.choose_animations(poser, available, ["mon"] as Array[String])
 	assert_eq(roles.idle, "mon.fight_idle")
 	assert_eq(roles.cry, "mon.battle_cry")
 	assert_eq(roles.physical, "mon.punch")
-	assert_eq(roles.special, "mon.special", "falls back to the name when the poser's clip is missing")
+	assert_eq(roles.special, "mon.special", "falls back to the name when the poser's animation is missing")
 	assert_eq(roles.walk, "mon.ground_walk")
 	assert_false(roles.has("faint"))
 
 
-func test_choose_clips_without_poser_uses_names() -> void:
-	var roles := CobblemonModel.choose_clips({}, ["mon.ground_idle", "mon.hurt"], ["mon"] as Array[String])
+func test_choose_animations_without_poser_uses_names() -> void:
+	var roles := CobblemonModel.choose_animations({}, ["mon.ground_idle", "mon.hurt"], ["mon"] as Array[String])
 	assert_eq(roles, {"idle": "mon.ground_idle", "recoil": "mon.hurt"})
 
 
-func test_choose_clips_falls_back_across_animation_groups() -> void:
-	# A form's poser (mon_large) whose clips live in the species' group (mon).
+func test_choose_animations_falls_back_across_animation_groups() -> void:
+	# A form's poser (mon_large) whose animations live in the species' group (mon).
 	var standing := {"poses": {"standing": {"poseTypes": ["STAND"], "animations": ["q.bedrock('mon', 'ground_idle')"]}}}
-	var roles := CobblemonModel.choose_clips(standing, ["mon.ground_idle", "mon.cry"], ["mon_large", "mon"] as Array[String])
+	var roles := CobblemonModel.choose_animations(standing, ["mon.ground_idle", "mon.cry"], ["mon_large", "mon"] as Array[String])
 	assert_eq(roles.idle, "mon.ground_idle", "a non-battle standing pose counts when there's no battle pose")
 	assert_eq(roles.cry, "mon.cry", "fallback names are searched in the species' group too")
-	var floating := CobblemonModel.choose_clips({}, ["bug.air_idle", "bug.blink"], ["other"] as Array[String])
+	var floating := CobblemonModel.choose_animations({}, ["bug.air_idle", "bug.blink"], ["other"] as Array[String])
 	assert_eq(floating.idle, "bug.air_idle", "air idles count, in any group the files hold")
 
 
@@ -123,12 +123,12 @@ const BIRD := {"poses": {
 
 
 func test_air_roles_come_from_hover_and_fly_poses() -> void:
-	var roles := CobblemonModel.choose_clips(BIRD, ["bird.ground_idle", "bird.air_idle", "bird.air_fly"], ["bird"] as Array[String])
+	var roles := CobblemonModel.choose_animations(BIRD, ["bird.ground_idle", "bird.air_idle", "bird.air_fly"], ["bird"] as Array[String])
 	assert_eq(roles.idle, "bird.ground_idle")
 	assert_eq(roles.air_idle, "bird.air_idle")
 	assert_eq(roles.air_fly, "bird.air_fly")
-	var grounded := CobblemonModel.choose_clips({}, ["mon.ground_idle"], ["mon"] as Array[String])
-	assert_false(grounded.has("air_idle"), "only species with air clips get air roles")
+	var grounded := CobblemonModel.choose_animations({}, ["mon.ground_idle"], ["mon"] as Array[String])
+	assert_false(grounded.has("air_idle"), "only species with air animations get air roles")
 
 
 func test_part_sets_follow_the_standing_and_hover_poses() -> void:
@@ -145,7 +145,7 @@ func test_part_sets_follow_the_standing_and_hover_poses() -> void:
 func test_emotion_run_and_air_sleep_roles_by_name() -> void:
 	var available := ["mon.ground_idle", "mon.ground_walk", "mon.ground_run", "mon.happy", "mon.sad", "mon.angry",
 		"mon.surprised", "mon.air_sleep"]
-	var roles := CobblemonModel.choose_clips({}, available, ["mon"] as Array[String])
+	var roles := CobblemonModel.choose_animations({}, available, ["mon"] as Array[String])
 	assert_eq(roles.walk, "mon.ground_walk")
 	assert_eq(roles.run, "mon.ground_run")
 	assert_eq(roles.happy, "mon.happy")
@@ -163,7 +163,7 @@ func test_quirks_come_from_the_standing_pose_without_blinks() -> void:
 	}}
 	var available := ["mon.blink", "mon.look_quirk", "mon.sniff_quirk", "mon.other_quirk"]
 	assert_eq(CobblemonModel.choose_quirks(poser, available), ["mon.look_quirk", "mon.sniff_quirk"] as Array[String],
-		"the battle pose's, blinks and missing clips left out")
+		"the battle pose's, blinks and missing animations left out")
 	assert_eq(CobblemonModel.choose_quirks({}, available), [] as Array[String])
 
 
@@ -172,6 +172,6 @@ func test_battle_poses_written_as_text_count_correctly() -> void:
 		"odd": {"isBattle": "false", "poseTypes": ["STAND"], "animations": ["q.bedrock('mon', 'wrong_idle')"]},
 		"battle": {"isBattle": "true", "poseTypes": ["STAND"], "animations": ["q.bedrock('mon', 'fight_idle')"]},
 	}}
-	var roles := CobblemonModel.choose_clips(poser, ["mon.wrong_idle", "mon.fight_idle"], ["mon"] as Array[String])
+	var roles := CobblemonModel.choose_animations(poser, ["mon.wrong_idle", "mon.fight_idle"], ["mon"] as Array[String])
 	assert_eq(roles.idle, "mon.fight_idle", "\"false\" isn't a battle pose")
 

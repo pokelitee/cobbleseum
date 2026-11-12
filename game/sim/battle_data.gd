@@ -78,7 +78,7 @@ static func load_showdown(dir := SHOWDOWN_DIR) -> Dictionary:
 
 ## Main-series effectiveness of an attacking type against a defender's types (0 to 4).
 func effectiveness(attack_type: String, defender_types: Array) -> float:
-	# Asked every hit and by the AI every decision, so results are cached per type pairing.
+	# Asked every hit and by the AI every decision, so results are cached per type combination.
 	var key := attack_type + ">" + ",".join(defender_types)
 	var cached: Variant = _effectiveness.get(key)
 	if cached != null:

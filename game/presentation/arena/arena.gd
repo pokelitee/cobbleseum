@@ -3,7 +3,7 @@ extends Node3D
 ## The world around the battle (concepts_brief.md §12.7), from an arena preset (Arenas): the
 ## battle's own field (Terrain, §9.8) with its features and small details (ArenaFields), the
 ## venue around it (open land out to Terrain.WORLD_RADIUS with props on the hills, or a
-## coliseum built by Stadium), and the preset's sky, sun, fog and weather. Everything is seeded
+## coliseum built by Coliseum), and the preset's sky, sun, fog and particles. Everything is seeded
 ## by the battle, so every render of a battle is identical.
 ##
 ## Everything is blocks in the voxel style of Cobblemon's models: boxes drawn through
@@ -11,7 +11,7 @@ extends Node3D
 ## or overlaps. A surface shader (arena_surface.gdshader) adds pixel grain lined up with each
 ## face, and grime, so no outside art is needed.
 
-## The battle floor's edge (the stadium's field), just past the simulation's wall.
+## The battle floor's edge (a coliseum's field), just past the simulation's wall.
 const FLOOR_RADIUS := Rules.ARENA_RADIUS + 0.5
 ## Props on the land beyond the arena start just past its wall, densest in EDGE_BAND (they mark
 ## the edge, like a treeline), thinner further out.
@@ -30,13 +30,13 @@ const DETAIL_END := Rules.ARENA_RADIUS + 16.0
 const CORNER_JITTER := 0.18
 ## Features' bases sink this far, so they sit in the faceted ground rather than on a corner.
 const SINK := 0.3
-## Where spectators may sit outside a stadium: ground this far out, at most this high.
+## Where spectators may sit outside a coliseum: ground this far out, at most this high.
 const SEAT_RANGE := Vector2(FLOOR_RADIUS + 3.0, FLOOR_RADIUS + 12.0)
 const SEAT_MAX_HEIGHT := 3.0
 const WATER_SIZE := 240.0
 const PARTICLE_AREA := Vector3(FLOOR_RADIUS * 3.0, 8, FLOOR_RADIUS * 3.0)
 const SURFACE_SHADER := preload("res://game/presentation/arena/arena_surface.gdshader")
-## Cameras stay this far inside the stadium's wall; elsewhere they may go CAMERA_OVERHANG past
+## Cameras stay this far inside the coliseum's wall; elsewhere they may go CAMERA_OVERHANG past
 ## the arena's (see-through keeps the fighters in view if the land is in the way).
 const CAMERA_MARGIN := 1.0
 const CAMERA_OVERHANG := 2.0
@@ -46,14 +46,14 @@ const ARC_STEP := 0.25
 const RING_BLOCK := 1.0
 
 var preset_name := ""
-## The coliseum's colours (Stadium.theme), for an enclosed venue.
+## The coliseum's colours (Coliseum.theme), for an enclosed venue.
 var theme := {}
 ## Places a spectator can stand, facing the floor's centre (world transforms).
 var seats: Array[Transform3D] = []
 ## How far from the centre a camera may go before it would be inside the scenery.
 var camera_limit := Rules.ARENA_RADIUS + CAMERA_OVERHANG
 
-var _biome: Dictionary
+var _look: Dictionary
 ## The battle's ground: the floor is built at its heights.
 var _terrain: Terrain
 var _rng := RandomNumberGenerator.new()
@@ -75,7 +75,7 @@ var _tops := {}
 
 
 ## Builds the arena preset `name` (Arenas) seeded by `seed`, around the battle's `terrain`
-## (flat if not given). `names` are the fighters' names, for the stadium's screens.
+## (flat if not given). `names` are the fighters' names, for the coliseum's screens.
 static func create(name: String, seed: int, names: Array = [], terrain: Terrain = null) -> Arena:
 	var preset := Arenas.preset(name)
 	assert(not preset.is_empty(), "unknown arena '%s'" % name)
@@ -83,11 +83,11 @@ static func create(name: String, seed: int, names: Array = [], terrain: Terrain 
 	arena.name = "Arena"
 	arena.preset_name = name
 	arena._enclosed = Arenas.enclosed(name)
-	arena._biome = _look(preset)
+	arena._look = _read_look(preset)
 	if arena._enclosed:
-		arena.theme = Stadium.theme(preset.get("theme", {}))
-		arena._biome.moss = arena.theme.moss
-		arena._biome.erase("water")
+		arena.theme = Coliseum.theme(preset.get("theme", {}))
+		arena._look.moss = arena.theme.moss
+		arena._look.erase("water")
 	arena._rng.seed = hash("%s|%d" % [name, seed])
 	arena._noise.seed = seed
 	arena._noise.frequency = 0.06
@@ -100,9 +100,9 @@ static func create(name: String, seed: int, names: Array = [], terrain: Terrain 
 	return arena
 
 
-## The field's look (ArenaFields) under the preset's sky, light, fog and weather, read from
+## The field's look (ArenaFields) under the preset's sky, light, fog and particles, read from
 ## its JSON (colours as "#rrggbb").
-static func _look(preset: Dictionary) -> Dictionary:
+static func _read_look(preset: Dictionary) -> Dictionary:
 	var look: Dictionary = ArenaFields.FIELDS[preset.field].duplicate()
 	look.sky = (preset.sky as Array).map(func(c: String) -> Color: return Color.html(c))
 	var angle: Array = preset.sun.angle
@@ -115,8 +115,8 @@ static func _look(preset: Dictionary) -> Dictionary:
 
 func _build(names: Array) -> void:
 	if _enclosed:
-		Stadium.build(self, _rng, names, _terrain.field != "paved")
-		camera_limit = Stadium.wall_radius() - CAMERA_MARGIN
+		Coliseum.build(self, _rng, names, _terrain.field != "paved")
+		camera_limit = Coliseum.wall_radius() - CAMERA_MARGIN
 	else:
 		build_landscape(Terrain.WORLD_RADIUS)
 		_build_props()
@@ -125,14 +125,14 @@ func _build(names: Array) -> void:
 	for glow: bool in [false, true]:
 		if _arcs.has(glow):
 			_add_arc_mesh(_arcs[glow], glow)
-	if _biome.has("water"):
-		_add_water(float(_biome.water))
+	if _look.has("water"):
+		_add_water(float(_look.water))
 	_add_environment()
-	_add_particles(str(_biome.particles))
+	_add_particles(str(_look.particles))
 
 
 func _colour(index: int) -> Color:
-	return _biome.colours[index]
+	return _look.colours[index]
 
 
 ## Slight per-block shade variation, so flat areas don't look painted on.
@@ -239,7 +239,7 @@ func add_box(centre: Vector2, bottom: float, top: float, colour: Color, size := 
 ## also the heights props stand on and seats on low ground nearby.
 func build_landscape(radius: float) -> void:
 	_land_radius = radius
-	var water: float = _biome.get("water", -INF)
+	var water: float = _look.get("water", -INF)
 	for cell in _terrain.world_cells(radius):
 		var ground := _terrain.ground_at(cell)
 		var steep := _steepness(cell, ground)
@@ -340,7 +340,7 @@ static func _corner_xz(corner: Vector2i) -> Vector2:
 
 
 ## The visible ground's height under `point` (between its cell's corners), or `fallback` where
-## the faceted ground isn't built (the stadium) or something stands on the cell.
+## the faceted ground isn't built (a paved field) or something stands on the cell.
 func surface_at(point: Vector2, fallback: float) -> float:
 	var key := Vector2i(int(floorf(point.x)), int(floorf(point.y)))
 	if not _tops.has(key) or _terrain.kind_at(point) != Terrain.Kind.GROUND:
@@ -369,7 +369,7 @@ func _steepness(cell: Vector2, ground: float) -> float:
 
 
 ## A cell's top: bare stone on steep ground, patches (paths, gravel, ash, trampled snow) where
-## the patch noise is high, the higher-ground colour above a metre, else the biome's ground;
+## the patch noise is high, the higher-ground colour above a metre, else the field's ground;
 ## darker under water.
 func _surface(cell: Vector2, ground: float, steep: float, water: float) -> Color:
 	if ground <= water:
@@ -456,13 +456,13 @@ func _palm(base: Vector3, height: float) -> void:
 ## (where the detail noise is high) as small clusters, and sit on the visible ground, which
 ## slopes smoothly where neighbours are within a step; only cliff edges are left bare.
 func _decorate(at: Vector2, ground: float, steep: float) -> void:
-	var kinds: Dictionary = _biome.get("details", {})
+	var kinds: Dictionary = _look.get("details", {})
 	if steep > Terrain.STEP + 1e-4 or kinds.is_empty():
 		return
 	if _noise.get_noise_2d(at.x * 0.8 - 300.0, at.y * 0.8) < DETAIL_PATCH:
 		return
 	var fade := clampf(inverse_lerp(DETAIL_END, DETAIL_FULL, at.length()), 0.0, 1.0)
-	if _rng.randf() > float(_biome.get("detail", 0.0)) * fade:
+	if _rng.randf() > float(_look.get("detail", 0.0)) * fade:
 		return
 	var kind := _pick_detail(kinds)
 	for n in _rng.randi_range(2, 5):
@@ -536,13 +536,13 @@ func add_seat(cell: Vector2, height: float) -> void:
 
 
 func _build_props() -> void:
-	var props: Dictionary = _biome.props
+	var props: Dictionary = _look.props
 	var kinds: Array = props.keys()
 	kinds.sort()
 	for cell in _heights:
 		var distance: float = (cell as Vector2).length()
 		var ground: float = _heights[cell]
-		if _biome.has("water") and ground < 0.0:
+		if _look.has("water") and ground < 0.0:
 			continue
 		if distance < PROP_RADIUS:
 			continue
@@ -623,7 +623,7 @@ func _material(glow: bool, face_uv: bool) -> Material:
 		return unshaded
 	var surface := ShaderMaterial.new()
 	surface.shader = SURFACE_SHADER
-	surface.set_shader_parameter("MOSS", float(_biome.get("moss", 0.0)))
+	surface.set_shader_parameter("MOSS", float(_look.get("moss", 0.0)))
 	surface.set_shader_parameter("FACE_UV", face_uv)
 	_surfaces.append(surface)
 	return surface
@@ -657,7 +657,7 @@ func _add_water(level: float) -> void:
 
 
 func _add_environment() -> void:
-	var sun_data: Dictionary = _biome.sun
+	var sun_data: Dictionary = _look.sun
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = sun_data.angle
 	sun.light_color = sun_data.colour
@@ -666,7 +666,7 @@ func _add_environment() -> void:
 	sun.directional_shadow_max_distance = 60.0
 	add_child(sun)
 	var environment := Environment.new()
-	var sky_colours: Array = _biome.sky
+	var sky_colours: Array = _look.sky
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = sky_colours[0]
 	sky_material.sky_horizon_color = sky_colours[1]
@@ -676,11 +676,11 @@ func _add_environment() -> void:
 	sky.sky_material = sky_material
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = sky
-	var ambient: Array = _biome.ambient
+	var ambient: Array = _look.ambient
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = ambient[0]
 	environment.ambient_light_energy = ambient[1]
-	var fog: Array = _biome.fog
+	var fog: Array = _look.fog
 	environment.fog_enabled = true
 	environment.fog_light_color = fog[0]
 	environment.fog_density = fog[1]
@@ -713,22 +713,22 @@ func _add_particles(kind: String) -> void:
 	particles.mesh = quad
 	match kind:
 		"petals":
-			_weather(particles, 70, 9.0, Vector3(0.4, -0.35, 0.1), 0.07, Color(1.0, 0.8, 0.88, 0.9))
+			_configure_particles(particles, 70, 9.0, Vector3(0.4, -0.35, 0.1), 0.07, Color(1.0, 0.8, 0.88, 0.9))
 		"sand":
-			_weather(particles, 120, 4.0, Vector3(2.0, -0.05, 0.4), 0.07, Color(0.95, 0.88, 0.7, 0.6))
+			_configure_particles(particles, 120, 4.0, Vector3(2.0, -0.05, 0.4), 0.07, Color(0.95, 0.88, 0.7, 0.6))
 		"embers":
 			particles.position.y = 0.2
-			_weather(particles, 110, 5.0, Vector3(0.1, 0.9, 0.0), 0.12, Color(1.0, 0.55, 0.15, 1.0))
+			_configure_particles(particles, 110, 5.0, Vector3(0.1, 0.9, 0.0), 0.12, Color(1.0, 0.55, 0.15, 1.0))
 		"snow":
-			_weather(particles, 300, 7.0, Vector3(0.2, -0.8, 0.0), 0.08, Color(1, 1, 1, 0.95))
+			_configure_particles(particles, 300, 7.0, Vector3(0.2, -0.8, 0.0), 0.08, Color(1, 1, 1, 0.95))
 		"dust":
-			_weather(particles, 70, 10.0, Vector3(0.05, 0.05, 0.05), 0.08, Color(0.8, 0.85, 1.0, 0.5))
+			_configure_particles(particles, 70, 10.0, Vector3(0.05, 0.05, 0.05), 0.08, Color(0.8, 0.85, 1.0, 0.5))
 	add_child(particles)
 
 
-## Weather drifts at `drift` (m/s) with a little spread; preprocessed so it fills the air from
+## Particles drift at `drift` (m/s) with a little spread; preprocessed so it fills the air from
 ## the first frame.
-func _weather(particles: CPUParticles3D, amount: int, lifetime: float, drift: Vector3, size: float, colour: Color) -> void:
+func _configure_particles(particles: CPUParticles3D, amount: int, lifetime: float, drift: Vector3, size: float, colour: Color) -> void:
 	particles.amount = amount
 	particles.lifetime = lifetime
 	particles.preprocess = lifetime

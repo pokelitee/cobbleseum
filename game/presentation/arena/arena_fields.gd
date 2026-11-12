@@ -2,7 +2,7 @@ class_name ArenaFields
 extends RefCounted
 ## How each field (Terrain.FIELDS) looks (concepts_brief.md §12.7): its colours, props and
 ## small details, as plain data that Arena builds the ground from. The sky, light, fog and
-## weather come from the arena preset (Arenas), so a field can sit under any of them.
+## particles come from the arena preset (Arenas), so a field can sit under any of them.
 ##
 ## Colours are [ground, patches (paths, gravel, ash), stone (cliffs and rock), higher ground,
 ## earth (the sides of the ground)]. Props are {kind: share of cells beyond the arena that get
@@ -43,7 +43,7 @@ const FIELDS := {
 		"detail": 0.35,
 		"details": {"pebble": 3, "mushroom": 2},
 	},
-	# The coliseum's paving (Stadium) has its own colours; these are for anything else on it.
+	# The coliseum's paving (Coliseum) has its own colours; these are for anything else on it.
 	"paved": {
 		"colours": [Color(0.78, 0.71, 0.58), Color(0.73, 0.66, 0.53), Color(0.62, 0.63, 0.6), Color(0.36, 0.48, 0.3), Color(0.45, 0.47, 0.44)],
 		"props": {},

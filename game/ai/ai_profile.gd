@@ -1,6 +1,6 @@
 class_name AIProfile
 extends Resource
-## A difficulty profile for UtilityAI (concepts_brief.md §11). Profiles live in
+## An AI profile: settings for UtilityAI (concepts_brief.md §11). Profiles live in
 ## game/ai/profiles/ as resources; rankings use "ranked" on both sides.
 
 ## Ticks behind the opponent's true state the AI sees it.

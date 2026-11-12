@@ -1,16 +1,16 @@
 class_name ProceduralMotion
 extends RefCounted
 ## The procedural animation layer (concepts_brief.md §7.4): motion of a model's root that
-## fills in for clips a species doesn't have. FighterView applies transform() to a node
-## between itself and the model, so it stacks with clips, knockback and the hit flash.
-## - movement: a hop while walking (no walk clip); flying types hover and bob throughout
+## fills in for animations a species doesn't have. FighterView applies transform() to a node
+## between itself and the model, so it stacks with animations, knockback and the hit flash.
+## - movement: a hop while walking (no walk animation); flying types hover and bob throughout
 ## - actions: a lunge (physical), a rear-back with squash and stretch (special), a spin
-##   (status) and a backward tilt (hit), each when the species has no clip for it
+##   (status) and a backward tilt (hit), each when the species has no animation for it
 ## - always: leaning into movement (pitched forward by forward speed, banked by sideways
 ##   speed, twice as much for fliers), fliers swooping low at speed, and a squash on landing
-## - sleep: slow breathing (no sleep clip)
-## - faint: tipping over and sinking (no faint clip)
-## Everything advances per video frame, scaled like the clips (0 in hit-stop), so renders
+## - sleep: slow breathing (no sleep animation)
+## - faint: tipping over and sinking (no faint animation)
+## Everything advances per video frame, scaled like the animations (0 in hit-stop), so renders
 ## are identical. Distances are shares of the fighter's height.
 
 const ACTION_FRAMES := {"lunge": 12, "rear": 14, "spin": 16, "tilt": 10, "land": 8}

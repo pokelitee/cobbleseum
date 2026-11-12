@@ -26,7 +26,7 @@ func _frames(plan: Dictionary, window: Dictionary) -> int:
 
 
 func test_knockout_usually_ends_the_clip() -> void:
-	var events := [_hit(100, 0, 40, 360), _hit(400, 1, 40, 360), _hit(800, 0, 360, 0), {"tick": 800, "type": "faint", "side": 1}]
+	var events := [_hit(100, 0, 40, 360), _hit(400, 1, 40, 360), _hit(800, 0, 360, 0), {"tick": 800, "type": "knockout", "side": 1}]
 	var plan := _plan(830)
 	var window := Highlights.choose(plan, events, MAX_HP, 150)
 	assert_eq(window.end, 830, "ends where the plan ends")
@@ -49,7 +49,7 @@ func test_windows_count_hitstop_and_slow_motion() -> void:
 	for t in range(250, 300):
 		plan.slow[t] = 3
 	plan.hitstop[260] = 5
-	var events := [_hit(260, 0, 400, 0), {"tick": 260, "type": "faint", "side": 1}]
+	var events := [_hit(260, 0, 400, 0), {"tick": 260, "type": "knockout", "side": 1}]
 	var window := Highlights.choose(plan, events, MAX_HP, 200)
 	assert_eq(window.end, 300)
 	assert_eq(window.start, 300 - 50 - (200 - 155), "the slowed tail fills 155 frames, the rest at one per tick")
@@ -71,14 +71,14 @@ func test_comebacks_and_crits_score_higher() -> void:
 
 func test_windows_never_cut_the_knockout_short() -> void:
 	var events := [_hit(500, 0, 200, 200), _hit(520, 1, 200, 200), _hit(800, 0, 200, 0),
-		{"tick": 800, "type": "faint", "side": 1}]
+		{"tick": 800, "type": "knockout", "side": 1}]
 	var window := Highlights.choose(_plan(830), events, MAX_HP, 330)
-	assert_eq(window.end, 830, "a window holding the faint plays to the plan's end")
+	assert_eq(window.end, 830, "a window holding the knockout plays to the plan's end")
 
 
 func test_the_victory_comes_on_top_of_the_clip() -> void:
 	var events := [_hit(500, 0, 300, 100), _hit(520, 0, 50, 50), _hit(800, 0, 50, 0),
-		{"tick": 800, "type": "faint", "side": 1}]
+		{"tick": 800, "type": "knockout", "side": 1}]
 	var plan := _plan(905)
 	plan.victory = {"start": 830, "side": 0}
 	var window := Highlights.choose(plan, events, MAX_HP, 330)

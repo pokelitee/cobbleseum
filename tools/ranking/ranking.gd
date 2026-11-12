@@ -1,7 +1,7 @@
 class_name Ranking
 extends RefCounted
 ## Ranking maths (concepts_brief.md §13), kept free of files and processes so it can be tested.
-## - schedule(): which pairings to play, sampled and seeded.
+## - schedule(): which matchups to play, sampled and seeded.
 ## - bradley_terry(): strengths fitted to all results, draws counting half a win each.
 ## - spearman(): rank correlation, for the AI-sensitivity check.
 
@@ -10,15 +10,15 @@ const MAX_ITERATIONS := 2000
 const TOLERANCE := 1e-9
 ## Each species also gets this many virtual draws against an average opponent, so a species
 ## that never won (or never lost) still gets a finite rating.
-const PRIOR_GAMES := 1.0
+const PRIOR_BATTLES := 1.0
 ## Ratings are shown on an Elo-like scale: 400 points is 10:1 odds, the average is 1500.
 const RATING_SCALE := 400.0
 const RATING_MEAN := 1500.0
 
 
-## Pairings for a sampled round robin: each species meets `opponents` others picked at random
-## (so most meet a few more, as others pick them too). Returns unique unordered pairings
-## [{"a", "b", "seed"}] with a ≤ b, sorted, each with its own battle seed. Every pairing is
+## Matchups for a sampled round robin: each species meets `opponents` others picked at random
+## (so most meet a few more, as others pick them too). Returns unique unordered matchups
+## [{"a", "b", "seed"}] with a ≤ b, sorted, each with its own battle seed. Every matchup is
 ## played from both sides with that seed.
 static func schedule(pool: Array, opponents: int, seed: int) -> Array[Dictionary]:
 	var ids: Array = pool.duplicate()
@@ -40,34 +40,34 @@ static func schedule(pool: Array, opponents: int, seed: int) -> Array[Dictionary
 				taken += 1
 	var keys := chosen.keys()
 	keys.sort()
-	var pairings: Array[Dictionary] = []
+	var matchup_list: Array[Dictionary] = []
 	for key: String in keys:
-		pairings.append({"a": key.get_slice("|", 0), "b": key.get_slice("|", 1),
+		matchup_list.append({"a": key.get_slice("|", 0), "b": key.get_slice("|", 1),
 			"seed": int(("%s|%d" % [key, seed]).hash() & 0x7fffffff)})
-	return pairings
+	return matchup_list
 
 
 ## A full round robin among `ids`, for the matchup matrix: every pair `repeats` times, each
-## with its own seed (the first is the seed schedule() would give, so shared games are reused).
+## with its own seed (the first is the seed schedule() would give, so shared battles are reused).
 static func round_robin(ids: Array, seed: int, repeats := 1) -> Array[Dictionary]:
 	var sorted: Array = ids.duplicate()
 	sorted.sort()
-	var pairings: Array[Dictionary] = []
+	var matchup_list: Array[Dictionary] = []
 	for i in sorted.size():
 		for j in range(i + 1, sorted.size()):
 			var key := "%s|%s" % [sorted[i], sorted[j]]
 			for repeat in repeats:
 				var tag := "%s|%d" % [key, seed] if repeat == 0 else "%s|%d|%d" % [key, seed, repeat]
-				pairings.append({"a": sorted[i], "b": sorted[j], "seed": int(tag.hash() & 0x7fffffff)})
-	return pairings
+				matchup_list.append({"a": sorted[i], "b": sorted[j], "seed": int(tag.hash() & 0x7fffffff)})
+	return matchup_list
 
 
 ## Fits Bradley-Terry strengths to battle records ({"a", "b", "result": "A"|"B"|"D"}).
-## Returns {species: {"rating", "games", "score"}} where score is wins plus half of draws.
+## Returns {species: {"rating", "battles", "score"}} where score is wins plus half of draws.
 static func bradley_terry(records: Array) -> Dictionary:
 	var wins := {}
-	var games := {}
-	var pair_games := {}
+	var battles := {}
+	var matchup_battles := {}
 	for record: Dictionary in records:
 		var a: String = record.a
 		var b: String = record.b
@@ -75,9 +75,9 @@ static func bradley_terry(records: Array) -> Dictionary:
 			continue
 		for id in [a, b]:
 			wins[id] = wins.get(id, 0.0)
-			games[id] = games.get(id, 0)
-		games[a] += 1
-		games[b] += 1
+			battles[id] = battles.get(id, 0)
+		battles[a] += 1
+		battles[b] += 1
 		match record.result:
 			"A":
 				wins[a] += 1.0
@@ -87,26 +87,26 @@ static func bradley_terry(records: Array) -> Dictionary:
 				wins[a] += 0.5
 				wins[b] += 0.5
 		var key := _pair_key(a, b)
-		pair_games[key] = pair_games.get(key, 0) + 1
+		matchup_battles[key] = matchup_battles.get(key, 0) + 1
 	var ids: Array = wins.keys()
 	var strength := {}
 	for id in ids:
 		strength[id] = 1.0
 	var opponents := {}
-	for key: String in pair_games:
+	for key: String in matchup_battles:
 		var a := key.get_slice("|", 0)
 		var b := key.get_slice("|", 1)
-		opponents.get_or_add(a, []).append([b, pair_games[key]])
-		opponents.get_or_add(b, []).append([a, pair_games[key]])
+		opponents.get_or_add(a, []).append([b, matchup_battles[key]])
+		opponents.get_or_add(b, []).append([a, matchup_battles[key]])
 	for iteration in MAX_ITERATIONS:
 		var next := {}
 		var change := 0.0
 		for id in ids:
 			# MM update, with the prior as virtual draws against a strength-1 opponent.
-			var denominator: float = PRIOR_GAMES / (strength[id] + 1.0)
+			var denominator: float = PRIOR_BATTLES / (strength[id] + 1.0)
 			for entry: Array in opponents.get(id, []):
 				denominator += float(entry[1]) / (strength[id] + strength[entry[0]])
-			next[id] = (wins[id] + PRIOR_GAMES * 0.5) / denominator
+			next[id] = (wins[id] + PRIOR_BATTLES * 0.5) / denominator
 		var log_mean := 0.0
 		for id in ids:
 			log_mean += log(next[id])
@@ -120,7 +120,7 @@ static func bradley_terry(records: Array) -> Dictionary:
 	var result := {}
 	for id in ids:
 		result[id] = {"rating": RATING_MEAN + RATING_SCALE * log(strength[id]) / log(10.0),
-			"games": games[id], "score": wins[id]}
+			"battles": battles[id], "score": wins[id]}
 	return result
 
 
@@ -152,13 +152,13 @@ static func spearman(first: Array, second: Array) -> float:
 
 
 ## Head-to-head win rates (draws as half) between every pair in `ids` from records:
-## {"a|b": share of games a won against b}.
+## {"a|b": share of battles a won against b}.
 static func matchups(records: Array, ids: Array) -> Dictionary:
 	var wanted := {}
 	for id in ids:
 		wanted[id] = true
 	var score := {}
-	var games := {}
+	var battles := {}
 	for record: Dictionary in records:
 		if not (wanted.has(record.a) and wanted.has(record.b)):
 			continue
@@ -166,10 +166,10 @@ static func matchups(records: Array, ids: Array) -> Dictionary:
 		for pair in [[record.a, record.b, a_share], [record.b, record.a, 1.0 - a_share]]:
 			var key := "%s|%s" % [pair[0], pair[1]]
 			score[key] = score.get(key, 0.0) + pair[2]
-			games[key] = games.get(key, 0) + 1
+			battles[key] = battles.get(key, 0) + 1
 	var rates := {}
-	for key: String in games:
-		rates[key] = score[key] / games[key]
+	for key: String in battles:
+		rates[key] = score[key] / battles[key]
 	return rates
 
 

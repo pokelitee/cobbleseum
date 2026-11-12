@@ -1,17 +1,18 @@
 extends SceneTree
 ## Renders converted models for visual checks of the converter.
 ## Usage (needs a window, not --headless):
-##   godot --path . --script res://tools/preview_model.gd -- 0009_blastoise [more folders] [--clip=physical]
-## Without --clip: the rest pose from four sides. With --clip=<role>: four moments of that
-## role's clip from a three-quarter view. Writes cache/previews/<folder>[_<role>].png;
+##   godot --path . --script res://tools/preview_model.gd -- 0009_blastoise [more folders]
+##       [--animation=physical]
+## Without --animation: the rest pose from four sides. With --animation=<role>: four moments of that
+## role's animation from a three-quarter view. Writes cache/previews/<folder>[_<role>].png;
 ## previews show Cobblemon art, so they stay in the cache.
 
 const SOURCE := "res://cache/sources/cobblemon/1.8.4"
 const VIEW_SIZE := 384
 ## Camera yaw per view: front (the model faces -Z), left side, back, three-quarter.
 const VIEWS: Array[float] = [0.0, 90.0, 180.0, 35.0]
-const CLIP_VIEW := 35.0
-const CLIP_MOMENTS: Array[float] = [0.0, 0.33, 0.5, 0.75]
+const ANIMATION_VIEW := 35.0
+const ANIMATION_MOMENTS: Array[float] = [0.0, 0.33, 0.5, 0.75]
 
 ## The project's stretch settings fix the root viewport's size, so views render here.
 var _viewport: SubViewport
@@ -32,8 +33,8 @@ func _run() -> void:
 	var role := ""
 	var folders: Array[String] = []
 	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--clip="):
-			role = arg.trim_prefix("--clip=")
+		if arg.begins_with("--animation="):
+			role = arg.trim_prefix("--animation=")
 		else:
 			folders.append(arg)
 	var status := 0
@@ -52,22 +53,22 @@ func _render(source: String, folder: String, role: String, path: String) -> Stri
 		return converted.error
 	var model: Node3D = converted.scene.instantiate()
 	var player: AnimationPlayer = model.get_node("AnimationPlayer")
-	var clips: Dictionary = model.get_meta("clips")
-	if not role.is_empty() and not clips.has(role):
+	var animations: Dictionary = model.get_meta("animations")
+	if not role.is_empty() and not animations.has(role):
 		model.free()
-		return "%s has no '%s' clip (has %s)" % [folder, role, ", ".join(clips.keys())]
+		return "%s has no '%s' animation (has %s)" % [folder, role, ", ".join(animations.keys())]
 	var stage := _stage()
 	stage.add_child(model)
 	_viewport.add_child(stage)
 	var bounds := _bounds(model)
 	var camera: Camera3D = stage.get_node("Camera")
-	var shots := VIEWS.size() if role.is_empty() else CLIP_MOMENTS.size()
+	var shots := VIEWS.size() if role.is_empty() else ANIMATION_MOMENTS.size()
 	var sheet := Image.create(VIEW_SIZE * shots, VIEW_SIZE, false, Image.FORMAT_RGBA8)
 	for i in shots:
-		var yaw := deg_to_rad(VIEWS[i] if role.is_empty() else CLIP_VIEW)
+		var yaw := deg_to_rad(VIEWS[i] if role.is_empty() else ANIMATION_VIEW)
 		if not role.is_empty():
-			player.play(clips[role])
-			player.seek(player.current_animation_length * CLIP_MOMENTS[i], true)
+			player.play(animations[role])
+			player.seek(player.current_animation_length * ANIMATION_MOMENTS[i], true)
 			player.pause()
 		var distance := bounds.get_longest_axis_size() * 1.6 + 0.5
 		var target := bounds.get_center()

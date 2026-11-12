@@ -1,6 +1,6 @@
 class_name BedrockAnimation
 extends RefCounted
-## Bakes Bedrock animation clips (.animation.json, format 1.8.0) into Godot Animations
+## Bakes Bedrock animations (.animation.json, format 1.8.0) into Godot Animations
 ## (concepts_brief.md §7.3). Every channel is sampled at a fixed rate with Bedrock's own
 ## interpolation and Molang evaluated at each sample, then stored as linear tracks.
 ##
@@ -11,20 +11,20 @@ const SAMPLE_RATE := 60.0
 const CHANNELS: Array[String] = ["rotation", "position", "scale"]
 
 
-## Converts one clip. `rest_rotations` maps bone name -> Bedrock rest rotation [x, y, z];
-## `skeleton` supplies rest positions. Problems are appended to `report`
+## Converts one animation's JSON (`source`). `rest_rotations` maps bone name -> Bedrock rest
+## rotation [x, y, z]; `skeleton` supplies rest positions. Problems are appended to `report`
 ## ({"unknown_bones", "molang_errors", "unknown_names"} dictionaries used as sets).
-static func build(clip: Dictionary, clip_name: String, skeleton: Skeleton3D, rest_rotations: Dictionary,
+static func build(source: Dictionary, animation_name: String, skeleton: Skeleton3D, rest_rotations: Dictionary,
 		skeleton_path: String, report: Dictionary) -> Animation:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash(clip_name)
+	rng.seed = hash(animation_name)
 	var channels := {}
 	var last_key := 0.0
-	for bone_name: String in clip.get("bones", {}):
+	for bone_name: String in source.get("bones", {}):
 		if skeleton.find_bone(bone_name) < 0:
 			report.get_or_add("unknown_bones", {})[bone_name] = true
 			continue
-		var bone: Dictionary = clip.bones[bone_name]
+		var bone: Dictionary = source.bones[bone_name]
 		for channel_name in CHANNELS:
 			if bone.has(channel_name):
 				var channel := _compile_channel(bone[channel_name], report)
@@ -32,9 +32,9 @@ static func build(clip: Dictionary, clip_name: String, skeleton: Skeleton3D, res
 				if not channel.is_empty():
 					last_key = maxf(last_key, channel[-1].time)
 	var animation := Animation.new()
-	var loop: Variant = clip.get("loop", false)
+	var loop: Variant = source.get("loop", false)
 	animation.loop_mode = Animation.LOOP_LINEAR if loop is bool and loop else Animation.LOOP_NONE
-	animation.length = maxf(float(clip.get("animation_length", last_key)), 1.0 / SAMPLE_RATE)
+	animation.length = maxf(float(source.get("animation_length", last_key)), 1.0 / SAMPLE_RATE)
 	var samples := int(ceil(animation.length * SAMPLE_RATE)) + 1
 	for key: Array in channels:
 		var bone_name: String = key[0]

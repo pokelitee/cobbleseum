@@ -12,8 +12,8 @@ extends Node3D
 ## Play mode (--play=<species> [--vs=<species>] [--ai=<profile>] [--seed=N], or a spec with
 ## "ai": "player"): the battle runs live, one tick per 1/30 s, since a player's choices can't
 ## be planned ahead. A camera follows the player's fighter, heavy hits freeze play briefly,
-## a move bar shows keys and cooldowns, and the battle's intents are saved as a replay in
-## recordings/replays/ that tools/record.gd can render. R starts a rematch, Esc quits.
+## a move bar shows keys and cooldowns, and the battle spec is saved with every tick's intents
+## in recordings/specs/, which tools/record.gd can render. R starts a rematch, Esc quits.
 ##
 ## The battle is run headless first so the Director can plan the whole presentation: hit-stop,
 ## slow motion and camera shots. Each video frame then either holds the current tick or
@@ -23,9 +23,9 @@ extends Node3D
 ## exits with code 2 if the battle's checksum doesn't match --expect-checksum.
 
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
-const REPLAYS_DIR := "res://recordings/replays"
+const SPECS_DIR := "res://recordings/specs"
 ## Play mode: frames the controls hint stays up, and frames after the knockout before the
-## replay is saved and the rematch hint shows.
+## battle spec is saved and the rematch hint shows.
 const HINT_FRAMES := 150
 const END_LINGER_FRAMES := 45
 const CHECKSUM_OK := "CHECKSUM_OK"
@@ -41,7 +41,7 @@ const STATUS_CALLOUTS := {
 const RISE_COLOUR := Color(1.0, 0.55, 0.3)
 const DROP_COLOUR := Color(0.4, 0.6, 1.0)
 const HEAL_COLOUR := Color(0.45, 1.0, 0.55)
-## Metres a fighter must move in a tick to play its walk clip.
+## Metres a fighter must move in a tick to play its walk animation.
 const WALK_THRESHOLD := 0.01
 ## Hits taking at least this share of the defender's HP (or big ones) make the crowd cheer;
 ## a knockout holds its loudest cheer this many frames.
@@ -49,7 +49,7 @@ const CHEER_SHARE := 0.15
 const KNOCKOUT_CHEER_FRAMES := 90
 ## Random stream id for the handheld wobble, after the simulation's own streams.
 const CAMERA_WOBBLE_STREAM := 100
-## Seeds the choice of Cobblemon watching from the stands, after the simulation's streams.
+## Seeds the choice of watchers in the stands, after the simulation's streams.
 const WATCHER_STREAM := 101
 
 var battle: Battle
@@ -296,7 +296,7 @@ func _next_live_frame() -> void:
 	if battle.is_over():
 		_end_frames += 1
 		if _end_frames == END_LINGER_FRAMES:
-			_save_replay()
+			_save_spec()
 			_hud.show_hint("R: rematch   Esc: quit")
 	elif _hold_frames > 0:
 		_hold_frames -= 1
@@ -327,24 +327,24 @@ func _next_live_frame() -> void:
 	_update_sight()
 
 
-## Saves the battle as a replay: its spec with every tick's intents per side, so it plays
-## back exactly (and tools/record.gd can render it).
-func _save_replay() -> void:
-	var replay: Dictionary = battle.spec.duplicate(true)
+## Saves the battle's spec with every tick's intents per side, so it replays exactly (and
+## tools/record.gd can render it).
+func _save_spec() -> void:
+	var saved: Dictionary = battle.spec.duplicate(true)
 	for side in 2:
-		replay.fighters[side].erase("ai")
-		replay.fighters[side].intents = battle.intent_log[side]
-	replay.checksum = battle.checksum()
-	var dir := ProjectSettings.globalize_path(REPLAYS_DIR)
+		saved.fighters[side].erase("ai")
+		saved.fighters[side].intents = battle.intent_log[side]
+	saved.checksum = battle.checksum()
+	var dir := ProjectSettings.globalize_path(SPECS_DIR)
 	DirAccess.make_dir_recursive_absolute(dir)
 	if not FileAccess.file_exists(dir.get_base_dir().path_join(".gdignore")):
 		FileAccess.open(dir.get_base_dir().path_join(".gdignore"), FileAccess.WRITE).close()
 	var names := "-vs-".join(battle.fighters.map(func(f: Fighter) -> String: return f.species_id))
 	var path := dir.path_join("%s_%s_%d.json" % [Time.get_datetime_string_from_system().replace(":", "-"), names, int(battle.spec.seed)])
 	var file := FileAccess.open(path, FileAccess.WRITE)
-	file.store_string(JSON.stringify(replay, "", false, true))
+	file.store_string(JSON.stringify(saved, "", false, true))
 	file.close()
-	print("replay saved to %s" % path)
+	print("battle spec saved to %s" % path)
 
 
 ## Sets how long the tick just shown is held and how fast animations play meanwhile:
@@ -407,7 +407,7 @@ func _play_events() -> void:
 				_hit_counts[event.side] += 1
 				var big: bool = event.crit or event.effectiveness > 1.0
 				# Big hits get a shocked reaction from species that have one.
-				_views[defender].play_role("shock" if big and _views[defender].has_clip("shock") else "recoil")
+				_views[defender].play_role("shock" if big and _views[defender].has_animation("shock") else "recoil")
 				_views[defender].take_hit(ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
 				_fx.on_hit(event, _views[defender], share, big)
 				if _live:
@@ -478,10 +478,10 @@ func _play_events() -> void:
 				_move_fx.dodge(_views[event.side], Vector2(event.direction[0], event.direction[1]))
 			"dodged":
 				_fx.on_dodge(_views[event.side])
-			"faint":
+			"knockout":
 				_views[event.side].play_role("faint")
 				_views[1 - int(event.side)].celebrate()
-				_sound.faint(event.side)
+				_sound.knockout(event.side)
 				_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
 				if _live:
 					_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
@@ -516,8 +516,8 @@ func _announce_boost(event: Dictionary) -> void:
 	_fx.announce(_views[event.side], "%s %s!" % [subject, verb], RISE_COLOUR if rising else DROP_COLOUR, 52)
 
 
-## The clip a move plays on wind-up: damaging moves by category (area moves can be either),
-## everything else the status clip.
+## The animation a move plays on wind-up: damaging moves by category (area moves can be either),
+## everything else the status animation.
 static func wind_up_role(move: BattleMove) -> String:
 	if not move.is_damaging():
 		return "status"
@@ -559,7 +559,7 @@ func _sync_views() -> void:
 		_frames_shown / float(Rules.TICK_RATE), _segment_frames == 0)
 
 
-## The arena (its own sky, sun and weather) and the camera.
+## The arena (its own sky, sun and particles) and the camera.
 func _build_stage(arena_name: String) -> void:
 	_arena = Arena.create(arena_name, int(battle.spec.seed), [battle.fighters[0].name, battle.fighters[1].name], battle.terrain)
 	add_child(_arena)
@@ -568,7 +568,7 @@ func _build_stage(arena_name: String) -> void:
 	add_child(_camera)
 
 
-## Spectators, if the arena has stands: figures in a share of the seats, and Cobblemon that
+## Spectators, if the arena has stands: figures in a share of the seats, and watchers that
 ## suit the arena in the front row, watching the fighters (half each), as many as its preset says.
 func _add_crowd(data: BattleData) -> void:
 	_crowd = Crowd.create(_arena, int(battle.spec.seed), Arenas.preset(battle.arena).get("crowd", {}))

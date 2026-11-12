@@ -1,6 +1,6 @@
 extends TestCase
 ## The crowd (concepts_brief.md §12.7): figures fill the stands of a coliseum and nothing sits
-## in the open; Cobblemon of the arena's types watch from the front row; cheers rise and calm.
+## in the open; watchers of the arena's types watch from the front row; cheers rise and calm.
 
 
 func test_figures_fill_most_seats_in_a_coliseum_and_none_in_the_open() -> void:
@@ -43,7 +43,7 @@ func test_watchers_suit_the_arena_and_spread_around_the_front_row() -> void:
 	var seats := crowd.watcher_seats(4)
 	assert_eq(seats.size(), 4)
 	for seat in seats:
-		assert_almost_eq(seat.origin.y, Stadium.row(0).y, 1e-4, "in the front row")
+		assert_almost_eq(seat.origin.y, Coliseum.row(0).y, 1e-4, "in the front row")
 	for i in 4:
 		for j in range(i + 1, 4):
 			assert_true(seats[i].origin.distance_to(seats[j].origin) > 10.0, "spread around the stands")
@@ -78,7 +78,7 @@ func test_a_preset_sets_how_full_the_stands_are_and_how_many_watch() -> void:
 	var empty := Crowd.create(arena, 3, {"fill": 0.0, "watchers": 0})
 	empty.build()
 	assert_eq(empty.figures, null, "empty stands")
-	assert_true(empty.watcher_seats(empty.watcher_count).is_empty(), "and no Cobblemon")
+	assert_true(empty.watcher_seats(empty.watcher_count).is_empty(), "and no watchers")
 	var full := Crowd.create(arena, 3, {"fill": 1.0, "watchers": 6})
 	full.build()
 	assert_eq(full.figures.multimesh.instance_count, arena.seats.size(), "every seat taken")

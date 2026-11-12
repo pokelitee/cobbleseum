@@ -20,7 +20,7 @@ Fetch and prepare the assets (about 157 MB to download the first time):
 godot --headless --path . --script res://tools/assets.gd
 ```
 
-This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout, exports Showdown's data to JSON, and converts every Pokémon with a Cobblemon model (1,005 species and forms) to a Godot scene. It also writes the roster (`cache/build/cobblemon/<version>/roster.json`: model, scale, height, hitbox, clips, QA flags and licence per species) and a QA report (`report.json`). Extracting Cobblemon's roughly 12,000 files and the first conversion take a few minutes each (about 7 minutes to convert on a desktop PC). Re-running skips finished steps; models are cached per species, so a rebuild converts only species whose inputs changed, and an interrupted build picks up where it stopped. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
+This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout, exports Showdown's data to JSON, and converts every Pokémon with a Cobblemon model (1,005 species and forms) to a Godot scene. It also writes the roster (`cache/build/cobblemon/<version>/roster.json`: model, scale, height, hitbox, animations, QA flags and licence per species) and a QA report (`report.json`). Extracting Cobblemon's roughly 12,000 files and the first conversion take a few minutes each (about 7 minutes to convert on a desktop PC). Re-running skips finished steps; models are cached per species, so a rebuild converts only species whose inputs changed, and an interrupted build picks up where it stopped. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
 
 Print species' standard movesets, or generate them all into `cache/build/movesets.json` with a summary (failures, common moves, agreement with Showdown's random-battle sets):
 
@@ -28,7 +28,7 @@ Print species' standard movesets, or generate them all into `cache/build/moveset
 godot --headless --path . --script res://tools/movesets.gd -- garchomp breloom
 ```
 
-Run a battle headless (prints the result, length and a checksum per seed). In a battle spec, a fighter without `moves` uses its species' standard moveset, and `"ai"` picks its controller (`easy`, `normal`, `hard`, `ranked` (the default) or `simple`):
+Run a battle headless (prints the result, length and a checksum per seed). In a battle spec, a fighter without `moves` uses its species' standard moveset, and `"ai"` picks its controller (`easy`, `normal`, `hard`, `ranked` (the default) or `stand_in`):
 
 ```bash
 godot --headless --path . --script res://tools/battle.gd -- game/data/battles/showcase.json --seeds=10
@@ -68,7 +68,7 @@ Instead of a spec file, flags can describe an AI-vs-AI battle, here and in the w
 godot --headless --path . --script res://tools/record.gd -- --watch=garchomp --vs=hydreigon --ai=hard --vs-ai=easy --seed=7
 ```
 
-Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves; gamepad: left stick, A to dodge, X Y B RB for moves). R starts a rematch and Esc quits. Each battle's spec, with every tick's intents, is saved to `recordings/replays/`, and `tools/record.gd` can render one like any spec:
+Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves; gamepad: left stick, A to dodge, X Y B RB for moves). R starts a rematch and Esc quits. Each battle's spec, with every tick's intents, is saved to `recordings/specs/`, and `tools/record.gd` can render one like any spec:
 
 ```bash
 godot --path . -- --play=cinderace --vs=blastoise --ai=normal
@@ -86,7 +86,7 @@ godot --headless --path . --script res://tests/run_tests.gd
 Preview converted models (opens a window; images go to `cache/previews/`):
 
 ```bash
-godot --path . --script res://tools/preview_model.gd -- 0009_blastoise --clip=physical
+godot --path . --script res://tools/preview_model.gd -- 0009_blastoise --animation=physical
 ```
 
 Preview roster species as they appear in battle, for converter QA (opens a window; writes a contact sheet to `cache/previews/`). Name species, or pass a QA flag from `report.json`:

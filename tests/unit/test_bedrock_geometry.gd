@@ -148,7 +148,7 @@ func test_reports_bad_hierarchies() -> void:
 
 
 func test_posed_bounds_follow_the_animated_bones() -> void:
-	# A body with a 1 m tall pole on top; the clip folds the pole down flat.
+	# A body with a 1 m tall pole on top; the animation folds the pole down flat.
 	var scene := _build([
 		{"name": "body", "pivot": [0, 0, 0], "cubes": [{"origin": [-4, 0, -4], "size": [8, 8, 8], "uv": [0, 0]}]},
 		{"name": "pole", "parent": "body", "pivot": [0, 8, 0], "cubes": [{"origin": [-1, 8, -1], "size": [2, 16, 2], "uv": [0, 0]}]},

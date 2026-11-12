@@ -682,7 +682,7 @@ The AI is a utility AI. At each decision step it scores every candidate action a
   - unit tests per consideration;
   - scenario tests, such as "dodges a telegraphed projectile" and "doesn't use a melee move out of range".
 
-**Implementation (M4)** in `game/ai/utility_ai.gd`. A battle spec names each fighter's AI (`"ai": "hard"`); the default is `ranked`, and `simple` selects the stand-in AI.
+**Implementation (M4)** in `game/ai/utility_ai.gd`. A battle spec names each fighter's AI (`"ai": "hard"`); the default is `ranked`, and `stand_in` selects the stand-in AI.
 
 - **Profiles** (`game/ai/profiles/*.tres`):
 
@@ -830,7 +830,7 @@ The camera director picks from a set of shot types based on battle events:
 An arena is a preset (`Arenas`): one JSON file in `game/data/arenas/`, named after the arena, so adding one is adding a file. A preset combines:
 
 - a **field** (`Terrain.FIELDS`), the ground the battle is fought on, which is the simulation's (§9.8): grassland, beach, volcano, snowfield, cave, or flat paving. `ArenaFields` holds each field's colours, props and details;
-- a **venue**: `open` (the field's own landscape all around) or `coliseum` (`Stadium`, around any field), with an optional **theme** for the coliseum's colours (stone, paving, apron, seats, trim, outside ground, a banner colour per side, moss);
+- a **venue**: `open` (the field's own landscape all around) or `coliseum` (`Coliseum`, around any field), with an optional **theme** for the coliseum's colours (stone, paving, apron, seats, trim, outside ground, a banner colour per side, moss);
 - its **look**: sky, sun, ambient light, fog and particles (colours as `"#rrggbb"`);
 - how a battle without a requested arena may get it: `"always"`, or `"suits"` with a list of types;
 - for a coliseum, an optional `"crowd"`: `"fill"`, the share of seats taken (0 for empty stands, 1 for a sell-out; 0.75 by default), and `"watchers"`, how many watchers sit in the front row (0–8; 4 by default). The night stadium is half full, with two.
@@ -852,7 +852,7 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
   Cameras may go 2 m past the wall; see-through keeps the fighters in view if the land is in the way.
 - **Look:** each preset sets its sky, sun angle and colour, ambient light, fog and particles (petals, blown sand, rising embers, snow, cave dust).
 - **Choice:** `"arena"` in a battle spec or `--arena=<name>` picks one. Otherwise the battle seed picks from the presets offered always (grassland, stadium) and those that suit one of the fighters' types (Fire → volcano, Ice → snowfield and the frost coliseum, Water → beach and the frost coliseum, Rock, Ground, Ghost and Dark → cave, Dark, Ghost and Electric → the night stadium, and so on). The choice is the simulation's, since the field's terrain is part of the battle (§9.8); the ground and features are built from that terrain, and fighters stand at its height. New presets in the pool change which arena a seed gets, so they bump the rules version.
-- **The coliseum** (`Stadium`) is about 15 m tall and 75 m across:
+- **The coliseum** (`Coliseum`) is about 15 m tall and 75 m across:
   - the field (concentric rings of pale paving with painted lines: boundary, halfway line, centre circle; or the preset's field of terrain inside a kerb), then an apron of grey-green paving with a trainer's box at each end;
   - a 2.4 m stone wall with a coping;
   - lower stands, a concourse, upper stands and a parapet, split into 16 sections by pillars, with a tunnel into the lower rows of every other section;

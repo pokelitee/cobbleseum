@@ -107,7 +107,7 @@ func test_generation_is_deterministic() -> void:
 
 func test_battles_use_the_standard_moveset_when_the_spec_has_none() -> void:
 	var spec := {"seed": 1, "fighters": [{"species": "rock"}, {"species": "bloom", "moves": ["gigadrain"]}]}
-	var created := Battle.create(spec, _data(), SimpleAI.pair(1))
+	var created := Battle.create(spec, _data(), StandInAI.pair(1))
 	assert_false(created.has("error"), str(created.get("error", "")))
 	var ids: Array = created.battle.fighters[0].moves.map(func(m: BattleMove) -> String: return m.id)
 	assert_eq(ids, Movesets.generate("rock", _data()).moves)

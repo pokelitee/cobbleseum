@@ -4,17 +4,17 @@ extends RefCounted
 ## after the arena. A preset combines
 ## - a field (Terrain.FIELDS): the ground the battle is fought on, which is the simulation's;
 ## - a venue: "open" (the field's own landscape all around) or "coliseum" (stands around the
-##   field, with an optional "theme" of colours, see Stadium);
-## - its look, for the presentation: sky, sun, ambient light, fog and weather particles;
+##   field, with an optional "theme" of colours, see Coliseum);
+## - its look, for the presentation: sky, sun, ambient light, fog and particles;
 ## - how a battle without a requested arena may get it: "always" (any fighters) or "suits"
 ##   (fighters with one of these types);
 ## - for a coliseum, an optional "crowd": {"fill": share of seats taken, "watchers": how many
-##   Cobblemon watch} (Crowd has the defaults).
+##   watchers sit in the front row} (Crowd has the defaults).
 ## Adding an arena is adding a file; the choice of arena is part of the battle (its terrain).
 
 const PRESETS_DIR := "res://game/data/arenas"
 const VENUES: Array[String] = ["open", "coliseum"]
-## The most Cobblemon a preset's crowd may seat in the front row.
+## The most watchers a preset's crowd may seat in the front row.
 const MAX_WATCHERS := 8
 
 static var _presets := {}

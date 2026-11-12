@@ -10,7 +10,7 @@ extends RefCounted
 ##   with more of them aren't penalised for it. A score of 0 vetoes the action.
 ## - Stability: the current action gets a commitment bonus, and movement is held for a
 ##   minimum time; between decisions (every `decision_interval_ticks`) it keeps moving.
-## - Difficulty comes from the AIProfile: reaction delay, decision interval, the chance of
+## - How well it plays comes from the AIProfile: reaction delay, decision interval, the chance of
 ##   taking the second-best action, and the chance of dodging a given threat at all.
 ## - Exact ties go to the side's random stream, never list order.
 ## With `keep_scores` set (the debug overlay), the last evaluation is kept in `last_scores`.
@@ -24,7 +24,7 @@ const MIN_HOLD_TICKS := 6
 const HOLD_SCORE := 0.05
 const CIRCLE_SCORE := 0.15
 const WAITING_CIRCLE_BONUS := 0.2
-## Move value (SimpleAI.move_score, in move-power units) at which it saturates.
+## Move value (StandInAI.move_score, in move-power units) at which it saturates.
 const VALUE_SCALE := 150.0
 ## Ticks ahead a projectile is checked for a hit, and the gap bands kept: with a melee move
 ## ready (just outside the foe's reach, inside dash range, so it closes only to strike), with
@@ -147,7 +147,7 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			# move value still vetoes self-destructing early and discounts charge, recharge and
 			# self-lowering moves.
 			var expected := expected_damage(me, foe, move, battle.data())
-			var adjusted := SimpleAI.move_score(me, foe, move) / maxf(move.power * move.expected_hits(), 1.0) if move.fixed_damage == 0 else 1.0
+			var adjusted := StandInAI.move_score(me, foe, move) / maxf(move.power * move.expected_hits(), 1.0) if move.fixed_damage == 0 else 1.0
 			# The stand-in's value of 0 is a veto (self-destructing early, sinking a stat below -2);
 			# the damage curve's floor would otherwise turn it into a usable score.
 			considerations.damage = _sample("damage", expected * adjusted / maxf(foe.max_hp, 1.0)) if adjusted > 0.0 else 0.0
@@ -155,7 +155,7 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			if move.own_stat_drop() < 0 and _other_attack_on(me, i):
 				considerations.stage_cost = stage_cost(me, move)
 		else:
-			considerations.value = _sample("value", SimpleAI.move_score(me, foe, move) / VALUE_SCALE)
+			considerations.value = _sample("value", StandInAI.move_score(me, foe, move) / VALUE_SCALE)
 			if move.kind == BattleMove.Kind.HEAL:
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		candidates.append(_scored("move:" + move.id, Action.USE_MOVE, considerations, i))

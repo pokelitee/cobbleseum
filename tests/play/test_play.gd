@@ -63,13 +63,13 @@ func test_a_logged_battle_replays_exactly() -> void:
 		if battle.tick % 47 == 0:
 			player.pending_dodge = true
 		battle.step()
-	# Round-trip through JSON the way a saved replay does.
-	var replay: Dictionary = JSON.parse_string(JSON.stringify({"seed": spec.seed, "fighters": [
+	# Round-trip through JSON the way a saved battle spec does.
+	var saved: Dictionary = JSON.parse_string(JSON.stringify({"seed": spec.seed, "fighters": [
 		{"species": "squirt", "moves": ["jet", "kick"], "intents": battle.intent_log[0]},
 		{"species": "squirt", "moves": ["jet", "kick"], "intents": battle.intent_log[1]}]}, "", false, true))
-	var replayed_controllers: Array = Controllers.for_spec(replay).controllers
+	var replayed_controllers: Array = Controllers.for_spec(saved).controllers
 	assert_true(replayed_controllers[0] is ReplayController and replayed_controllers[1] is ReplayController)
-	var replayed: Battle = Battle.create(replay, _data(), replayed_controllers).battle
+	var replayed: Battle = Battle.create(saved, _data(), replayed_controllers).battle
 	for fighter in replayed.fighters:
 		fighter.max_hp = 600
 		fighter.hp = 600
@@ -84,7 +84,7 @@ func test_player_camera_looks_past_the_player_at_the_foe() -> void:
 	assert_true(pose.target.z > 0.0 and pose.target.z < 6.0, "looking between the two")
 
 
-func test_every_move_kind_has_a_wind_up_clip() -> void:
+func test_every_move_kind_has_a_wind_up_animation() -> void:
 	for id: String in MOVES:
 		var move: BattleMove = BattleMove.from_showdown(id, MOVES[id]).move
 		assert_true(BattleView.wind_up_role(move) in ["physical", "special", "status"])

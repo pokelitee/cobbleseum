@@ -3,15 +3,16 @@ extends SceneTree
 ## Usage: godot --headless --path . --script res://tools/batch.gd -- [--battles=500] [--seed=1]
 ##        [--ai-a=ranked] [--ai-b=ranked]
 ## The AI options name each side's controller (Controllers): pitting two AIs against each
-## other over random pairings, side A's win rate shows which is stronger.
+## other over random matchups, side A's win rate shows which is stronger.
 ##
-## Runs random pairings of roster species with their standard movesets and the stand-in AI,
-## then prints the numbers the rules are tuned against and writes them, with every battle's
-## summary, to results/balance_<rules version>_<seed>.json:
+## Runs random matchups of roster species with their standard movesets, using the ranked AI
+## profile unless --ai-a or --ai-b names another AI, then prints the numbers the rules are
+## tuned against and writes them, with every battle's summary, to
+## results/balance_<rules version>_<seed>.json:
 ## - battle length (median and spread) and draw rate;
 ## - how often the side with the type advantage wins;
 ## - how often each move kind is used, plus dodges, statuses and side bias.
-## Pairings and battle seeds come from --seed, so a report can be reproduced exactly.
+## Matchups and battle seeds come from --seed, so a report can be reproduced exactly.
 
 const DEFAULT_BATTLES := 500
 const RESULTS_DIR := "res://results"
@@ -132,7 +133,7 @@ static func summarise(rows: Array[Dictionary]) -> Dictionary:
 	for kind: String in kinds:
 		kind_shares[kind] = float(kinds[kind]) / maxi(uses, 1)
 	var per_battle := {}
-	for type in ["hit", "miss", "dodge", "dodged", "status", "boost", "heal", "faint", "time_up"]:
+	for type in ["hit", "miss", "dodge", "dodged", "status", "boost", "heal", "knockout", "time_up"]:
 		per_battle[type] = float(events.get(type, 0)) / rows.size()
 	return {
 		"battles": rows.size(),

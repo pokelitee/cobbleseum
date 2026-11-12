@@ -2,11 +2,11 @@ extends SceneTree
 ## Species rankings (concepts_brief.md §13).
 ## Usage: godot --headless --path . --script res://tools/rank.gd -- <command> [options]
 ##   run      plays a sampled round robin: every species meets --opponents=20 random others,
-##            every pairing from both sides with the same seed. --profile=ranked picks the AI,
+##            every matchup from both sides with the same seed. --profile=ranked picks the AI,
 ##            --seed=1 the schedule, --jobs=N splits it over N processes, --limit=N uses only
 ##            N species (a pilot). Resumes: battles already stored are skipped.
 ##   matrix   plays a full round robin among the --top=24 species of the current ranking,
-##            --repeats=5 seeds per pairing from both sides, for the matchup matrix.
+##            --repeats=5 seeds per matchup from both sides, for the matchup matrix.
 ##   report   fits Bradley-Terry ratings to every stored battle for the rules version and
 ##            profile, and writes results/rank/v<rules>/<profile>/ranking.json and ranking.md.
 ##   compare  ranks --profile against --against=hard on the battles both have played, and
@@ -17,7 +17,7 @@ extends SceneTree
 const RESULTS_DIR := "res://results/rank"
 const DEFAULT_OPPONENTS := 20
 const DEFAULT_TOP := 24
-## Seeds per pairing in the matchup matrix, each played from both sides.
+## Seeds per matchup in the matchup matrix, each played from both sides.
 const DEFAULT_REPEATS := 5
 const PROGRESS_EVERY := 250
 const REPORT_ROWS := 30
@@ -82,31 +82,31 @@ func _pool(data: BattleData, options: Dictionary) -> Array:
 ## Plays the schedule (sampled with `opponents`, or a full round robin when -1) for this shard,
 ## or launches --jobs processes that each take a shard.
 func _run(data: BattleData, options: Dictionary, pool: Array, opponents: int, tag: String) -> String:
-	var pairings := Ranking.schedule(pool, opponents, options.seed) if opponents > 0 		else Ranking.round_robin(pool, options.seed, options.repeats)
+	var matchups := Ranking.schedule(pool, opponents, options.seed) if opponents > 0 		else Ranking.round_robin(pool, options.seed, options.repeats)
 	if options.jobs > 1:
-		return _launch(options, pairings.size() * 2)
+		return _launch(options, matchups.size() * 2)
 	var dir := _dir(options.profile)
 	var done := _stored_keys(dir)
 	var path := dir.path_join("%s_shard%d.jsonl" % [tag, options.shard])
 	var file := open_for_append(path)
 	var played := 0
 	var started := Time.get_ticks_msec()
-	for index in pairings.size():
+	for index in matchups.size():
 		if index % options.shards != options.shard:
 			continue
-		var pairing: Dictionary = pairings[index]
+		var matchup: Dictionary = matchups[index]
 		for swapped in [false, true]:
-			var a: String = pairing.b if swapped else pairing.a
-			var b: String = pairing.a if swapped else pairing.b
-			if done.has(_key(a, b, pairing.seed)):
+			var a: String = matchup.b if swapped else matchup.a
+			var b: String = matchup.a if swapped else matchup.b
+			if done.has(_key(a, b, matchup.seed)):
 				continue
-			file.store_line(JSON.stringify(play(data, a, b, int(pairing.seed), options.profile)))
+			file.store_line(JSON.stringify(play(data, a, b, int(matchup.seed), options.profile)))
 			played += 1
 			if played % PROGRESS_EVERY == 0:
 				file.flush()
 				print("shard %d: %d battles (%.0f ms each)" % [options.shard, played, float(Time.get_ticks_msec() - started) / played])
 	file.close()
-	print("shard %d: played %d new battles of %d pairings" % [options.shard, played, pairings.size()])
+	print("shard %d: played %d new battles of %d matchups" % [options.shard, played, matchups.size()])
 	return ""
 
 
@@ -152,8 +152,8 @@ func _report(profile: String) -> String:
 	var dir := _dir(profile)
 	var report := {"rules": Rules.RULES_VERSION, "profile": profile, "battles": records.size(),
 		"species": ordered.size(), "ranking": ordered.map(func(id: String) -> Dictionary:
-			return {"species": id, "rating": snappedf(ratings[id].rating, 0.1), "games": ratings[id].games,
-				"win_rate": snappedf(ratings[id].score / maxf(ratings[id].games, 1), 0.001)}),
+			return {"species": id, "rating": snappedf(ratings[id].rating, 0.1), "battles": ratings[id].battles,
+				"win_rate": snappedf(ratings[id].score / maxf(ratings[id].battles, 1), 0.001)}),
 		"matrix": {"species": matrix_ids, "win_rates": matrix}}
 	var file := FileAccess.open(dir.path_join("ranking.json"), FileAccess.WRITE)
 	file.store_string(JSON.stringify(report, "  "))
@@ -164,7 +164,7 @@ func _report(profile: String) -> String:
 	print("%d battles, %d species (rules v%d, AI %s)" % [records.size(), ordered.size(), Rules.RULES_VERSION, profile])
 	for i in mini(15, ordered.size()):
 		var id: String = ordered[i]
-		print("%3d. %-20s %6.0f  %d games" % [i + 1, id, ratings[id].rating, ratings[id].games])
+		print("%3d. %-20s %6.0f  %d battles" % [i + 1, id, ratings[id].rating, ratings[id].battles])
 	print("wrote %s" % dir.path_join("ranking.md"))
 	return ""
 
@@ -196,11 +196,11 @@ static func markdown(report: Dictionary) -> String:
 	for section in [["Top", rows.slice(0, REPORT_ROWS), 0], ["Bottom", rows.slice(maxi(0, rows.size() - 10)), maxi(0, rows.size() - 10)]]:
 		lines.append("## %s" % section[0])
 		lines.append("")
-		lines.append("| Rank | Species | Rating | Games | Win rate |")
+		lines.append("| Rank | Species | Rating | Battles | Win rate |")
 		lines.append("|---:|---|---:|---:|---:|")
 		for i in section[1].size():
 			var row: Dictionary = section[1][i]
-			lines.append("| %d | %s | %.0f | %d | %.1f%% |" % [section[2] + i + 1, row.species, row.rating, row.games, row.win_rate * 100.0])
+			lines.append("| %d | %s | %.0f | %d | %.1f%% |" % [section[2] + i + 1, row.species, row.rating, row.battles, row.win_rate * 100.0])
 		lines.append("")
 	var ids: Array = report.matrix.species
 	if not ids.is_empty():
