@@ -43,8 +43,14 @@ const DROP_COLOUR := Color(0.4, 0.6, 1.0)
 const HEAL_COLOUR := Color(0.45, 1.0, 0.55)
 ## Metres a fighter must move in a tick to play its walk clip.
 const WALK_THRESHOLD := 0.01
+## Hits taking at least this share of the defender's HP (or big ones) make the crowd cheer;
+## a knockout holds its loudest cheer this many frames.
+const CHEER_SHARE := 0.15
+const KNOCKOUT_CHEER_FRAMES := 90
 ## Random stream id for the handheld wobble, after the simulation's own streams.
 const CAMERA_WOBBLE_STREAM := 100
+## Seeds the choice of Cobblemon watching from the stands, after the simulation's streams.
+const WATCHER_STREAM := 101
 
 var battle: Battle
 var plan: Dictionary
@@ -77,6 +83,8 @@ var _clip_mode := false
 var _expected_checksum := ""
 var _accumulator := 0.0
 var _arena: Arena
+## Spectators in the stands (none in the open).
+var _crowd: Crowd
 ## Play mode state.
 var _live := false
 var _player_side := -1
@@ -133,6 +141,7 @@ func _ready() -> void:
 		_views.append(view)
 	for side in 2:
 		_views[side].watch(_views[1 - side])
+	_add_crowd(loaded.data)
 	_hud = Hud.new()
 	add_child(_hud)
 	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size)
@@ -252,6 +261,7 @@ func _next_frame() -> void:
 		_begin_tick()
 	for view in _views:
 		view.next_frame()
+	_crowd.next_frame()
 	_fx.next_frame()
 	_move_fx.next_frame()
 	_hud.next_frame()
@@ -291,12 +301,14 @@ func _next_live_frame() -> void:
 		if _hold_frames == 0:
 			for view in _views:
 				view.set_time_scale(1.0)
+			_crowd.set_time_scale(1.0)
 	else:
 		_step_battle()
 	if _live_frames == HINT_FRAMES and not battle.is_over():
 		_hud.show_hint("")
 	for view in _views:
 		view.next_frame()
+	_crowd.next_frame()
 	_fx.next_frame()
 	_move_fx.next_frame()
 	_hud.next_frame()
@@ -346,6 +358,7 @@ func _begin_tick() -> void:
 	_hold_is_hitstop = hitstop > 0
 	for view in _views:
 		view.set_time_scale(0.0 if hitstop > 0 else 1.0 / slow)
+	_crowd.set_time_scale(0.0 if hitstop > 0 else 1.0 / slow)
 	var segment := Director.shot_for(plan.shots, shown)
 	if segment != _segment:
 		_segment = segment
@@ -398,6 +411,7 @@ func _play_events() -> void:
 					_hold_frames = Director.HEAVY_HITSTOP_FRAMES if big else Director.HITSTOP_FRAMES
 					for view in _views:
 						view.set_time_scale(0.0)
+					_crowd.set_time_scale(0.0)
 				if move.kind == BattleMove.Kind.MELEE:
 					_move_fx.melee(_views[event.side], _views[defender], move)
 				elif _fired_tick[event.side] == int(event.tick):
@@ -406,6 +420,8 @@ func _play_events() -> void:
 				_sound.hit(move, big)
 				if big:
 					_hud.shake(defender)
+				if big or share >= CHEER_SHARE:
+					_crowd.cheer(0.4 + share * 1.5 + (0.25 if big else 0.0))
 			"miss":
 				var move := _move(event.side, event.move)
 				if move.kind == BattleMove.Kind.MELEE:
@@ -462,6 +478,7 @@ func _play_events() -> void:
 				_views[event.side].play_role("faint")
 				_views[1 - int(event.side)].celebrate()
 				_sound.faint(event.side)
+				_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
 				_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
 			"overtime":
 				_hud.flash_title("Overtime!", Color(1.0, 0.55, 0.3))
@@ -515,6 +532,7 @@ func _sync_views() -> void:
 		_hold_is_hitstop = false
 		for view in _views:
 			view.set_time_scale(1.0 / plan.slow[_shown_tick()])
+		_crowd.set_time_scale(1.0 / plan.slow[_shown_tick()])
 	for side in 2:
 		var fighter := battle.fighters[side]
 		_views[side].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
@@ -534,6 +552,28 @@ func _build_stage(arena_name: String) -> void:
 	_camera = Camera3D.new()
 	_camera.far = Terrain.WORLD_RADIUS * 3.0
 	add_child(_camera)
+
+
+## Spectators, if the arena has stands: figures in most seats, and Cobblemon that suit the
+## arena in the front row, watching the fighters (half each).
+func _add_crowd(data: BattleData) -> void:
+	_crowd = Crowd.create(_arena, int(battle.spec.seed))
+	add_child(_crowd)
+	var seats := _crowd.watcher_seats(Crowd.WATCHERS)
+	if not seats.is_empty():
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash("%d|%d" % [int(battle.spec.seed), WATCHER_STREAM])
+		var fighters := battle.fighters.map(func(f: Fighter) -> String: return f.species_id)
+		var ids := Crowd.choose_watchers(Arenas.preset(battle.arena).get("suits", []), data.roster, data.species, fighters, rng, seats.size())
+		for i in ids.size():
+			var entry: Dictionary = data.roster[ids[i]]
+			var view := FighterView.from_model(MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
+			if view == null:
+				push_warning("cannot load the model %s for a spectator" % entry.model)
+				continue
+			_crowd.add_watcher(view, seats[i], _views[i % 2])
+			view.set_hovering("Flying" in data.species[ids[i]].get("types", []) or view.floats())
+	_crowd.build()
 
 
 ## Heights of the HUD's top and bottom bands, matching the layout in Hud.setup.

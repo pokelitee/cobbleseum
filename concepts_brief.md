@@ -856,6 +856,10 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
   - a cool, slightly dim day, so the moves' colours stand out.
 - **Cameras** stay inside a limit each arena sets (just inside the stadium's wall, or where the ground starts to rise elsewhere), so they never end up inside the scenery.
 - **Seats:** the arena offers seats facing the floor (on the stands' rows, else on low terrain nearby) for spectators.
+- **Crowd** (`Crowd`), in coliseums only (a crowd on an open hillside would look odd):
+  - low-poly figures (legs, a shirt in one of eight colours, arms, a head in one of four skin tones) in three quarters of the stands' seats, drawn as one MultiMesh and animated in a shader (`crowd.gdshader`), so thousands cost one draw;
+  - four Cobblemon of the arena's types (its `suits`, 0.4–2.2 m tall, never the fighters themselves) spread around the front row, each watching one fighter with its head;
+  - they sway while they wait. Hits that take at least 15% of the defender's HP, critical hits and super-effective hits make them cheer: figures hop and raise their arms, more of them the bigger the hit, and the cheer calms over a couple of seconds. A knockout brings everyone to their feet for 3 s, and the Cobblemon cry. Hit-stop freezes the crowd along with the fighters.
 - **Determinism:** everything, the weather included (fixed particle seeds), comes from the preset and the battle seed, so every render of a battle is identical.
 
 ## 13. Ranking
@@ -998,7 +1002,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 **M7: arenas.** Arena presets (a field, a venue and a look) are done, with nine presets (§12.7).
 
 - Biomes, each with its own ground, props, sky, lighting, fog and weather particles, picked at random or by the fighters' types. Done as presets: five open fields, the paved stadium, a night stadium and two coliseums around fields of terrain.
-- Crowds: cheap animated spectators in a venue's stands (coliseums only), including Cobblemon models at the edges, reacting to big hits and knockouts.
+- Crowds: cheap animated spectators in a venue's stands (coliseums only), including Cobblemon models at the edges, reacting to big hits and knockouts. Done (§12.7).
 - Cosmetic first; terrain that affects play (cover, water, elevation) only later, as a rules change the AI understands.
 - Environment art comes from openly licensed sets or is made in-house; Minecraft's own textures aren't usable.
 
