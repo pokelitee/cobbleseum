@@ -27,7 +27,7 @@ const KNOCKOUT_SPEED := 0.25
 ## Handheld wobble amplitude per shot, in metres for a reference-height fighter.
 const WOBBLE := {
 	Director.Shot.WIDE: 0.04, Director.Shot.OVER_SHOULDER: 0.07, Director.Shot.CLOSE_UP: 0.05,
-	Director.Shot.TRACKING: 0.08, Director.Shot.IMPACT: 0.12, Director.Shot.KNOCKOUT: 0.05,
+	Director.Shot.TRACKING: 0.08, Director.Shot.IMPACT: 0.12, Director.Shot.KNOCKOUT: 0.05, Director.Shot.VICTORY: 0.03,
 }
 ## Wobble frequencies in hertz; slow enough to read as a held camera, not shake.
 const WOBBLE_FREQUENCIES: Array[float] = [0.31, 0.53, 0.89]
@@ -130,6 +130,14 @@ func pose_for(segment: Dictionary, battle: Battle, shot_seconds: float, progress
 			var angle := atan2(away.y, away.x) + clampf(-KNOCKOUT_ARC + shot_seconds * KNOCKOUT_SPEED, -KNOCKOUT_ARC, KNOCKOUT_ARC)
 			var orbit := Vector2(cos(angle), sin(angle)) * 3.2 * back
 			pose = _make(me + orbit, (1.2 + 1.2 * eased) * k + lift, me, my_height * 0.3, 45 + widen)
+		Director.Shot.VICTORY:
+			# In front of the winner, slowly pushing in, a little to one side and below its eyes.
+			var facing: Vector2 = battle.fighters[side].facing
+			var front := facing.normalized() if facing.length() > 0.01 else toward
+			var side_step := Vector2(-front.y, front.x)
+			var push := lerpf(1.25, 1.0, eased)
+			var distance := (1.6 + my_height * 1.4) * push * (1.15 if portrait else 1.0)
+			pose = _make(me + (front + side_step * 0.35) * distance, my_height * 0.7 + lift, me, my_height * 0.55, 40 + widen)
 		_:
 			# Slow arc around the fighters, alternating direction from shot to shot.
 			var middle := (a + b) * 0.5

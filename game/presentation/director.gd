@@ -3,13 +3,13 @@ extends RefCounted
 ## Plans how a finished battle is presented (concepts_brief.md §12.2, §12.3): how many video
 ## frames each simulation tick occupies (hit-stop, slow motion) and which camera shot covers
 ## each tick. Planning reads the whole event log, so it can build up to moments such as the
-## knockout. Choices draw only from the battle's cosmetic stream, so a battle always gets
-## the same edit.
+## knockout and the winner's victory shot after it. Choices draw only from the battle's
+## cosmetic stream, so a battle always gets the same edit.
 
-enum Shot { WIDE, OVER_SHOULDER, CLOSE_UP, TRACKING, IMPACT, KNOCKOUT }
+enum Shot { WIDE, OVER_SHOULDER, CLOSE_UP, TRACKING, IMPACT, KNOCKOUT, VICTORY }
 
 ## Shots that may interrupt others, highest priority last.
-const PRIORITY: Array[Shot] = [Shot.WIDE, Shot.OVER_SHOULDER, Shot.TRACKING, Shot.CLOSE_UP, Shot.IMPACT, Shot.KNOCKOUT]
+const PRIORITY: Array[Shot] = [Shot.WIDE, Shot.OVER_SHOULDER, Shot.TRACKING, Shot.CLOSE_UP, Shot.IMPACT, Shot.KNOCKOUT, Shot.VICTORY]
 const BASE_SHOT_MIN_TICKS := 90
 const BASE_SHOT_MAX_TICKS := 180
 ## A wind-up gets a close-up when its move is at least this strong.
@@ -24,16 +24,22 @@ const HEAVY_HITSTOP_FRAMES := 5
 ## Knockout slow motion: frames per tick, and how long it lingers after the faint.
 const KNOCKOUT_FRAMES_PER_TICK := 3
 const KNOCKOUT_LINGER_TICKS := 30
+## After a knockout, the winner's victory shot (and the HUD's victory card) at normal speed.
+const VICTORY_TICKS := 75
 
 
 ## events: the battle's event log. end_tick: the tick the battle ended. max_hp: per side.
-## move_power: per side, move id -> base power. Covers ticks [0, end_tick + linger); ticks
-## from end_tick on are presentation-only (the battle is over, the faint plays out). Returns:
+## move_power: per side, move id -> base power. Covers ticks [0, end_tick + linger), plus the
+## victory after a knockout; ticks from end_tick on are presentation-only (the battle is over,
+## the faint plays out, the winner celebrates). Returns:
 ##   "hitstop": PackedInt32Array, frozen frames shown before each tick advances
 ##   "slow": PackedInt32Array, frames each tick lasts after any hit-stop (1, or more in slow motion)
 ##   "shots": Array of {"start", "end", "shot", "side"}
+##   "victory": {"start": tick, "side": the winner} after a knockout, else {}
 static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array, random: SimRandom) -> Dictionary:
-	var length := end_tick + KNOCKOUT_LINGER_TICKS
+	var knockout := _knockout_window(events, end_tick)
+	var victory_start := end_tick + KNOCKOUT_LINGER_TICKS
+	var length := victory_start + (VICTORY_TICKS if not knockout.is_empty() else 0)
 	var hitstop := PackedInt32Array()
 	hitstop.resize(length)
 	var slow := PackedInt32Array()
@@ -45,7 +51,6 @@ static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array,
 	side_at.resize(length)
 
 	_base_shots(shot_at, side_at, random)
-	var knockout := _knockout_window(events, end_tick)
 	for i in events.size():
 		var event: Dictionary = events[i]
 		match event.type:
@@ -64,11 +69,14 @@ static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array,
 					hitstop[event.tick] += HEAVY_HITSTOP_FRAMES if heavy else HITSTOP_FRAMES
 				if heavy:
 					_overlay(shot_at, side_at, event.tick, event.tick + IMPACT_TICKS, Shot.IMPACT, defender)
+	var victory := {}
 	if not knockout.is_empty():
-		_overlay(shot_at, side_at, knockout.start, length, Shot.KNOCKOUT, knockout.loser)
-		for tick in range(knockout.start, length):
+		_overlay(shot_at, side_at, knockout.start, victory_start, Shot.KNOCKOUT, knockout.loser)
+		for tick in range(knockout.start, victory_start):
 			slow[tick] = KNOCKOUT_FRAMES_PER_TICK
-	return {"hitstop": hitstop, "slow": slow, "shots": _segments(shot_at, side_at)}
+		victory = {"start": victory_start, "side": 1 - int(knockout.loser)}
+		_overlay(shot_at, side_at, victory_start, length, Shot.VICTORY, victory.side)
+	return {"hitstop": hitstop, "slow": slow, "shots": _segments(shot_at, side_at), "victory": victory}
 
 
 ## Video frames from `tick` to the end of the plan.
