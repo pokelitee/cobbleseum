@@ -3,6 +3,7 @@
 	"field": "paved",
 	"venue": "coliseum",
 	"suits": ["Dark", "Ghost", "Electric"],
+	"crowd": {"fill": 0.5, "watchers": 2},
 	"theme": {
 		"stone": "#5c6068",
 		"stone_dark": "#43474f",

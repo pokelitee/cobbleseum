@@ -828,7 +828,8 @@ An arena is a preset (`Arenas`): one JSON file in `game/data/arenas/`, named aft
 - a **field** (`Terrain.FIELDS`), the ground the battle is fought on, which is the simulation's (§9.8): grassland, beach, volcano, snowfield, cave, or flat paving. `ArenaFields` holds each field's colours, props and details;
 - a **venue**: `open` (the field's own landscape all around) or `coliseum` (`Stadium`, around any field), with an optional **theme** for the coliseum's colours (stone, paving, apron, seats, trim, outside ground, a banner colour per side, moss);
 - its **look**: sky, sun, ambient light, fog and weather particles (colours as `"#rrggbb"`);
-- how a battle without a requested arena may get it: `"always"`, or `"suits"` with a list of types.
+- how a battle without a requested arena may get it: `"always"`, or `"suits"` with a list of types;
+- for a coliseum, an optional `"crowd"`: `"fill"`, the share of seats taken (0 for empty stands, 1 for a sell-out; 0.75 by default), and `"watchers"`, how many Cobblemon sit in the front row (0–8; 4 by default). The night stadium is half full, with two.
 
 The presets are grassland, beach, volcano, snowfield, cave and stadium (the open fields and the paved coliseum), plus a night stadium, a garden coliseum (grassland in sandstone stands) and a frost coliseum (snowfield in pale blue stands). Presets evoke kinds of places (a league stadium at night, a gym's battle hall) and never reproduce specific locations from the games or the anime.
 
@@ -857,8 +858,8 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
 - **Cameras** stay inside a limit each arena sets (just inside the stadium's wall, or where the ground starts to rise elsewhere), so they never end up inside the scenery.
 - **Seats:** the arena offers seats facing the floor (on the stands' rows, else on low terrain nearby) for spectators.
 - **Crowd** (`Crowd`), in coliseums only (a crowd on an open hillside would look odd):
-  - low-poly figures (legs, a shirt in one of eight colours, arms, a head in one of four skin tones) in three quarters of the stands' seats, drawn as one MultiMesh and animated in a shader (`crowd.gdshader`), so thousands cost one draw;
-  - four Cobblemon of the arena's types (its `suits`, 0.4–2.2 m tall, never the fighters themselves) spread around the front row, each watching one fighter with its head;
+  - low-poly figures (legs, a shirt in one of eight colours, arms, a head in one of four skin tones) in the preset's share of the stands' seats (three quarters by default), drawn as one MultiMesh and animated in a shader (`crowd.gdshader`), so thousands cost one draw;
+  - the preset's number of Cobblemon (four by default) of the arena's types (its `suits`, 0.4–2.2 m tall, never the fighters themselves) spread around the front row, each watching one fighter with its head;
   - they sway while they wait. Hits that take at least 15% of the defender's HP, critical hits and super-effective hits make them cheer: figures hop and raise their arms, more of them the bigger the hit, and the cheer calms over a couple of seconds. A knockout brings everyone to their feet for 3 s, and the Cobblemon cry. Hit-stop freezes the crowd along with the fighters.
 - **Determinism:** everything, the weather included (fixed particle seeds), comes from the preset and the battle seed, so every render of a battle is identical.
 

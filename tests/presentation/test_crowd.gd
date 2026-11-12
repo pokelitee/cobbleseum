@@ -71,3 +71,33 @@ func test_cheers_hold_then_calm_and_freeze_in_hit_stop() -> void:
 	assert_true(crowd.excitement < 0.2, "calms within a few seconds: %.2f" % crowd.excitement)
 	crowd.free()
 	arena.free()
+
+
+func test_a_preset_sets_how_full_the_stands_are_and_how_many_watch() -> void:
+	var arena := Arena.create("stadium", 3)
+	var empty := Crowd.create(arena, 3, {"fill": 0.0, "watchers": 0})
+	empty.build()
+	assert_eq(empty.figures, null, "empty stands")
+	assert_true(empty.watcher_seats(empty.watcher_count).is_empty(), "and no Cobblemon")
+	var full := Crowd.create(arena, 3, {"fill": 1.0, "watchers": 6})
+	full.build()
+	assert_eq(full.figures.multimesh.instance_count, arena.seats.size(), "every seat taken")
+	assert_eq(full.watcher_seats(full.watcher_count).size(), 6)
+	var default := Crowd.create(arena, 3)
+	assert_eq([default.fill, default.watcher_count], [Crowd.FILL, Crowd.WATCHERS], "defaults where a preset says nothing")
+	empty.free()
+	full.free()
+	default.free()
+	arena.free()
+
+
+func test_crowd_settings_are_checked() -> void:
+	var base := {"field": "paved", "venue": "coliseum", "sky": [], "sun": {}, "ambient": {}, "fog": {}}
+	assert_eq(Arenas._problem(base), "")
+	for crowd: Variant in [{"fill": 1.5}, {"fill": "most"}, {"watchers": -1}, {"watchers": 2.5}, {"watchers": Arenas.MAX_WATCHERS + 1}, {"size": 3}, "full"]:
+		var entry := base.duplicate()
+		entry.crowd = crowd
+		assert_false(Arenas._problem(entry).is_empty(), "rejects %s" % [crowd])
+	var good := base.duplicate()
+	good.crowd = {"fill": 0.5, "watchers": 2}
+	assert_eq(Arenas._problem(good), "")
