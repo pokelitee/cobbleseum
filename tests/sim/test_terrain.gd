@@ -38,17 +38,17 @@ func _raise(terrain: Terrain, from: Vector2i, to: Vector2i, height: float) -> vo
 
 
 func test_generation_is_repeatable_and_keeps_the_starts_clear() -> void:
-	for biome: String in Terrain.FIELDS:
-		var first := Terrain.generate(biome, SimRandom.new(5))
-		var second := Terrain.generate(biome, SimRandom.new(5))
-		assert_eq(first._heights, second._heights, biome)
+	for field: String in Terrain.FIELDS:
+		var first := Terrain.generate(field, SimRandom.new(5))
+		var second := Terrain.generate(field, SimRandom.new(5))
+		assert_eq(first._heights, second._heights, field)
 		for start in Terrain.starts():
 			var level := first.height_at(start)
 			for cell in first.cells():
 				if cell.distance_to(start) < Terrain.START_CLEAR:
-					assert_eq(first.height_at(cell), level, "%s start level at %s" % [biome, cell])
-					assert_eq(first.kind_at(cell), Terrain.Kind.GROUND, "%s start open at %s" % [biome, cell])
-		assert_true(first.starts_connected(), "%s: the starts can walk to each other" % biome)
+					assert_eq(first.height_at(cell), level, "%s start level at %s" % [field, cell])
+					assert_eq(first.kind_at(cell), Terrain.Kind.GROUND, "%s start open at %s" % [field, cell])
+		assert_true(first.starts_connected(), "%s: the starts can walk to each other" % field)
 		for cell in first.cells():
 			assert_eq(fmod(first.height_at(cell), Terrain.STEP), 0.0, "heights come in steps")
 	assert_eq(Terrain.generate("paved", SimRandom.new(5)).highest(), 0.0, "paving is flat")

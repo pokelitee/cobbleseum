@@ -159,7 +159,7 @@ func checksum() -> String:
 
 
 func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
-	if fighter.is_fainted():
+	if fighter.is_knocked_out():
 		return
 	for i in fighter.cooldowns.size():
 		fighter.cooldowns[i] = maxi(0, fighter.cooldowns[i] - 1)
@@ -169,9 +169,9 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			fighter.dodge_charges += 1
 			fighter.dodge_recharge_ticks = 0
 	_tick_conditions(fighter)
-	if fighter.is_fainted() or fighter.is_incapacitated():
+	if fighter.is_knocked_out() or fighter.is_incapacitated():
 		fighter.followups.clear()
-		if not fighter.is_fainted():
+		if not fighter.is_knocked_out():
 			_drift(fighter, foe, Vector2.ZERO)
 		return
 	for followup in fighter.followups.duplicate():
@@ -334,7 +334,7 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> void:
 			if move.kind == BattleMove.Kind.AREA:
 				_event("blast", fighter.side, {"move": move.id})
 			var reach_up := Rules.MELEE_HEIGHT if move.kind == BattleMove.Kind.MELEE else Rules.AREA_HEIGHT
-			if _gap(fighter, foe) > reach or foe.is_fainted() or absf(foe.ground - fighter.ground) > reach_up:
+			if _gap(fighter, foe) > reach or foe.is_knocked_out() or absf(foe.ground - fighter.ground) > reach_up:
 				_event("miss", fighter.side, {"move": move.id})
 			elif foe.is_invulnerable():
 				_event("miss", fighter.side, {"move": move.id})
@@ -384,7 +384,7 @@ func _move_projectiles() -> void:
 		var move := owner.moves[projectile.move]
 		var height: float = projectile.height
 		var level := absf(height - (target.ground + Rules.CHEST_HEIGHT)) <= Rules.PROJECTILE_VERTICAL_REACH
-		if closest.distance_to(target.position) <= target.radius + Rules.PROJECTILE_RADIUS and not target.is_fainted() and level:
+		if closest.distance_to(target.position) <= target.radius + Rules.PROJECTILE_RADIUS and not target.is_knocked_out() and level:
 			if not target.is_invulnerable():
 				if move.is_damaging():
 					_hit(owner, target, move)
@@ -414,8 +414,8 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	defender.hp -= dealt
 	_event("hit", attacker.side, {"move": move.id, "damage": outcome.damage, "crit": outcome.crit,
 		"effectiveness": outcome.effectiveness, "hp": defender.hp})
-	if defender.is_fainted():
-		_event("faint", defender.side, {})
+	if defender.is_knocked_out():
+		_event("knockout", defender.side, {})
 	else:
 		var push := (defender.position - attacker.position).normalized()
 		defender.velocity += push * Rules.knockback_speed(float(dealt) / defender.max_hp, defender.weight_kg)
@@ -428,12 +428,12 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 		for effect in move.secondaries:
 			if _random.chance(effect.chance / 100.0):
 				_apply_effect(attacker, defender, effect, move.id)
-	if move.drain_share > 0.0 and not attacker.is_fainted():
+	if move.drain_share > 0.0 and not attacker.is_knocked_out():
 		_heal(attacker, maxi(1, roundi(dealt * move.drain_share)), move.id)
 	if move.recoil_share > 0.0:
 		var recoil := maxi(1, roundi(dealt * move.recoil_share))
 		_hurt(attacker, recoil, "recoil", {"move": move.id})
-	if not move.self_boosts.is_empty() and not attacker.is_fainted():
+	if not move.self_boosts.is_empty() and not attacker.is_knocked_out():
 		_boost(attacker, move.self_boosts, move.id)
 
 
@@ -457,7 +457,7 @@ func _apply_effect(attacker: Fighter, defender: Fighter, effect: Dictionary, mov
 
 ## Gives a major status unless the fighter already has one or its type is immune.
 func _inflict(fighter: Fighter, status: String) -> void:
-	if not fighter.status.is_empty() or fighter.is_fainted():
+	if not fighter.status.is_empty() or fighter.is_knocked_out():
 		return
 	for type: String in Rules.STATUS_IMMUNITIES.get(status, []):
 		if type in fighter.types:
@@ -520,13 +520,13 @@ func _heal(fighter: Fighter, amount: int, move_id: String) -> void:
 
 ## Takes HP outside a hit (status damage, recoil, confusion), reporting it as `type`.
 func _hurt(fighter: Fighter, amount: int, type: String, details: Dictionary) -> void:
-	if fighter.is_fainted():
+	if fighter.is_knocked_out():
 		return
 	fighter.hp = maxi(0, fighter.hp - amount)
 	details.merge({"damage": amount, "hp": fighter.hp})
 	_event(type, fighter.side, details)
-	if fighter.is_fainted():
-		_event("faint", fighter.side, {})
+	if fighter.is_knocked_out():
+		_event("knockout", fighter.side, {})
 
 
 ## Status timers, damage over time and paralysis stuns, once per tick before acting.
@@ -554,7 +554,7 @@ func _tick_conditions(fighter: Fighter) -> void:
 				if _random.chance(Rules.PARALYSIS_STUN_CHANCE):
 					fighter.stun_ticks = Rules.seconds_to_ticks(Rules.PARALYSIS_STUN_SECONDS)
 					_event("stunned", fighter.side, {})
-	if fighter.status_ticks <= 0 and not fighter.is_fainted():
+	if fighter.status_ticks <= 0 and not fighter.is_knocked_out():
 		_end_status(fighter)
 
 
@@ -585,8 +585,8 @@ static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data:
 
 
 func _check_end() -> void:
-	var a_down := fighters[0].is_fainted()
-	var b_down := fighters[1].is_fainted()
+	var a_down := fighters[0].is_knocked_out()
+	var b_down := fighters[1].is_knocked_out()
 	if a_down and b_down:
 		result = Result.DRAW
 	elif b_down:

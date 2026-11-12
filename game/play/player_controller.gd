@@ -12,7 +12,7 @@ const DODGE_ACTION := "cobbleseum_dodge"
 const DIRECTION_ACTIONS: Array[String] = ["cobbleseum_left", "cobbleseum_right", "cobbleseum_forward", "cobbleseum_back"]
 ## Labels shown in the move bar, in move order.
 const MOVE_KEYS: Array[String] = ["J / X", "K / Y", "L / B", "I / RB"]
-## Stick input is rounded to this step so replays store short, exact numbers.
+## Stick input is rounded to this step so saved battle specs store short, exact numbers.
 const INPUT_STEP := 0.01
 
 ## Camera-relative input, latched until the next decide().

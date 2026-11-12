@@ -43,7 +43,7 @@ func _initialize() -> void:
 	if flag_spec.has("error"):
 		return _fail(flag_spec.error)
 	if not flag_spec.is_empty() and flag_spec.fighters[0].ai == "player":
-		return _fail("--play needs a player; record its replay instead (recordings/replays/)")
+		return _fail("--play needs a player; record its saved battle spec instead (recordings/specs/)")
 	for arg: String in parsed.rest:
 		if arg.begins_with("--seconds="):
 			seconds = maxf(1.0, arg.get_slice("=", 1).to_float())

@@ -2,7 +2,7 @@ class_name PartSwap
 extends SkeletonModifier3D
 ## Shows the parts a Cobblemon poser shows in the current stance and hides the rest, such as
 ## folded wings on the ground and open wings in the air. Parts are bones; a hidden bone is
-## scaled to zero after the clip has posed it, so any clip can play in either stance.
+## scaled to zero after the animation has posed it, so any animation can play in either stance.
 
 ## Set by FighterView: true shows the "air" parts, false the "ground" ones.
 var air := false

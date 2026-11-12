@@ -2,7 +2,7 @@ class_name Molang
 extends RefCounted
 ## Parser and evaluator for the subset of Molang found in Cobblemon's animation files:
 ## numbers, + - * /, unary - + !, parentheses, math.* functions, and query/variable names.
-## Only the animation time is known when baking clips, so every other name evaluates to 0
+## Only the animation time is known when baking animations, so every other name evaluates to 0
 ## and is listed in `unknown_names` for the converter's report. Asset text is never run as code.
 
 enum Kind { NUMBER, NAME, CALL, NEGATE, NOT, BINARY }
@@ -150,7 +150,7 @@ func _parse_name(name: String) -> Array:
 				error = "expected ',' or ')' in call to %s" % name
 	if not name.begins_with("math."):
 		# Query functions such as q.r.velocity_y(0) describe live entity state (riding, targets),
-		# which doesn't exist when baking a clip, so they behave like unknown names.
+		# which doesn't exist when baking an animation, so they behave like unknown names.
 		if not name in unknown_names:
 			unknown_names.append(name)
 		return [Kind.NAME, name]

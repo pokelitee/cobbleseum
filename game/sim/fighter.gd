@@ -78,12 +78,12 @@ static func create(side_index: int, species_id_value: String, species: Dictionar
 	return fighter
 
 
-func is_fainted() -> bool:
+func is_knocked_out() -> bool:
 	return hp <= 0
 
 
 func can_act() -> bool:
-	return action == Action.READY and not is_fainted() and not is_incapacitated()
+	return action == Action.READY and not is_knocked_out() and not is_incapacitated()
 
 
 ## A stat after stat stages (and burn for Attack).

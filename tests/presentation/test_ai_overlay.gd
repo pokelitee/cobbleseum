@@ -14,10 +14,10 @@ func test_overlay_asks_utility_ais_to_keep_scores() -> void:
 	var ai := UtilityAI.new(Controllers.load_profile("ranked"), SimRandom.new(1))
 	var overlay := AIOverlay.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(overlay)
-	overlay.setup([ai, SimpleAI.new(SimRandom.new(2))], ["A", "B"], Vector2(1920, 1080), Vector2(170, 80))
+	overlay.setup([ai, StandInAI.new(SimRandom.new(2))], ["A", "B"], Vector2(1920, 1080), Vector2(170, 80))
 	assert_true(ai.keep_scores)
 	assert_eq(AIOverlay.describe_controller(ai), "AI ranked")
-	assert_eq(AIOverlay.describe_controller(SimpleAI.new(SimRandom.new(3))), "AI simple")
+	assert_eq(AIOverlay.describe_controller(StandInAI.new(SimRandom.new(3))), "AI stand_in")
 	overlay.refresh()
 	overlay.free()
 

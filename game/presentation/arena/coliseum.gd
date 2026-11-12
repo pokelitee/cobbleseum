@@ -1,7 +1,7 @@
-class_name Stadium
+class_name Coliseum
 extends RefCounted
 ## The coliseum venue (concepts_brief.md §12.7): a round coliseum built from blocks around the
-## battle's field, big enough to read as a stadium rather than a low wall. Its colours come from
+## battle's field, big enough to read as a coliseum rather than a low wall. Its colours come from
 ## the preset's theme (DEFAULT_THEME where it leaves one out).
 ##
 ## From the centre out:

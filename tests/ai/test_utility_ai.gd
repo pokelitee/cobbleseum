@@ -177,10 +177,10 @@ func test_easy_misses_more_dodges_than_hard() -> void:
 
 
 func test_controllers_come_from_the_spec() -> void:
-	var made := Controllers.for_spec({"seed": 1, "fighters": [{"species": "a"}, {"species": "b", "ai": "simple"}]})
+	var made := Controllers.for_spec({"seed": 1, "fighters": [{"species": "a"}, {"species": "b", "ai": "stand_in"}]})
 	assert_true(made.controllers[0] is UtilityAI, "ranked by default")
 	assert_eq((made.controllers[0] as UtilityAI).profile.resource_path, Controllers.PROFILES_DIR.path_join("ranked.tres"))
-	assert_true(made.controllers[1] is SimpleAI)
+	assert_true(made.controllers[1] is StandInAI)
 	assert_true(Controllers.for_spec({"seed": 1, "fighters": [{"ai": "genius"}, {}]}).error.contains("unknown AI"))
 	for profile in ["easy", "normal", "hard", "ranked"]:
 		assert_true(Controllers.load_profile(profile) != null, profile)

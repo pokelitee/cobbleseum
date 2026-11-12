@@ -2,7 +2,7 @@ extends SceneTree
 ## Renders roster species as they appear in battle, for converter QA (concepts_brief.md §7.5).
 ## Usage (needs a window, not --headless):
 ##   godot --path . --script res://tools/preview_roster.gd -- [species ...] [--flag=bounds_mismatch]
-## Each species is shown at its roster scale, partway into its idle clip, beside an outline of
+## Each species is shown at its roster scale, partway into its idle animation, beside an outline of
 ## its hitbox capsule, from a camera framed on the hitbox (not the model, which may be
 ## wrong). Writes one contact sheet, cache/previews/roster_<name>.png, labelled by tile order
 ## in the printed list; previews show Cobblemon art, so they stay in the cache.

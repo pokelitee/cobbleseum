@@ -21,7 +21,7 @@ const IMPACT_TICKS := 12
 const HEAVY_HIT_SHARE := 0.1
 const HITSTOP_FRAMES := 2
 const HEAVY_HITSTOP_FRAMES := 5
-## Knockout slow motion: frames per tick, and how long it lingers after the faint.
+## Knockout slow motion: frames per tick, and how long it lingers after the knockout.
 const KNOCKOUT_FRAMES_PER_TICK := 3
 const KNOCKOUT_LINGER_TICKS := 30
 ## After a knockout, the winner's victory shot (and the HUD's victory card) at normal speed.
@@ -31,7 +31,7 @@ const VICTORY_TICKS := 75
 ## events: the battle's event log. end_tick: the tick the battle ended. max_hp: per side.
 ## move_power: per side, move id -> base power. Covers ticks [0, end_tick + linger), plus the
 ## victory after a knockout; ticks from end_tick on are presentation-only (the battle is over,
-## the faint plays out, the winner celebrates). Returns:
+## the knockout plays out, the winner celebrates). Returns:
 ##   "hitstop": PackedInt32Array, frozen frames shown before each tick advances
 ##   "slow": PackedInt32Array, frames each tick lasts after any hit-stop (1, or more in slow motion)
 ##   "shots": Array of {"start", "end", "shot", "side"}
@@ -116,11 +116,11 @@ static func _overlay(shot_at: PackedInt32Array, side_at: PackedInt32Array, start
 			side_at[t] = side
 
 
-## Slow motion starts at the wind-up of the move that caused the faint.
+## Slow motion starts at the wind-up of the move that caused the knockout.
 static func _knockout_window(events: Array, end_tick: int) -> Dictionary:
 	for i in range(events.size() - 1, -1, -1):
 		var event: Dictionary = events[i]
-		if event.type != "faint":
+		if event.type != "knockout":
 			continue
 		var loser: int = event.side
 		for j in range(i - 1, -1, -1):

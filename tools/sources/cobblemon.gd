@@ -2,7 +2,7 @@ extends RefCounted
 ## Build step for the Cobblemon source (concepts_brief.md §7, §8).
 ## Matches Showdown species to Cobblemon models (CobblemonRoster), converts each one into
 ## models/<id>.scn, and writes:
-## - roster.json: one entry per species with its model, scale, height, hitbox radius, clips,
+## - roster.json: one entry per species with its model, scale, height, hitbox radius, animations,
 ##   QA flags and licence. Headless simulation reads only this file.
 ## - report.json: the QA report, a summary plus each species' flags and conversion problems.
 ##
@@ -111,7 +111,7 @@ static func _roster_entry(entry: Dictionary, report: Dictionary, source_dir: Str
 	var roster_entry := {
 		"name": entry.name, "num": entry.num, "folder": entry.folder, "aspects": entry.aspects,
 		"model": entry.id + ".scn", "scale": sized.scale, "height": sized.height, "radius": sized.radius,
-		"clips": (report.get("clips", {}) as Dictionary).keys(), "poser": report.get("poser", false),
+		"animations": (report.get("animations", {}) as Dictionary).keys(), "poser": report.get("poser", false),
 		"flags": flags, "licence": LICENCE,
 	}
 	var qa := {"flags": flags, "model_height": model_height, "hitbox_height": hitbox_height}
@@ -177,7 +177,7 @@ static func _json_report(report: Dictionary) -> Dictionary:
 	var out := {}
 	for key: String in report:
 		var value: Variant = report[key]
-		if value is Dictionary and key != "clips":
+		if value is Dictionary and key != "animations":
 			var names: Array = value.keys()
 			names.sort()
 			out[key] = names

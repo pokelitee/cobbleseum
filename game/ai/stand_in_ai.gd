@@ -1,4 +1,4 @@
-class_name SimpleAI
+class_name StandInAI
 extends RefCounted
 ## Stand-in controller until the utility AI (concepts_brief.md §11, milestone 4):
 ## - dodges sideways when a projectile is about to hit or a melee strike is about to land,
@@ -29,7 +29,7 @@ const CONFUSE_SCORE := 70.0
 const DEBUFF_SCORE := 55.0
 const STAGE_TARGET := 2
 ## Damaging moves: charge and recharge moves are worth a little less, fixed damage a little
-## more (it ignores defences), and self-destructing only when nearly fainted.
+## more (it ignores defences), and self-destructing only when nearly knocked out.
 const CHARGE_FACTOR := 0.75
 const RECHARGE_FACTOR := 0.8
 const FIXED_DAMAGE_FACTOR := 1.8
@@ -53,8 +53,8 @@ func _init(stream: SimRandom) -> void:
 ## One controller per side, each on its own random stream from the battle seed.
 static func pair(seed: int) -> Array:
 	return [
-		SimpleAI.new(SimRandom.stream(seed, Battle.Stream.SIDE_A)),
-		SimpleAI.new(SimRandom.stream(seed, Battle.Stream.SIDE_B)),
+		StandInAI.new(SimRandom.stream(seed, Battle.Stream.SIDE_A)),
+		StandInAI.new(SimRandom.stream(seed, Battle.Stream.SIDE_B)),
 	]
 
 

@@ -1,7 +1,7 @@
 class_name BattleSound
 extends Node
 ## Battle sound (concepts_brief.md §12.5) from Cobblemon's sound files:
-## - cries: both fighters at the intro, and a lower-pitched cry on a faint
+## - cries: both fighters at the intro, and a lower-pitched cry on a knockout
 ## - wind-up: the move's own `<move>_actor*` sound, when Cobblemon has one
 ## - hits: the move's `<move>_target*` sound, else the generic impact sound for its type
 ## Variants are chosen by a counter, never at random, so every render sounds the same.
@@ -11,7 +11,7 @@ extends Node
 const SOUNDS_DIR := "res://cache/sources/cobblemon/1.8.4/assets/cobblemon/sounds"
 ## Frames between the two intro cries, so they don't play over each other.
 const INTRO_CRY_GAP := 24
-const FAINT_PITCH := 0.8
+const KNOCKOUT_PITCH := 0.8
 const CRY_DB := -7.0
 const MOVE_DB := -6.0
 const BIG_HIT_DB := 2.0
@@ -38,8 +38,8 @@ func intro() -> void:
 	_schedule(INTRO_CRY_GAP, cry_path(1), CRY_DB)
 
 
-func faint(side: int) -> void:
-	_schedule(0, cry_path(side), CRY_DB, FAINT_PITCH)
+func knockout(side: int) -> void:
+	_schedule(0, cry_path(side), CRY_DB, KNOCKOUT_PITCH)
 
 
 func windup(move: BattleMove) -> void:

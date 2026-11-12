@@ -46,10 +46,10 @@ func test_a_coliseum_takes_any_field_and_theme() -> void:
 	assert_true(terrain.highest() > 0.0, "mounds and features inside")
 	var arena := Arena.create("garden_coliseum", 4, [], terrain)
 	assert_eq(arena.theme.stone, Color.html("#c9b48e"), "the preset's theme")
-	assert_eq(arena.theme.slab, Stadium.DEFAULT_THEME.slab, "defaults fill the rest")
-	assert_true(arena.camera_limit < Stadium.wall_radius())
+	assert_eq(arena.theme.slab, Coliseum.DEFAULT_THEME.slab, "defaults fill the rest")
+	assert_true(arena.camera_limit < Coliseum.wall_radius())
 	assert_true(arena.seats.size() > 500, "seats are in the stands")
-	assert_false(arena._biome.has("water"))
+	assert_false(arena._look.has("water"))
 	assert_true(absf(arena.surface_at(Vector2(0.5, 0.5), -100.0) - terrain.ground_at(Vector2(0.5, 0.5))) < Terrain.STEP,
 		"the field is the faceted ground")
 	arena.free()
@@ -87,13 +87,13 @@ func test_the_visible_ground_follows_the_battle_ground() -> void:
 	arena.free()
 
 
-func test_the_stadium_rises_around_the_field_with_seats_in_the_stands() -> void:
+func test_the_coliseum_rises_around_the_field_with_seats_in_the_stands() -> void:
 	var arena := Arena.create("stadium", 3, ["Garchomp", "Greninja"])
-	assert_true(Stadium.top_height() > 12.0, "tall enough to read as a stadium: %.1f m" % Stadium.top_height())
-	assert_true(Stadium.wall_radius() > Arena.FLOOR_RADIUS + 3.0, "an apron between the field and the wall")
-	assert_true(arena.camera_limit < Stadium.wall_radius(), "cameras stay inside the wall")
+	assert_true(Coliseum.top_height() > 12.0, "tall enough to read as a coliseum: %.1f m" % Coliseum.top_height())
+	assert_true(Coliseum.wall_radius() > Arena.FLOOR_RADIUS + 3.0, "an apron between the field and the wall")
+	assert_true(arena.camera_limit < Coliseum.wall_radius(), "cameras stay inside the wall")
 	for seat in arena.seats:
-		assert_true(seat.origin.y > Stadium.WALL_HEIGHT, "seats are in the stands")
+		assert_true(seat.origin.y > Coliseum.WALL_HEIGHT, "seats are in the stands")
 	assert_true(arena.seats.size() > 500)
 	var labels := arena.find_children("*", "Label3D", false, false)
 	assert_eq(labels.size(), 2, "a screen at each end")

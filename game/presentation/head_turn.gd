@@ -1,7 +1,7 @@
 class_name HeadTurn
 extends SkeletonModifier3D
 ## Turns one bone (the head) about the model's up axis by `yaw` radians, on top of whatever
-## clip is playing. FighterView sets `yaw` each frame so the head follows the foe.
+## animation is playing. FighterView sets `yaw` each frame so the head follows the foe.
 
 var bone := -1
 var yaw := 0.0

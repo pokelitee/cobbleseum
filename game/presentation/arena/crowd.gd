@@ -2,36 +2,36 @@ class_name Crowd
 extends Node3D
 ## Spectators (concepts_brief.md §12.7), in venues with stands only: a crowd of low-poly
 ## figures filling most of the coliseum's seats, drawn as one MultiMesh and animated in its
-## shader (crowd.gdshader), and a few Cobblemon of the arena's types in the front row. They
+## shader (crowd.gdshader), and a few watchers of the arena's types in the front row. They
 ## sway while they wait and cheer at big hits and knockouts: figures hop and raise their arms
-## (more of them the bigger the moment), and the Cobblemon cry. Presentation only, seeded by
+## (more of them the bigger the moment), and the watchers cry. Presentation only, seeded by
 ## the battle.
 
 const SHADER := preload("res://game/presentation/arena/crowd.gdshader")
 ## A preset's "crowd" may set "fill" (the share of seats taken, 0 to 1) and "watchers" (how
-## many Cobblemon watch, up to Arenas.MAX_WATCHERS); these are the defaults.
+## many watchers sit in the front row, up to Arenas.MAX_WATCHERS); these are the defaults.
 const FILL := 0.75
 const WATCHERS := 4
-## The heights (metres) of Cobblemon that fit a seat.
+## The heights (metres) of Pokémon that fit a seat.
 const WATCHER_HEIGHT := Vector2(0.4, 2.2)
-## Figures this close to a Cobblemon's seat make room for it.
+## Figures this close to a watcher's seat make room for it.
 const WATCHER_ROOM := 1.6
 ## Excitement falls by this share per frame once a cheer's hold ends.
 const CALM := 0.04
 ## Where the arms hang from (metres up the figure); the shader raises them about it.
 const SHOULDER := 0.92
-## Cheers at least this excited make the Cobblemon cry.
+## Cheers at least this excited make the watchers cry.
 const LOUD := 0.8
 const SHIRTS: Array[Color] = [
 	Color(0.85, 0.25, 0.22), Color(0.22, 0.42, 0.8), Color(0.95, 0.8, 0.25), Color(0.3, 0.65, 0.35),
 	Color(0.92, 0.92, 0.9), Color(0.55, 0.35, 0.7), Color(0.95, 0.55, 0.2), Color(0.25, 0.25, 0.28),
 ]
 
-## The Cobblemon watching, and the figures' MultiMesh (null without stands).
+## The watchers, and the figures' MultiMesh (null without stands).
 var watchers: Array[FighterView] = []
 var figures: MultiMeshInstance3D
 var excitement := 0.0
-## This arena's share of seats taken and number of Cobblemon watching.
+## This arena's share of seats taken and number of watchers.
 var fill := FILL
 var watcher_count := WATCHERS
 
@@ -40,7 +40,7 @@ var _time := 0.0
 var _time_scale := 1.0
 var _hold := 0
 var _rng := RandomNumberGenerator.new()
-## Seats left for figures (world transforms), and the front row's, for the Cobblemon.
+## Seats left for figures (world transforms), and the front row's, for the watchers.
 var _seats: Array[Transform3D] = []
 var _front: Array[Transform3D] = []
 ## Each watcher's place on the floor, re-applied every frame so its head follows the battle.
@@ -49,7 +49,7 @@ var _watcher_heights: Array[float] = []
 
 
 ## The crowd for `arena`, seeded by `seed`: figures in the seats of a venue with stands, none
-## in the open, as the preset's crowd `settings` say. Add Cobblemon with add_watcher() before
+## in the open, as the preset's crowd `settings` say. Add watchers with add_watcher() before
 ## the figures are placed by build().
 static func create(arena: Arena, seed: int, settings: Dictionary = {}) -> Crowd:
 	var crowd := Crowd.new()
@@ -59,7 +59,7 @@ static func create(arena: Arena, seed: int, settings: Dictionary = {}) -> Crowd:
 	crowd._rng.seed = hash("crowd|%d" % seed)
 	if arena.theme.is_empty():
 		return crowd
-	var front_height := Stadium.row(0).y
+	var front_height := Coliseum.row(0).y
 	for seat in arena.seats:
 		crowd._seats.append(seat)
 		if is_equal_approx(seat.origin.y, front_height):
@@ -67,7 +67,7 @@ static func create(arena: Arena, seed: int, settings: Dictionary = {}) -> Crowd:
 	return crowd
 
 
-## Cobblemon species that could watch an arena that suits `types`: ones of those types that fit
+## Species that could watch an arena that suits `types`: ones of those types that fit
 ## a seat, not the fighters themselves, picked by `rng` (sorted first, so the pick is repeatable).
 static func choose_watchers(types: Array, roster: Dictionary, species: Dictionary, exclude: Array,
 		rng: RandomNumberGenerator, count := WATCHERS) -> Array[String]:
@@ -86,7 +86,7 @@ static func choose_watchers(types: Array, roster: Dictionary, species: Dictionar
 	return chosen
 
 
-## The seats the Cobblemon take: spread around the front row, one per share of the circle.
+## The seats the watchers take: spread around the front row, one per share of the circle.
 func watcher_seats(count: int) -> Array[Transform3D]:
 	var picked: Array[Transform3D] = []
 	if _front.is_empty():
@@ -101,7 +101,7 @@ func watcher_seats(count: int) -> Array[Transform3D]:
 	return picked
 
 
-## Seats a Cobblemon at `seat`, facing the field and watching `fighter`, and clears the figures
+## Seats a watcher at `seat`, facing the field and watching `fighter`, and clears the figures
 ## around it.
 func add_watcher(view: FighterView, seat: Transform3D, fighter: FighterView) -> void:
 	add_child(view)

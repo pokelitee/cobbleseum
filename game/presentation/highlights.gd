@@ -22,7 +22,7 @@ const DODGED_SCORE := 1.0
 const STATUS_SCORE := 1.0
 const BOOST_SCORE := 0.4
 const HEAL_SCORE := 0.6
-const FAINT_SCORE := 8.0
+const KNOCKOUT_SCORE := 8.0
 const TIME_UP_SCORE := 4.0
 ## Ticks kept after a window's last hit, so the reaction plays out.
 const END_LINGER_TICKS := 20
@@ -41,7 +41,7 @@ static func choose(plan_data: Dictionary, events: Array, max_hp: Array, frames: 
 	var scores := event_scores(events, max_hp)
 	var finish := length
 	for event: Dictionary in events:
-		if event.type in ["faint", "time_up"]:
+		if event.type in ["knockout", "time_up"]:
 			finish = mini(finish, int(event.tick))
 	var ends: Array[int] = [length]
 	for i in events.size():
@@ -95,8 +95,8 @@ static func event_scores(events: Array, max_hp: Array) -> PackedFloat32Array:
 				scores[i] = BOOST_SCORE
 			"heal":
 				scores[i] = HEAL_SCORE
-			"faint":
-				scores[i] = FAINT_SCORE
+			"knockout":
+				scores[i] = KNOCKOUT_SCORE
 			"time_up":
 				scores[i] = TIME_UP_SCORE
 	return scores

@@ -1,10 +1,11 @@
 class_name Controllers
 extends RefCounted
 ## Builds each side's controller from a battle spec (concepts_brief.md §10, §11). A fighter's
-## "ai" names a profile in game/ai/profiles ("easy", "normal", "hard", "ranked"), "simple"
-## for the stand-in SimpleAI, or "player"; the default is "ranked". A fighter with recorded
-## "intents" (a replay) is played back instead. Each side draws from its own random
-## stream of the battle seed, so every run of a spec makes the same choices.
+## "ai" names a profile in game/ai/profiles ("easy", "normal", "hard", "ranked"), "stand_in"
+## for the stand-in AI (StandInAI), or "player"; the default is "ranked". A fighter with
+## recorded "intents" (a player's side of a saved battle spec) is replayed instead. Each side
+## draws from its own random stream of the battle seed, so every run of a spec makes the same
+## choices.
 
 const PROFILES_DIR := "res://game/ai/profiles"
 const DEFAULT_AI := "ranked"
@@ -23,12 +24,12 @@ static func for_spec(spec: Dictionary) -> Dictionary:
 		if name == "player":
 			controllers.append(PlayerController.new())
 			continue
-		if name == "simple":
-			controllers.append(SimpleAI.new(stream))
+		if name == "stand_in":
+			controllers.append(StandInAI.new(stream))
 			continue
 		var profile := load_profile(name)
 		if profile == null:
-			return {"error": "unknown AI '%s' (use simple or a profile in %s)" % [name, PROFILES_DIR]}
+			return {"error": "unknown AI '%s' (use stand_in or a profile in %s)" % [name, PROFILES_DIR]}
 		controllers.append(UtilityAI.new(profile, stream))
 	return {"controllers": controllers}
 

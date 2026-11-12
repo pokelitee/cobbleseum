@@ -250,8 +250,8 @@ func test_status_damage_can_knock_out() -> void:
 	battle._inflict(target, "psn")
 	target.hp = 1
 	_run_ticks(battle, Rules.TICK_RATE + 1)
-	assert_true(target.is_fainted())
-	assert_eq(_events(battle, "faint").size(), 1)
+	assert_true(target.is_knocked_out())
+	assert_eq(_events(battle, "knockout").size(), 1)
 	assert_eq(battle.result, Battle.Result.WIN_A)
 
 
@@ -259,14 +259,14 @@ func test_ai_scores_support_moves_by_situation() -> void:
 	var battle := _battle(["recover", "willowisp", "swordsdance"], ["jet"])
 	var me := battle.fighters[0]
 	var foe := battle.fighters[1]
-	assert_eq(SimpleAI.move_score(me, foe, _move("recover")), 0.0, "no heal at full HP")
+	assert_eq(StandInAI.move_score(me, foe, _move("recover")), 0.0, "no heal at full HP")
 	me.hp = me.max_hp / 4
-	assert_true(SimpleAI.move_score(me, foe, _move("recover")) > 100.0, "heals when hurt")
-	assert_true(SimpleAI.move_score(me, foe, _move("willowisp")) > 0.0)
+	assert_true(StandInAI.move_score(me, foe, _move("recover")) > 100.0, "heals when hurt")
+	assert_true(StandInAI.move_score(me, foe, _move("willowisp")) > 0.0)
 	foe.status = "par"
-	assert_eq(SimpleAI.move_score(me, foe, _move("willowisp")), 0.0, "no status on a foe that has one")
+	assert_eq(StandInAI.move_score(me, foe, _move("willowisp")), 0.0, "no status on a foe that has one")
 	me.boosts.atk = 2
-	assert_eq(SimpleAI.move_score(me, foe, _move("swordsdance")), 0.0, "stops buffing at +2")
+	assert_eq(StandInAI.move_score(me, foe, _move("swordsdance")), 0.0, "stops buffing at +2")
 
 
 func test_ai_discounts_moves_that_lower_its_attacking_stat() -> void:
@@ -276,10 +276,10 @@ func test_ai_discounts_moves_that_lower_its_attacking_stat() -> void:
 	var me := battle.fighters[0]
 	var foe := battle.fighters[1]
 	var jet := _move("jet")
-	assert_true(SimpleAI.move_score(me, foe, overheat) < 130.0 * 0.6, "pays for the -2 it causes")
+	assert_true(StandInAI.move_score(me, foe, overheat) < 130.0 * 0.6, "pays for the -2 it causes")
 	me.boosts.spa = -2
-	assert_almost_eq(SimpleAI.move_score(me, foe, jet), 80.0 * 0.5, 1e-4, "attacks weigh the current stage")
-	assert_eq(SimpleAI.move_score(me, foe, overheat), 0.0, "waits for -2 to wear off before dropping further")
+	assert_almost_eq(StandInAI.move_score(me, foe, jet), 80.0 * 0.5, 1e-4, "attacks weigh the current stage")
+	assert_eq(StandInAI.move_score(me, foe, overheat), 0.0, "waits for -2 to wear off before dropping further")
 
 
 func test_stat_stages_wear_off_one_step_at_a_time() -> void:

@@ -105,12 +105,12 @@ func test_fixed_damage_ignores_stats() -> void:
 	assert_eq(outcome.damage, Rules.LEVEL)
 
 
-func test_self_destruct_faints_the_user() -> void:
+func test_self_destruct_knocks_out_the_user() -> void:
 	var battle := _battle(["explosion"], [{"use": 0}])
 	_place(battle, 1.0)
 	for i in 30:
 		battle.step()
-	assert_true(battle.fighters[0].is_fainted())
+	assert_true(battle.fighters[0].is_knocked_out())
 	assert_eq(_events(battle, "self_destruct").size(), 1)
 	assert_true(battle.is_over())
 
@@ -129,8 +129,8 @@ func test_ai_values_new_moves_sensibly() -> void:
 	var battle := _battle(["explosion", "bulletseed", "solarbeam"])
 	var me := battle.fighters[0]
 	var foe := battle.fighters[1]
-	assert_eq(SimpleAI.move_score(me, foe, _move("explosion")), 0.0, "no self-destruct at full HP")
+	assert_eq(StandInAI.move_score(me, foe, _move("explosion")), 0.0, "no self-destruct at full HP")
 	me.hp = me.max_hp / 10
-	assert_true(SimpleAI.move_score(me, foe, _move("explosion")) > 200.0)
-	assert_almost_eq(SimpleAI.move_score(me, foe, _move("bulletseed")), 25 * 3.1, 1e-4)
-	assert_almost_eq(SimpleAI.move_score(me, foe, _move("solarbeam")), 120 * SimpleAI.CHARGE_FACTOR, 1e-4)
+	assert_true(StandInAI.move_score(me, foe, _move("explosion")) > 200.0)
+	assert_almost_eq(StandInAI.move_score(me, foe, _move("bulletseed")), 25 * 3.1, 1e-4)
+	assert_almost_eq(StandInAI.move_score(me, foe, _move("solarbeam")), 120 * StandInAI.CHARGE_FACTOR, 1e-4)

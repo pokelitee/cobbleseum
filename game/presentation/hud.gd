@@ -19,7 +19,7 @@ const REFERENCE_SIZE := 1080.0
 const HEALTHY := Color(0.3, 0.9, 0.4)
 const WARNING := Color(1.0, 0.8, 0.2)
 const DANGER := Color(1.0, 0.3, 0.25)
-## Each side's accent (the plate's edge, the intro's names), like the stadium's banners.
+## Each side's accent (the plate's edge, the intro's names), like the coliseum's banners.
 const SIDE_COLOURS: Array[Color] = [Color(0.92, 0.3, 0.26), Color(0.26, 0.52, 0.96)]
 const PLATE := Color(0.06, 0.08, 0.14, 0.8)
 const GOLD := Color(1.0, 0.86, 0.32)

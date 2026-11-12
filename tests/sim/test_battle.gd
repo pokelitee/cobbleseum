@@ -27,7 +27,7 @@ func _spec(seed: int, a := "squirt", b := "blaze", moves_a := ["jet", "kick"], m
 
 
 func _run(spec: Dictionary) -> Battle:
-	var created := Battle.create(spec, _data(), SimpleAI.pair(spec.seed))
+	var created := Battle.create(spec, _data(), StandInAI.pair(spec.seed))
 	assert_false(created.has("error"), str(created.get("error", "")))
 	var battle: Battle = created.battle
 	battle.run()
@@ -86,11 +86,11 @@ func test_battle_ends_within_the_time_cap() -> void:
 	assert_true(battle.events.any(func(e: Dictionary) -> bool: return e.type == "hit"))
 
 
-func test_mirror_match_has_no_side_bias() -> void:
+func test_mirror_matchup_has_no_side_bias() -> void:
 	var wins := [0, 0]
 	for seed in 20:
 		var spec := _spec(seed, "squirt", "squirt", ["jet", "kick"], ["jet", "kick"])
-		var battle: Battle = Battle.create(spec, _data(), SimpleAI.pair(seed)).battle
+		var battle: Battle = Battle.create(spec, _data(), StandInAI.pair(seed)).battle
 		# Two weak moves can't get through a full HP pool before the time cap; this test is
 		# about which side wins, so give both sides a smaller one.
 		for fighter in battle.fighters:
@@ -105,7 +105,7 @@ func test_mirror_match_has_no_side_bias() -> void:
 
 
 func test_bad_specs_are_reported() -> void:
-	var controllers := [SimpleAI.new(SimRandom.new(1)), SimpleAI.new(SimRandom.new(2))]
+	var controllers := [StandInAI.new(SimRandom.new(1)), StandInAI.new(SimRandom.new(2))]
 	assert_true(Battle.create(_spec(1, "nobody"), _data(), controllers).error.contains("unknown species"))
 	assert_true(Battle.create(_spec(1, "squirt", "blaze", ["nothing"]), _data(), controllers).error.contains("unknown move"))
 	assert_true(Battle.create({"seed": 1, "fighters": []}, _data(), controllers).error.contains("two fighters"))
@@ -114,16 +114,16 @@ func test_bad_specs_are_reported() -> void:
 func test_hitbox_radius_comes_from_the_roster() -> void:
 	var data := _data()
 	data.roster = {"squirt": {"radius": 0.7}, "blaze": {"radius": 1.1}}
-	var created := Battle.create(_spec(1), data, SimpleAI.pair(1))
+	var created := Battle.create(_spec(1), data, StandInAI.pair(1))
 	assert_eq(created.battle.fighters[0].radius, 0.7)
 	assert_eq(created.battle.fighters[1].radius, 1.1)
 	var spec := _spec(1)
 	spec.fighters[0].radius = 0.4
-	assert_eq(Battle.create(spec, data, SimpleAI.pair(1)).battle.fighters[0].radius, 0.4, "the spec overrides the roster")
+	assert_eq(Battle.create(spec, data, StandInAI.pair(1)).battle.fighters[0].radius, 0.4, "the spec overrides the roster")
 
 
 func test_species_outside_the_roster_are_rejected() -> void:
 	var data := _data()
 	data.roster = {"squirt": {"radius": 0.7}}
-	var created := Battle.create(_spec(1), data, SimpleAI.pair(1))
+	var created := Battle.create(_spec(1), data, StandInAI.pair(1))
 	assert_true(str(created.get("error", "")).contains("not in the roster"), str(created))

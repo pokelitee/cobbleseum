@@ -2,15 +2,15 @@ extends TestCase
 ## Ranking maths (concepts_brief.md §13) on synthetic results.
 
 
-## Records from a known strength order: in each game the stronger side wins `bias` of the
-## time (deterministically), the rest go the other way, and one game in `draw_every` draws.
-func _records(strengths: Dictionary, games_per_pair := 20, bias := 0.75, draw_every := 10) -> Array:
+## Records from a known strength order: in each battle the stronger side wins `bias` of the
+## time (deterministically), the rest go the other way, and one battle in `draw_every` draws.
+func _records(strengths: Dictionary, battles_per_matchup := 20, bias := 0.75, draw_every := 10) -> Array:
 	var ids := strengths.keys()
 	var records: Array = []
 	var random := SimRandom.new(3)
 	for i in ids.size():
 		for j in range(i + 1, ids.size()):
-			for g in games_per_pair:
+			for g in battles_per_matchup:
 				var a: String = ids[i] if g % 2 == 0 else ids[j]
 				var b: String = ids[j] if g % 2 == 0 else ids[i]
 				var result := "D"
@@ -38,7 +38,7 @@ func test_draws_count_half_and_even_results_rate_equal() -> void:
 	var ratings := Ranking.bradley_terry(records)
 	assert_eq(ratings.x.score, 2.0)
 	assert_almost_eq(ratings.x.rating, ratings.y.rating, 1e-6)
-	assert_eq(ratings.x.games, 4)
+	assert_eq(ratings.x.battles, 4)
 
 
 func test_an_unbeaten_species_still_gets_a_finite_rating() -> void:
@@ -53,10 +53,10 @@ func test_schedule_is_seeded_and_unique() -> void:
 	assert_eq(first, Ranking.schedule(pool, 3, 1), "same seed, same schedule")
 	assert_true(first != Ranking.schedule(pool, 3, 2))
 	var seen := {}
-	for pairing in first:
-		assert_true(pairing.a < pairing.b)
-		var key: String = pairing.a + pairing.b
-		assert_false(seen.has(key), "no pairing twice")
+	for matchup in first:
+		assert_true(matchup.a < matchup.b)
+		var key: String = matchup.a + matchup.b
+		assert_false(seen.has(key), "no matchup twice")
 		seen[key] = true
 	for id in pool:
 		assert_true(first.filter(func(p: Dictionary) -> bool: return p.a == id or p.b == id).size() >= 3, id)
