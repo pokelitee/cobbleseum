@@ -629,7 +629,7 @@ Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.g
 - **Animation never affects gameplay.** Hit timing comes from move data. Every species plays correctly whatever animations it has, and headless runs never load models.
 
 **Battle spec** (input):
-- rules version and data versions (manifest hashes);
+- rules version and data versions (manifest hashes): `"rules_version"`, and `"data_versions"` with the SHA-256 that `sources.json` pins for each source. Saved specs always have them; a hand-written spec may leave them out and then plays under any;
 - the two roster entries and their movesets;
 - the AI profile for each side (`"ai"` per fighter; default `ranked`);
 - the seed.
@@ -646,6 +646,7 @@ Battles with a player also record the intents on every tick.
 - The same spec produces the same battle on the same Godot build and platform.
 - Functions such as sin, cos and atan2 may give slightly different results on different operating systems or CPUs, so identical results across platforms aren't promised.
 - A replay whose checksum doesn't match fails loudly instead of rendering a different battle.
+- A spec that names another rules or data version stops with an error before it plays.
 
 **Run modes:**
 

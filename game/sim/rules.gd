@@ -1,7 +1,8 @@
 class_name Rules
 extends RefCounted
 ## Battle rules constants (concepts_brief.md §9). Starting values: batch simulation tunes them.
-## Bump RULES_VERSION whenever a change alters battle outcomes; it is part of every battle spec.
+## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
+## and won't replay under another.
 
 const RULES_VERSION := 15
 const TICK_RATE := 30
