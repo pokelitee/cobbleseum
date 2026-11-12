@@ -2,7 +2,8 @@ class_name Hud
 extends CanvasLayer
 ## The battle HUD (concepts_brief.md §12.1, §12.5): a name plate per fighter (its name, type
 ## pills, status badges, and a rounded HP bar with a lagging damage segment and its percentage),
-## move-name banners, and the intro, winner and credits cards, in the game's fonts (UiFonts).
+## move-name banners, and the intro, victory, winner and credits cards, in the game's fonts
+## (UiFonts).
 ## Layout follows the orientation: portrait has side B at the top and side A at the bottom;
 ## landscape has side A top-left and side B top-right. Everything animates per video frame.
 
@@ -59,6 +60,9 @@ var _intro: Control
 var _intro_age := 0
 var _winner: Label
 var _winner_band: ColorRect
+## The victory card, sliding in from the left, and frames since it appeared.
+var _victory: Control
+var _victory_age := -1
 var _credits: Control
 ## Play mode's move bar: per move {"panel", "shade"} (the shade covers it while cooling down).
 var _move_slots: Array[Dictionary] = []
@@ -66,6 +70,8 @@ var _hint: Label
 ## Flashed titles: {"label": Label, "age": frames}.
 var _titles: Array[Dictionary] = []
 const TITLE_FRAMES := 45
+## The victory card slides in over this many frames while the name plates fade out.
+const VICTORY_IN_FRAMES := 12
 var _frame := 0
 
 
@@ -222,6 +228,36 @@ func show_winner(text: String) -> void:
 	_winner_band.visible = true
 
 
+## The victory card across the lower part of the screen: "WINNER", the winner's name outlined
+## in its side's colour, and its HP left and the battle's length. The name plates fade out.
+func show_victory(side: int, name: String, hp_share: float, seconds: float) -> void:
+	var height := 260.0 * _scale
+	_victory = Control.new()
+	_victory.size = Vector2(_size.x, height)
+	# Below the winner, whom the victory shot frames in the middle, and above the credit line.
+	_victory.position = Vector2(-_size.x, _size.y * (0.74 if _portrait else 0.78) - height * 0.5)
+	_victory.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_victory)
+	_victory.add_child(_rect(Color(0.04, 0.05, 0.1, 0.78), Vector2.ZERO, _victory.size / _scale))
+	_victory.add_child(_rect(SIDE_COLOURS[side], Vector2.ZERO, Vector2(_size.x / _scale, 8)))
+	_victory.add_child(_rect(SIDE_COLOURS[side], Vector2(0, height / _scale - 8), Vector2(_size.x / _scale, 8)))
+	var lines := VBoxContainer.new()
+	lines.alignment = BoxContainer.ALIGNMENT_CENTER
+	lines.add_theme_constant_override("separation", roundi(-6 * _scale))
+	_victory.add_child(lines)
+	var heading := _label("WINNER", 48, GOLD, true)
+	var title := _label(name, 120, Color.WHITE, true)
+	title.add_theme_color_override("font_outline_color", SIDE_COLOURS[side].darkened(0.35))
+	title.add_theme_constant_override("outline_size", roundi(20 * _scale))
+	var total := roundi(seconds)
+	var stats := _label("%d%% HP left  ·  %d:%02d" % [ceili(hp_share * 100.0 - 1e-6), total / 60, total % 60], 36, Color(0.88, 0.9, 0.95))
+	for label: Label in [heading, title, stats]:
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lines.add_child(label)
+	lines.size = Vector2(_size.x, height)
+	_victory_age = 0
+
+
 ## A title flashed in the middle of the screen, e.g. "Overtime!".
 func flash_title(text: String, colour: Color) -> void:
 	var title := _label(text, 96, colour, true)
@@ -271,6 +307,8 @@ func show_hint(text: String) -> void:
 
 
 func show_credits() -> void:
+	if _victory != null:
+		_victory.visible = false
 	_credits.visible = true
 	_credits.modulate.a = 0.0
 
@@ -303,6 +341,12 @@ func next_frame() -> void:
 		_intro.visible = _intro_age < INTRO_FRAMES
 	if _winner.visible:
 		_winner.scale = _winner.scale.lerp(Vector2.ONE, 0.25)
+	if _victory_age >= 0:
+		_victory_age += 1
+		var t := ease(clampf(_victory_age / float(VICTORY_IN_FRAMES), 0.0, 1.0), 0.3)
+		_victory.position.x = lerpf(-_size.x, 0.0, t)
+		for panel in _panels:
+			panel.modulate.a = 1.0 - t
 	if _credits.visible:
 		_credits.modulate.a = minf(1.0, _credits.modulate.a + 0.1)
 	for title in _titles.duplicate():

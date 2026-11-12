@@ -759,6 +759,7 @@ The camera director picks from a set of shot types based on battle events:
 | Impact punch-in | On a heavy hit, critical hit or super-effective hit |
 | Low angle | On big hits from large fighters |
 | Knockout orbit | Around the faint, in slow motion |
+| Victory | After the knockout (2.5 s at normal speed): in front of the winner, a little to one side, slowly pushing in. The winner celebrates, the crowd cheers again, and the HUD's victory card slides in below: "WINNER", the name outlined in its side's colour, its HP left and the battle's length, while the name plates fade. Play mode keeps the plain "wins!" line, since a live battle has no planned ending. |
 
 - **Cuts:** timed to events, with a minimum shot length so the edit never jitters.
 - **Repeatability:** shot choices draw from the cosmetic random stream, so re-rendering a battle produces the same edit.
@@ -810,7 +811,7 @@ The camera director picks from a set of shot types based on battle events:
 
 1. Choose a matchup and seed, which gives a battle spec.
 2. Run it headless to get the battle record.
-3. Choose the clip window from the event log: at most 60 seconds, usually ending shortly after the knockout. `Highlights` scores events (hits by damage share, plus crits, super-effective hits and comebacks; misses a little; the faint or time-up a lot) and keeps the best-scoring window of the requested length. A window ends either a short linger after a hit or at the end of the plan, and one that reaches the faint always plays the whole knockout.
+3. Choose the clip window from the event log: at most 60 seconds, usually ending shortly after the knockout. `Highlights` scores events (hits by damage share, plus crits, super-effective hits and comebacks; misses a little; the faint or time-up a lot) and keeps the best-scoring window of the requested length. A window ends either a short linger after a hit or at the end of the plan, and one that reaches the faint always plays the whole knockout and the victory after it. The victory comes on top of the requested length, so it never pushes the knockout out of the window.
 4. For each requested format, start a second Godot process under Movie Maker with that format's `override.cfg`. The process:
    - skips ahead to the window's start without drawing;
    - renders the window;
@@ -1013,7 +1014,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 **M8: visual polish.**
 
 - Rendering: environment lighting, soft shadows, ambient occlusion, bloom, and shading that matches Cobblemon's look.
-- A designed HUD (styled HP bars, type icons, portraits, status badges), intro title cards, and a victory screen with the winner's pose. Done: name plates with type and status pills, rounded HP bars with percentages, and the intro and winner cards (§12.5). Types are text pills rather than icons; portraits and the winner's pose are still to do.
+- A designed HUD (styled HP bars, type icons, portraits, status badges), intro title cards, and a victory screen with the winner's pose. Done: name plates with type and status pills, rounded HP bars with percentages, the intro card (§12.5), and the victory shot and card (§12.3). Types are text pills rather than icons; portraits are still to do.
 - Openly licensed display and body fonts, never the official Pokémon fonts or logo styling. Done: Lilita One and Nunito.
 - Music and crowd sound; for clips, title cards, captions and a slow-motion replay of the knockout.
 

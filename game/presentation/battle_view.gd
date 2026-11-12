@@ -91,6 +91,7 @@ var _player_side := -1
 var _player: PlayerController
 var _player_camera: PlayerCamera
 var _live_frames := 0
+var _victory_shown := false
 var _end_frames := 0
 
 
@@ -360,6 +361,8 @@ func _begin_tick() -> void:
 	for view in _views:
 		view.set_time_scale(0.0 if hitstop > 0 else 1.0 / slow)
 	_crowd.set_time_scale(0.0 if hitstop > 0 else 1.0 / slow)
+	if not plan.victory.is_empty() and shown >= int(plan.victory.start) and not _victory_shown:
+		_show_victory(int(plan.victory.side))
 	var segment := Director.shot_for(plan.shots, shown)
 	if segment != _segment:
 		_segment = segment
@@ -480,13 +483,23 @@ func _play_events() -> void:
 				_views[1 - int(event.side)].celebrate()
 				_sound.faint(event.side)
 				_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
-				_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
+				if _live:
+					_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
 			"overtime":
 				_hud.flash_title("Overtime!", Color(1.0, 0.55, 0.3))
 			"time_up":
 				_hud.show_winner("Time up: draw")
 				for view in _views:
 					view.play_role("sad")
+
+
+## The planned ending's victory: the HUD's card with the winner's name, HP left and the
+## battle's length, and the crowd cheering again.
+func _show_victory(side: int) -> void:
+	_victory_shown = true
+	var winner := battle.fighters[side]
+	_hud.show_victory(side, winner.name, float(winner.hp) / winner.max_hp, battle.tick / float(Rules.TICK_RATE))
+	_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
 
 
 ## "Attack rose!", "Defense fell sharply!", or "Stats rose!" for several at once.

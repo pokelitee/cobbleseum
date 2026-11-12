@@ -59,6 +59,21 @@ func test_plain_text_uses_the_body_font() -> void:
 	label.free()
 
 
+func test_the_victory_card_slides_in_as_the_plates_fade() -> void:
+	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
+		var hud := _hud(size)
+		hud.show_victory(1, "Right", 0.623, 83.4)
+		var texts := hud._victory.find_children("*", "Label", true, false).map(func(l: Label) -> String: return l.text)
+		assert_eq(texts, ["WINNER", "Right", "63% HP left  ·  1:23"])
+		for i in Hud.VICTORY_IN_FRAMES:
+			hud.next_frame()
+		assert_eq(hud._victory.position.x, 0.0, "in place")
+		assert_true(Rect2(Vector2.ZERO, size).encloses(Rect2(hud._victory.position, hud._victory.size)), "on screen at %s" % size)
+		for panel in hud._panels:
+			assert_eq(panel.modulate.a, 0.0, "plates faded out")
+		hud.free()
+
+
 func test_banners_stay_on_screen() -> void:
 	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
 		var hud := _hud(size)

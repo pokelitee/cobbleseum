@@ -5,7 +5,8 @@ extends RefCounted
 ## crits, super-effective hits and comebacks (hits by a fighter low on HP) count most, and the
 ## knockout or time-up counts so much that clips usually end on it. A window ends either
 ## where the plan ends or a short linger after a hit, so it always closes on a payoff; a
-## window that reaches the finish always plays the whole knockout to the end.
+## window that reaches the finish always plays the whole knockout to the end, and then the
+## victory, which comes on top of the requested length rather than out of it.
 
 const HIT_SCORE := 1.0
 ## Added per share of the defender's max HP the hit took.
@@ -31,7 +32,8 @@ const END_LINGER_TICKS := 20
 ## shorter: {"start": tick, "end": tick (exclusive), "score": float}. Ties go to the later
 ## window, which is closer to the finish.
 static func choose(plan_data: Dictionary, events: Array, max_hp: Array, frames: int) -> Dictionary:
-	var length: int = plan_data.slow.size()
+	var victory: Dictionary = plan_data.get("victory", {})
+	var length: int = int(victory.start) if not victory.is_empty() else plan_data.slow.size()
 	var frames_at := PackedInt32Array()
 	frames_at.resize(length)
 	for t in length:
@@ -58,6 +60,8 @@ static func choose(plan_data: Dictionary, events: Array, max_hp: Array, frames: 
 				score += scores[i]
 		if best.is_empty() or score > best.score or (is_equal_approx(score, best.score) and end > best.end):
 			best = {"start": start, "end": end, "score": score}
+	if best.end == length:
+		best.end = plan_data.slow.size()
 	return best
 
 

@@ -74,3 +74,13 @@ func test_windows_never_cut_the_knockout_short() -> void:
 		{"tick": 800, "type": "faint", "side": 1}]
 	var window := Highlights.choose(_plan(830), events, MAX_HP, 330)
 	assert_eq(window.end, 830, "a window holding the faint plays to the plan's end")
+
+
+func test_the_victory_comes_on_top_of_the_clip() -> void:
+	var events := [_hit(500, 0, 300, 100), _hit(520, 0, 50, 50), _hit(800, 0, 50, 0),
+		{"tick": 800, "type": "faint", "side": 1}]
+	var plan := _plan(905)
+	plan.victory = {"start": 830, "side": 0}
+	var window := Highlights.choose(plan, events, MAX_HP, 330)
+	assert_eq(window.end, 905, "the knockout and then the whole victory")
+	assert_true(_frames(plan, window) >= 330 + 75, "the victory doesn't eat into the action")
