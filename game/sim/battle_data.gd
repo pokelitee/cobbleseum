@@ -6,6 +6,9 @@ extends RefCounted
 
 const SHOWDOWN_DIR := "res://cache/build/showdown/0.11.11"
 const ROSTER_FILE := "res://cache/build/cobblemon/1.8.4/roster.json"
+## The asset manifest (§6), whose pinned SHA-256 per source names the data a battle runs on.
+const MANIFEST := "res://sources.json"
+const SOURCES: Array[String] = ["showdown", "cobblemon"]
 
 var species: Dictionary
 var moves: Dictionary
@@ -13,6 +16,9 @@ var type_chart: Dictionary
 ## Showdown ID -> {"learnset": {move id: [sources]}}, for the moveset generator.
 var learnsets: Dictionary
 var roster: Dictionary = {}
+## The data versions (§10): source -> the SHA-256 the manifest pins for it. Empty for data
+## built by hand.
+var versions: Dictionary = {}
 ## Converted moves and generated movesets, cached: both depend only on the data.
 var _converted := {}
 var _movesets := {}
@@ -51,7 +57,8 @@ static func to_id(name: String) -> String:
 	return id
 
 
-## Loads the Showdown data and the roster. Returns {"data": BattleData} or {"error": String}.
+## Loads the Showdown data and the roster, with their versions. Returns {"data": BattleData}
+## or {"error": String}.
 static func load_all() -> Dictionary:
 	var loaded := load_showdown()
 	if loaded.has("error"):
@@ -61,7 +68,25 @@ static func load_all() -> Dictionary:
 	if not (parsed is Dictionary and parsed.get("species") is Dictionary):
 		return {"error": "%s is missing or invalid; run the asset pipeline first (tools/assets.gd)" % path}
 	loaded.data.roster = parsed.species
+	var pinned := manifest_versions()
+	if pinned.has("error"):
+		return pinned
+	loaded.data.versions = pinned.versions
 	return loaded
+
+
+## The data versions the manifest pins: {"versions": {source: SHA-256}} or {"error": String}.
+static func manifest_versions(path := MANIFEST) -> Dictionary:
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path)) if FileAccess.file_exists(path) else null
+	var sources: Variant = parsed.get("sources") if parsed is Dictionary else null
+	var versions := {}
+	for id in SOURCES:
+		var source: Variant = sources.get(id) if sources is Dictionary else null
+		var sha256: Variant = source.get("sha256") if source is Dictionary else null
+		if not sha256 is String:
+			return {"error": "%s is missing or has no sha256 for %s" % [path, id]}
+		versions[id] = sha256
+	return {"versions": versions}
 
 
 ## Loads the exported Showdown data. Returns {"data": BattleData} or {"error": String}.

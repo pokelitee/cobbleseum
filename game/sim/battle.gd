@@ -39,15 +39,20 @@ var _state := PackedFloat64Array()
 var _projectile_count := 0
 
 
-## `spec` = {"seed": int, "fighters": [{"species", "moves"?: [ids], "radius"?}, x2]}. Without
+## `spec` = {"seed": int, "fighters": [{"species", "moves"?: [ids], "radius"?}, x2],
+## "rules_version"?: int, "data_versions"?: {source: SHA-256}}. Without
 ## "moves" a fighter gets its species' standard moveset (Movesets). The
 ## hitbox radius comes from the spec, else the roster, else Fighter.DEFAULT_RADIUS; with a
-## roster loaded, species outside it are rejected.
+## roster loaded, species outside it are rejected. A spec that names a rules or data version
+## other than these is rejected, since it would play as a different battle.
 ## Controllers are objects with decide(battle, side) -> {"move": Vector2, "use": int,
 ## "dodge": Vector2 (zero for none)}; each
 ## owns its random stream (see random_stream()).
 ## Returns {"battle": Battle} or {"error": String}.
 static func create(battle_spec: Dictionary, data: BattleData, controllers: Array) -> Dictionary:
+	var version_problem := _version_problem(battle_spec, data)
+	if not version_problem.is_empty():
+		return {"error": version_problem}
 	var entries: Array = battle_spec.get("fighters", [])
 	if entries.size() != 2 or controllers.size() != 2:
 		return {"error": "a battle needs exactly two fighters and two controllers"}
@@ -92,6 +97,35 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		battle.fighters.append(fighter)
 	battle._hash.start(HashingContext.HASH_SHA256)
 	return {"battle": battle}
+
+
+static func _version_problem(battle_spec: Dictionary, data: BattleData) -> String:
+	if battle_spec.has("rules_version") and int(battle_spec.rules_version) != Rules.RULES_VERSION:
+		return ("the battle spec is for rules version %d, not the current %d, so it would replay as a different battle;" +
+			" replay it from a commit with rules version %d") % [int(battle_spec.rules_version), Rules.RULES_VERSION, int(battle_spec.rules_version)]
+	var named: Variant = battle_spec.get("data_versions", {})
+	if not named is Dictionary:
+		return "the battle spec's data_versions must be an object of source: SHA-256"
+	for source: String in named:
+		var loaded: String = data.versions.get(source, "")
+		if str(named[source]) != loaded:
+			return ("the battle spec is for %s data %s, not the loaded %s, so it would replay as a different battle;" +
+				" replay it from a commit whose sources.json pins that data") % [source, str(named[source]).left(12),
+				loaded.left(12) if not loaded.is_empty() else "(unversioned)"]
+	return ""
+
+
+## The battle spec to save after a battle with record_intents: the rules and data versions it
+## ran under, every tick's intents per side in place of the AI, and the checksum. It replays
+## exactly, and create() rejects it under other versions.
+func saved_spec() -> Dictionary:
+	var saved := {"rules_version": Rules.RULES_VERSION, "data_versions": _data.versions.duplicate()}
+	saved.merge(spec.duplicate(true))
+	for side in 2:
+		saved.fighters[side].erase("ai")
+		saved.fighters[side].intents = intent_log[side]
+	saved.checksum = checksum()
+	return saved
 
 
 ## An intent in the compact form intent_log stores.

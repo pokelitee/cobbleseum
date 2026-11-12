@@ -13,7 +13,8 @@ extends Node3D
 ## "ai": "player"): the battle runs live, one tick per 1/30 s, since a player's choices can't
 ## be planned ahead. A camera follows the player's fighter, heavy hits freeze play briefly,
 ## a move bar shows keys and cooldowns, and the battle spec is saved with every tick's intents
-## in recordings/specs/, which tools/record.gd can render. R starts a rematch, Esc quits.
+## and the rules and data versions in recordings/specs/, which tools/record.gd can render.
+## R starts a rematch, Esc quits.
 ##
 ## The battle is run headless first so the Director can plan the whole presentation: hit-stop,
 ## slow motion and camera shots. Each video frame then either holds the current tick or
@@ -327,14 +328,10 @@ func _next_live_frame() -> void:
 	_update_sight()
 
 
-## Saves the battle's spec with every tick's intents per side, so it replays exactly (and
-## tools/record.gd can render it).
+## Saves the battle's spec (Battle.saved_spec) so it replays exactly (and tools/record.gd can
+## render it).
 func _save_spec() -> void:
-	var saved: Dictionary = battle.spec.duplicate(true)
-	for side in 2:
-		saved.fighters[side].erase("ai")
-		saved.fighters[side].intents = battle.intent_log[side]
-	saved.checksum = battle.checksum()
+	var saved := battle.saved_spec()
 	var dir := ProjectSettings.globalize_path(SPECS_DIR)
 	DirAccess.make_dir_recursive_absolute(dir)
 	if not FileAccess.file_exists(dir.get_base_dir().path_join(".gdignore")):

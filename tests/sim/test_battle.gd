@@ -111,6 +111,40 @@ func test_bad_specs_are_reported() -> void:
 	assert_true(Battle.create({"seed": 1, "fighters": []}, _data(), controllers).error.contains("two fighters"))
 
 
+func test_a_spec_plays_only_under_the_versions_it_names() -> void:
+	var data := _data()
+	data.versions = {"showdown": "a".repeat(64), "cobblemon": "b".repeat(64)}
+	var spec := _spec(1)
+	assert_false(Battle.create(spec, data, StandInAI.pair(1)).has("error"), "a spec naming no versions plays under any")
+	spec.rules_version = Rules.RULES_VERSION
+	spec.data_versions = {"showdown": "a".repeat(64)}
+	var created := Battle.create(spec, data, StandInAI.pair(1))
+	assert_false(created.has("error"), str(created.get("error", "")))
+	spec.rules_version = Rules.RULES_VERSION + 1
+	var error: String = Battle.create(spec, data, StandInAI.pair(1)).get("error", "")
+	assert_true(error.contains("rules version %d" % (Rules.RULES_VERSION + 1)), error)
+	spec.rules_version = Rules.RULES_VERSION
+	spec.data_versions.cobblemon = "c".repeat(64)
+	error = Battle.create(spec, data, StandInAI.pair(1)).get("error", "")
+	assert_true(error.contains("cobblemon data %s, not the loaded %s" % ["c".repeat(12), "b".repeat(12)]), error)
+	error = Battle.create(spec, _data(), StandInAI.pair(1)).get("error", "")
+	assert_true(error.contains("(unversioned)"), "data built by hand has no versions to match: %s" % error)
+	spec.data_versions = "0.11.11"
+	assert_true(Battle.create(spec, data, StandInAI.pair(1)).get("error", "").contains("data_versions must be"))
+
+
+func test_data_versions_are_the_manifests_pins() -> void:
+	var pinned := BattleData.manifest_versions()
+	assert_false(pinned.has("error"), str(pinned.get("error", "")))
+	var manifest := AssetPipeline.load_manifest(BattleData.MANIFEST)
+	for id in BattleData.SOURCES:
+		assert_eq(pinned.versions.get(id), manifest.sources[id].sha256, id)
+	# The pins name the data a battle runs on only if it's loaded from their versions' builds.
+	assert_true(BattleData.SHOWDOWN_DIR.ends_with("/" + manifest.sources.showdown.version), BattleData.SHOWDOWN_DIR)
+	assert_true(BattleData.ROSTER_FILE.contains("/%s/" % manifest.sources.cobblemon.version), BattleData.ROSTER_FILE)
+	assert_true(BattleData.manifest_versions("res://missing.json").has("error"))
+
+
 func test_hitbox_radius_comes_from_the_roster() -> void:
 	var data := _data()
 	data.roster = {"squirt": {"radius": 0.7}, "blaze": {"radius": 1.1}}

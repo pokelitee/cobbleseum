@@ -28,7 +28,7 @@ Print species' standard movesets, or generate them all into `cache/build/moveset
 godot --headless --path . --script res://tools/movesets.gd -- garchomp breloom
 ```
 
-Run a battle headless (prints the result, length and a checksum per seed). In a battle spec, a fighter without `moves` uses its species' standard moveset, and `"ai"` picks its controller (`easy`, `normal`, `hard`, `ranked` (the default) or `stand_in`):
+Run a battle headless (prints the result, length and a checksum per seed). In a battle spec, a fighter without `moves` uses its species' standard moveset, and `"ai"` picks its controller (`easy`, `normal`, `hard`, `ranked` (the default) or `stand_in`). A spec with `rules_version` or `data_versions` runs only under those versions and otherwise stops with an error:
 
 ```bash
 godot --headless --path . --script res://tools/battle.gd -- game/data/battles/showcase.json --seeds=10
@@ -68,7 +68,7 @@ Instead of a spec file, flags can describe an AI-vs-AI battle, here and in the w
 godot --headless --path . --script res://tools/record.gd -- --watch=garchomp --vs=hydreigon --ai=hard --vs-ai=easy --seed=7
 ```
 
-Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves; gamepad: left stick, A to dodge, X Y B RB for moves). R starts a rematch and Esc quits. Each battle's spec, with every tick's intents, is saved to `recordings/specs/`, and `tools/record.gd` can render one like any spec:
+Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves; gamepad: left stick, A to dodge, X Y B RB for moves). R starts a rematch and Esc quits. Each battle's spec, with every tick's intents and the rules and data versions it ran under, is saved to `recordings/specs/`, and `tools/record.gd` can render one like any spec (after a rules or data change it stops with an error instead of rendering a different battle):
 
 ```bash
 godot --path . -- --play=cinderace --vs=blastoise --ai=normal
