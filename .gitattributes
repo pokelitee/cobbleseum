@@ -8,3 +8,5 @@
 *.glb binary
 *.scn binary
 *.res binary
+*.ttf binary
+*.otf binary

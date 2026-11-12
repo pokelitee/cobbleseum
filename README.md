@@ -135,4 +135,4 @@ The design is described in the [concept brief](concepts_brief.md). In short:
 
 The code and original data in this repository are licensed under the [MIT License](LICENSE).
 
-Assets fetched by the pipeline keep their own licences: Pokémon Showdown is MIT, and Cobblemon's models and animations are Creative Commons Attribution-NonCommercial. Pokémon names and designs belong to Nintendo, Creatures Inc. and GAME FREAK. Cobbleseum is an unaffiliated fan project.
+The fonts in `game/presentation/fonts/` (Lilita One and Nunito) are under the SIL Open Font License 1.1; their licence files sit beside them. Assets fetched by the pipeline keep their own licences: Pokémon Showdown is MIT, and Cobblemon's models and animations are Creative Commons Attribution-NonCommercial. Pokémon names and designs belong to Nintendo, Creatures Inc. and GAME FREAK. Cobbleseum is an unaffiliated fan project.

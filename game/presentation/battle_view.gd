@@ -95,6 +95,7 @@ var _end_frames := 0
 
 
 func _ready() -> void:
+	UiFonts.use_by_default()
 	var options := _parse_args(OS.get_cmdline_user_args())
 	var spec: Variant = options.flag_spec if not options.flag_spec.is_empty() \
 		else JSON.parse_string(FileAccess.get_file_as_string(options.spec))
@@ -144,7 +145,7 @@ func _ready() -> void:
 	_add_crowd(loaded.data)
 	_hud = Hud.new()
 	add_child(_hud)
-	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size)
+	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types])
 	_move_fx = MoveFX.new()
 	add_child(_move_fx)
 	for fighter in battle.fighters:

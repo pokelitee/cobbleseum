@@ -786,8 +786,11 @@ The camera director picks from a set of shot types based on battle events:
   - Cobblemon cries, impact sounds and whooshes, synced to events.
   - No music unless it is original or properly licensed.
 - **HUD:**
-  - Animated HP bars that drain with a lagging "damage taken" segment and shake on big hits.
-  - Names and move-name callouts.
+  - A name plate per fighter: dark and rounded, with a stripe in the side's colour (red for side A, blue for side B), the name, a pill per type in its type colour, and status badges as pills after them.
+  - A rounded HP bar under the name with a light band along its top, its percentage (rounded up, so a fighter with HP left never shows 0%), and a lagging "damage taken" segment. Bars drain and shake on big hits; side B's mirrors in landscape so both drain toward the middle.
+  - Move-name banners in the move's type colour, and callouts over the fighters.
+  - **Fonts** (`UiFonts`, `game/presentation/fonts/`, SIL Open Font License with the licences beside them): Lilita One, a chunky display face, for names, titles, banners, callouts and the stadium's screens; Nunito ExtraBold for everything else. The body font is set at startup, not as the project's custom font, because Godot loads that before a fresh checkout has imported the font files.
+  - The intro card puts the two names, outlined in their sides' colours, either side of a gold "VS" (stacked in portrait). The winner's line sits on a dark band.
   - Intro and outro cards. Every clip ends with the credits card (§14).
 
 ### 12.6 Recording flow
@@ -1010,8 +1013,8 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 **M8: visual polish.**
 
 - Rendering: environment lighting, soft shadows, ambient occlusion, bloom, and shading that matches Cobblemon's look.
-- A designed HUD (styled HP bars, type icons, portraits, status badges), intro title cards, and a victory screen with the winner's pose.
-- Openly licensed display and body fonts, never the official Pokémon fonts or logo styling.
+- A designed HUD (styled HP bars, type icons, portraits, status badges), intro title cards, and a victory screen with the winner's pose. Done: name plates with type and status pills, rounded HP bars with percentages, and the intro and winner cards (§12.5). Types are text pills rather than icons; portraits and the winner's pose are still to do.
+- Openly licensed display and body fonts, never the official Pokémon fonts or logo styling. Done: Lilita One and Nunito.
 - Music and crowd sound; for clips, title cards, captions and a slow-motion replay of the knockout.
 
 **Later:**

@@ -1,9 +1,10 @@
 class_name Hud
 extends CanvasLayer
-## The battle HUD (concepts_brief.md §12.1, §12.5): names, HP bars with a lagging damage
-## segment, move-name banners, and the intro, winner and credits cards. Layout follows the
-## orientation: portrait has side B at the top and side A at the bottom; landscape has
-## side A top-left and side B top-right. Everything animates per video frame.
+## The battle HUD (concepts_brief.md §12.1, §12.5): a name plate per fighter (its name, type
+## pills, status badges, and a rounded HP bar with a lagging damage segment and its percentage),
+## move-name banners, and the intro, winner and credits cards, in the game's fonts (UiFonts).
+## Layout follows the orientation: portrait has side B at the top and side A at the bottom;
+## landscape has side A top-left and side B top-right. Everything animates per video frame.
 
 ## Frames before the lagging segment starts draining, and its drain per frame (share of bar).
 const LAG_DELAY := 12
@@ -17,6 +18,17 @@ const REFERENCE_SIZE := 1080.0
 const HEALTHY := Color(0.3, 0.9, 0.4)
 const WARNING := Color(1.0, 0.8, 0.2)
 const DANGER := Color(1.0, 0.3, 0.25)
+## Each side's accent (the plate's edge, the intro's names), like the stadium's banners.
+const SIDE_COLOURS: Array[Color] = [Color(0.92, 0.3, 0.26), Color(0.26, 0.52, 0.96)]
+const PLATE := Color(0.06, 0.08, 0.14, 0.8)
+const GOLD := Color(1.0, 0.86, 0.32)
+## The plate reaches this far around the name and bar, and the bar sits this far down.
+const PLATE_PAD := Vector2(18, 12)
+const BAR_TOP := 80.0
+const BAR_HEIGHT := 36.0
+## Banners sit this far below the panel's origin (above it for portrait's bottom plate).
+const BANNER_BELOW := 150.0
+const BANNER_ABOVE := -86.0
 ## Uses a non-breaking hyphen so the licence name never wraps mid-word.
 ## Badge text and colour per status condition.
 const STATUS_BADGES := {
@@ -33,6 +45,7 @@ var _panels: Array[Control] = []
 var _panel_homes: Array[Vector2] = []
 var _bars: Array[ColorRect] = []
 var _lags: Array[ColorRect] = []
+var _percents: Array[Label] = []
 ## HP fractions as last set. Kept here because a Control's scale can't reach exactly 0.
 var _hp_values: Array[float] = [1.0, 1.0]
 var _lag_values: Array[float] = [1.0, 1.0]
@@ -45,6 +58,7 @@ var _badges: Array[Dictionary] = [{}, {}]
 var _intro: Control
 var _intro_age := 0
 var _winner: Label
+var _winner_band: ColorRect
 var _credits: Control
 ## Play mode's move bar: per move {"panel", "shade"} (the shade covers it while cooling down).
 var _move_slots: Array[Dictionary] = []
@@ -55,7 +69,8 @@ const TITLE_FRAMES := 45
 var _frame := 0
 
 
-func setup(names: Array, viewport_size: Vector2) -> void:
+## Builds the HUD for fighters `names` (side A first), with each one's `types` for its pills.
+func setup(names: Array, viewport_size: Vector2, types: Array = [[], []]) -> void:
 	_size = viewport_size
 	_portrait = VideoFormat.is_portrait(viewport_size)
 	_scale = minf(viewport_size.x, viewport_size.y) / REFERENCE_SIZE
@@ -70,35 +85,68 @@ func setup(names: Array, viewport_size: Vector2) -> void:
 			home = Vector2(margin if side == 0 else viewport_size.x - margin - bar_width, 40 * _scale)
 		panel.position = home
 		add_child(panel)
-		var name_label := _label(names[side], 56, Color.WHITE)
-		panel.add_child(name_label)
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", roundi(10 * _scale))
-		row.position = Vector2(name_label.get_minimum_size().x + 16 * _scale, 12 * _scale)
-		panel.add_child(row)
-		_badge_rows.append(row)
-		var back := _rect(Color(0, 0, 0, 0.6), Vector2(0, 80), Vector2(bar_width / _scale, 36))
-		panel.add_child(back)
-		# Mirror the right-hand landscape bar so it drains toward the centre of the screen.
+		# Mirror the right-hand landscape plate so its bar drains toward the centre of the screen.
 		var mirrored := not _portrait and side == 1
-		var lag := _rect(Color(1, 0.95, 0.85), Vector2(4, 84), Vector2(bar_width / _scale - 8, 28))
-		var bar := _rect(HEALTHY, Vector2(4, 84), Vector2(bar_width / _scale - 8, 28))
+		var plate := Panel.new()
+		plate.position = -PLATE_PAD * _scale
+		plate.size = (Vector2(bar_width / _scale, BAR_TOP + BAR_HEIGHT) + PLATE_PAD * 2.0) * _scale
+		plate.add_theme_stylebox_override("panel", _plate_style(side, mirrored))
+		plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(plate)
+		var name_label := _label(names[side], 56, Color.WHITE, true)
+		panel.add_child(name_label)
+		# Type pills, then status badges as they come and go.
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", roundi(8 * _scale))
+		row.position = Vector2(name_label.get_minimum_size().x + 16 * _scale, 14 * _scale)
+		panel.add_child(row)
+		var own_types: Array = types[side] if side < types.size() else []
+		for type: String in own_types:
+			row.add_child(_pill(type.to_upper(), TypeColors.of(type)))
+		_badge_rows.append(row)
+		var track := Panel.new()
+		track.position = Vector2(0, BAR_TOP) * _scale
+		track.size = Vector2(bar_width / _scale, BAR_HEIGHT) * _scale
+		var track_style := StyleBoxFlat.new()
+		track_style.bg_color = Color(0, 0, 0, 0.6)
+		track_style.set_corner_radius_all(roundi(BAR_HEIGHT * 0.5 * _scale))
+		track.add_theme_stylebox_override("panel", track_style)
+		# The bar's ends take the track's rounded shape.
+		track.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
+		track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(track)
+		var lag := _rect(Color(1, 0.95, 0.85), Vector2.ZERO, Vector2(bar_width / _scale, BAR_HEIGHT))
+		var bar := _rect(HEALTHY, Vector2.ZERO, Vector2(bar_width / _scale, BAR_HEIGHT))
+		# A light band along the top of the bar, so it reads as rounded rather than flat.
+		bar.add_child(_rect(Color(1, 1, 1, 0.22), Vector2(0, 4), Vector2(bar_width / _scale, BAR_HEIGHT * 0.3)))
 		for rect in [lag, bar]:
 			if mirrored:
 				rect.pivot_offset = Vector2(rect.size.x, 0)
-			panel.add_child(rect)
+			track.add_child(rect)
+		var percent := _label("100%", 26, Color.WHITE)
+		percent.add_theme_constant_override("outline_size", roundi(8 * _scale))
+		percent.size = Vector2(track.size.x - 24 * _scale, track.size.y)
+		percent.position = Vector2(12 * _scale, 0)
+		percent.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		percent.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if mirrored else HORIZONTAL_ALIGNMENT_RIGHT
+		track.add_child(percent)
 		_panels.append(panel)
 		_panel_homes.append(home)
 		_bars.append(bar)
 		_lags.append(lag)
+		_percents.append(percent)
 	var credit := _label("Models, animations and sounds: Cobblemon (CC BY-NC 3.0)", 28, Color.WHITE)
 	credit.position = Vector2(margin, viewport_size.y - 60 * _scale)
 	add_child(credit)
-	var matchup := ("%s
-VS
-%s" if _portrait else "%s  VS  %s") % [names[0], names[1]]
-	_intro = _card(matchup, 96, 0.0)
-	_winner = _label("", 110, Color(1.0, 0.9, 0.35))
+	_intro = _matchup(names)
+	_winner_band = ColorRect.new()
+	_winner_band.color = Color(0.04, 0.05, 0.1, 0.72)
+	_winner_band.size = Vector2(viewport_size.x, 190 * _scale)
+	_winner_band.position = Vector2(0, viewport_size.y * 0.42 - _winner_band.size.y * 0.5)
+	_winner_band.visible = false
+	add_child(_winner_band)
+	_winner = _label("", 110, GOLD, true)
+	_winner.add_theme_constant_override("outline_size", roundi(16 * _scale))
 	_winner.visible = false
 	add_child(_winner)
 	_credits = _card(CREDITS_TEXT, 44, 0.85)
@@ -116,6 +164,7 @@ func set_hp(side: int, fraction: float, immediate := false) -> void:
 		_lag_waits[side] = LAG_DELAY
 	_hp_values[side] = fraction
 	bar.scale.x = fraction
+	_percents[side].text = "%d%%" % ceili(fraction * 100.0 - 1e-6)
 	bar.color = HEALTHY if fraction > 0.5 else (WARNING if fraction > 0.2 else DANGER)
 
 
@@ -126,14 +175,7 @@ func set_status(side: int, status: String, active: bool) -> void:
 		_badges[side].erase(status)
 	if not active or not STATUS_BADGES.has(status):
 		return
-	var badge := Label.new()
-	badge.text = " %s " % STATUS_BADGES[status][0]
-	badge.add_theme_font_size_override("font_size", roundi(34 * _scale))
-	badge.add_theme_color_override("font_color", Color.WHITE)
-	var style := StyleBoxFlat.new()
-	style.bg_color = STATUS_BADGES[status][1]
-	style.set_corner_radius_all(roundi(8 * _scale))
-	badge.add_theme_stylebox_override("normal", style)
+	var badge := _pill(STATUS_BADGES[status][0], STATUS_BADGES[status][1])
 	_badge_rows[side].add_child(badge)
 	_badges[side][status] = badge
 
@@ -146,21 +188,24 @@ func shake(side: int) -> void:
 func banner(side: int, move_name: String, type: String) -> void:
 	var tag := Label.new()
 	tag.text = " %s " % move_name
+	tag.add_theme_font_override("font", UiFonts.DISPLAY)
 	tag.add_theme_font_size_override("font_size", roundi(40 * _scale))
 	tag.add_theme_color_override("font_color", Color.WHITE)
 	tag.add_theme_color_override("font_outline_color", Color.BLACK)
 	tag.add_theme_constant_override("outline_size", roundi(8 * _scale))
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(TypeColors.of(type), 0.85)
-	style.set_corner_radius_all(roundi(10 * _scale))
+	style.set_corner_radius_all(roundi(14 * _scale))
+	style.content_margin_left = 10 * _scale
+	style.content_margin_right = 10 * _scale
 	tag.add_theme_stylebox_override("normal", style)
 	_panels[side].add_child(tag)
 	tag.size = tag.get_minimum_size()  # measured once the theme applies, inside the tree
 	var right_aligned := not _portrait and side == 1
-	var bar_width := _bars[side].size.x + 8 * _scale
-	tag.position = Vector2(bar_width - tag.size.x if right_aligned else 0.0, 126 * _scale)
+	var bar_width := _bars[side].size.x
+	tag.position = Vector2(bar_width - tag.size.x if right_aligned else 0.0, BANNER_BELOW * _scale)
 	if _portrait and side == 0:
-		tag.position.y = -70 * _scale  # above the bottom bar, not off the screen
+		tag.position.y = BANNER_ABOVE * _scale  # above the bottom plate, not off the screen
 	for old in _banners.filter(func(b: Dictionary) -> bool: return b.side == side):
 		old.label.queue_free()
 		_banners.erase(old)
@@ -174,11 +219,12 @@ func show_winner(text: String) -> void:
 	_winner.pivot_offset = _winner.size * 0.5
 	_winner.visible = true
 	_winner.scale = Vector2.ONE * 1.6
+	_winner_band.visible = true
 
 
 ## A title flashed in the middle of the screen, e.g. "Overtime!".
 func flash_title(text: String, colour: Color) -> void:
-	var title := _label(text, 96, colour)
+	var title := _label(text, 96, colour, true)
 	title.size = title.get_minimum_size()
 	title.position = (_size - title.size) * Vector2(0.5, 0.35)
 	add_child(title)
@@ -285,9 +331,68 @@ func _card(text: String, font_size: int, dim: float) -> Control:
 	return card
 
 
-func _label(text: String, font_size: int, colour: Color) -> Label:
+## The intro card: the two names in their sides' colours either side of a gold "VS", across
+## the middle (stacked in portrait).
+func _matchup(names: Array) -> Control:
+	var card := Control.new()
+	card.size = _size
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(card)
+	var box := BoxContainer.new()
+	box.vertical = _portrait
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", roundi(36 * _scale))
+	card.add_child(box)
+	for part: Array in [[names[0], 0], ["VS", -1], [names[1], 1]]:
+		var vs: bool = part[1] < 0
+		var label := _label(part[0], 132 if vs else 104, GOLD if vs else Color.WHITE, true)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_color_override("font_outline_color", Color.BLACK if vs else SIDE_COLOURS[part[1]].darkened(0.35))
+		label.add_theme_constant_override("outline_size", roundi(20 * _scale))
+		box.add_child(label)
+	box.size = box.get_minimum_size()
+	box.position = (_size - box.size) * 0.5
+	return card
+
+
+## A small rounded tag: a type or a status condition.
+func _pill(text: String, colour: Color) -> Label:
+	var pill := _label(text, 24, Color.WHITE)
+	pill.add_theme_constant_override("outline_size", roundi(6 * _scale))
+	pill.add_theme_color_override("font_outline_color", colour.darkened(0.5))
+	var style := StyleBoxFlat.new()
+	style.bg_color = colour
+	style.set_corner_radius_all(roundi(14 * _scale))
+	style.content_margin_left = 12 * _scale
+	style.content_margin_right = 12 * _scale
+	style.content_margin_top = 2 * _scale
+	style.content_margin_bottom = 2 * _scale
+	pill.add_theme_stylebox_override("normal", style)
+	return pill
+
+
+## A fighter's plate: dark and rounded, with a stripe of the side's colour on its outer edge.
+func _plate_style(side: int, mirrored: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = PLATE
+	style.set_corner_radius_all(roundi(20 * _scale))
+	style.border_color = SIDE_COLOURS[side]
+	if mirrored:
+		style.border_width_right = roundi(8 * _scale)
+	else:
+		style.border_width_left = roundi(8 * _scale)
+	style.shadow_color = Color(0, 0, 0, 0.35)
+	style.shadow_size = roundi(10 * _scale)
+	return style
+
+
+## A label in the body font, or the display font with `display`.
+func _label(text: String, font_size: int, colour: Color, display := false) -> Label:
 	var label := Label.new()
 	label.text = text
+	if display:
+		label.add_theme_font_override("font", UiFonts.DISPLAY)
 	label.add_theme_font_size_override("font_size", roundi(font_size * _scale))
 	label.add_theme_color_override("font_color", colour)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)

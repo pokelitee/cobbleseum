@@ -28,6 +28,7 @@ var _view_args: PackedStringArray = []
 const CREDITS := """Pokémon models, textures, animations and sounds: Cobblemon (https://cobblemon.com),
 licensed CC BY-NC 3.0. Non-commercial use only.
 Battle data: Pokémon Showdown (MIT).
+Fonts: Lilita One and Nunito (SIL Open Font License 1.1).
 Pokémon and Pokémon character names are trademarks of Nintendo, Creatures Inc. and GAME FREAK.
 Made with Cobbleseum, an unaffiliated fan project.
 """
