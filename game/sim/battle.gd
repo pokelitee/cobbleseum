@@ -17,7 +17,9 @@ var projectiles: Array[Dictionary] = []
 ## Events for presentation and highlight picking: {"tick", "type", "side", ...}.
 var events: Array[Dictionary] = []
 var spec: Dictionary
-## The arena's ground (§9.8), from the spec's "arena" (or the fighters' types) and the seed.
+## The arena preset (Arenas), from the spec's "arena" or else the fighters' types and the seed.
+var arena := ""
+## The arena's ground (§9.8), from its field and the seed.
 var terrain: Terrain
 ## With record_intents set (battles with a player), every tick's intents per side, as
 ## [move x, move y, use, dodge x, dodge y]; a ReplayController plays them back.
@@ -58,8 +60,9 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 	var types: Array = []
 	for entry: Dictionary in entries:
 		types.append_array(data.species.get(entry.get("species", ""), {}).get("types", []))
-	var biome := Terrain.choose_biome(str(battle_spec.get("arena", "")), types, int(battle_spec.seed))
-	battle.terrain = Terrain.generate(biome, SimRandom.stream(int(battle_spec.seed), Stream.TERRAIN))
+	battle.arena = Arenas.choose(str(battle_spec.get("arena", "")), types, int(battle_spec.seed))
+	battle.terrain = Terrain.generate(Arenas.preset(battle.arena).field, SimRandom.stream(int(battle_spec.seed), Stream.TERRAIN),
+		Arenas.enclosed(battle.arena))
 	for side in 2:
 		var entry: Dictionary = entries[side]
 		var species: Variant = data.species.get(entry.get("species", ""))

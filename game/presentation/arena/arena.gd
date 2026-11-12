@@ -1,9 +1,10 @@
 class_name Arena
 extends Node3D
-## The world around the battle (concepts_brief.md §12.7): the battle's own landscape
-## (Terrain, §9.8) out to Terrain.WORLD_RADIUS, with its features, small details, props on the
-## hills, sky, sun, fog and weather, all from one biome (ArenaBiomes) and seeded by the battle,
-## so every render of a battle is identical. The stadium has a builder of its own (Stadium).
+## The world around the battle (concepts_brief.md §12.7), from an arena preset (Arenas): the
+## battle's own field (Terrain, §9.8) with its features and small details (ArenaFields), the
+## venue around it (open land out to Terrain.WORLD_RADIUS with props on the hills, or a
+## coliseum built by Stadium), and the preset's sky, sun, fog and weather. Everything is seeded
+## by the battle, so every render of a battle is identical.
 ##
 ## Everything is blocks in the voxel style of Cobblemon's models: boxes drawn through
 ## MultiMeshes, and curved blocks (ring segments) built as exact meshes so rings have no gaps
@@ -44,7 +45,9 @@ const ARC_STEP := 0.25
 ## Ring blocks are about this long.
 const RING_BLOCK := 1.0
 
-var biome_name := ""
+var preset_name := ""
+## The coliseum's colours (Stadium.theme), for an enclosed venue.
+var theme := {}
 ## Places a spectator can stand, facing the floor's centre (world transforms).
 var seats: Array[Transform3D] = []
 ## How far from the centre a camera may go before it would be inside the scenery.
@@ -62,34 +65,60 @@ var _glowing: Array = []
 var _arcs := {}
 ## The surface shader's materials, for see-through updates.
 var _surfaces: Array[ShaderMaterial] = []
+## How far the faceted ground is built: the whole world, or just the field inside a coliseum.
+var _land_radius := Terrain.WORLD_RADIUS
+var _enclosed := false
 ## Ground height by cell beyond the arena, so props sit on top.
 var _heights := {}
 ## Each built cell's four corner heights ([-x-z, +x-z, +x+z, -x+z]), for surface_at().
 var _tops := {}
 
 
-## Builds the arena for `name` (one of Terrain.BIOMES) seeded by `seed`, around the battle's
-## `terrain` (flat if not given). `names` are the fighters' names, for the stadium's screens.
+## Builds the arena preset `name` (Arenas) seeded by `seed`, around the battle's `terrain`
+## (flat if not given). `names` are the fighters' names, for the stadium's screens.
 static func create(name: String, seed: int, names: Array = [], terrain: Terrain = null) -> Arena:
+	var preset := Arenas.preset(name)
+	assert(not preset.is_empty(), "unknown arena '%s'" % name)
 	var arena := Arena.new()
 	arena.name = "Arena"
-	arena.biome_name = name
-	arena._biome = ArenaBiomes.BIOMES[name]
+	arena.preset_name = name
+	arena._enclosed = Arenas.enclosed(name)
+	arena._biome = _look(preset)
+	if arena._enclosed:
+		arena.theme = Stadium.theme(preset.get("theme", {}))
+		arena._biome.moss = arena.theme.moss
+		arena._biome.erase("water")
 	arena._rng.seed = hash("%s|%d" % [name, seed])
 	arena._noise.seed = seed
 	arena._noise.frequency = 0.06
-	arena._terrain = terrain if terrain != null else Terrain.flat(name)
+	if terrain == null:
+		terrain = Terrain.flat(preset.field)
+		terrain.enclosed = arena._enclosed
+	arena._terrain = terrain
 	arena._terrain.fill_world()
 	arena._build(names)
 	return arena
 
 
+## The field's look (ArenaFields) under the preset's sky, light, fog and weather, read from
+## its JSON (colours as "#rrggbb").
+static func _look(preset: Dictionary) -> Dictionary:
+	var look: Dictionary = ArenaFields.FIELDS[preset.field].duplicate()
+	look.sky = (preset.sky as Array).map(func(c: String) -> Color: return Color.html(c))
+	var angle: Array = preset.sun.angle
+	look.sun = {"angle": Vector3(angle[0], angle[1], angle[2]), "colour": Color.html(preset.sun.colour), "energy": float(preset.sun.energy)}
+	look.ambient = [Color.html(preset.ambient.colour), float(preset.ambient.energy)]
+	look.fog = [Color.html(preset.fog.colour), float(preset.fog.density)]
+	look.particles = str(preset.get("particles", ""))
+	return look
+
+
 func _build(names: Array) -> void:
-	if _biome.get("stadium", false):
-		Stadium.build(self, _rng, names)
+	if _enclosed:
+		Stadium.build(self, _rng, names, _terrain.field != "paved")
 		camera_limit = Stadium.wall_radius() - CAMERA_MARGIN
 	else:
-		_build_landscape()
+		build_landscape(Terrain.WORLD_RADIUS)
 		_build_props()
 	_add_blocks(_blocks, false)
 	_add_blocks(_glowing, true)
@@ -206,9 +235,12 @@ func add_box(centre: Vector2, bottom: float, top: float, colour: Color, size := 
 	(_glowing if glow else _blocks).append(entry)
 
 
-func _build_landscape() -> void:
+## The faceted ground out to `radius`, with the field's features and details; in the open,
+## also the heights props stand on and seats on low ground nearby.
+func build_landscape(radius: float) -> void:
+	_land_radius = radius
 	var water: float = _biome.get("water", -INF)
-	for cell in _terrain.world_cells(Terrain.WORLD_RADIUS):
+	for cell in _terrain.world_cells(radius):
 		var ground := _terrain.ground_at(cell)
 		var steep := _steepness(cell, ground)
 		_ground_cell(cell, ground, vary(_surface(cell, ground, steep, water), 0.04))
@@ -218,7 +250,7 @@ func _build_landscape() -> void:
 		elif ground > water:
 			_decorate(cell, ground, steep)
 		var distance := cell.length()
-		if distance > Rules.ARENA_RADIUS + 1.0:
+		if not _enclosed and distance > Rules.ARENA_RADIUS + 1.0:
 			_heights[cell] = ground
 			if ground >= maxf(water, 0.0) and distance >= SEAT_RANGE.x and distance <= SEAT_RANGE.y and ground <= SEAT_MAX_HEIGHT and steep < 1.0:
 				add_seat(cell, ground)
@@ -252,7 +284,7 @@ func _ground_cell(cell: Vector2, ground: float, top_colour: Color) -> void:
 		var a: int = side[0]
 		var b: int = side[1]
 		var neighbour: Vector2 = cell + side[2]
-		var inside := neighbour.length() <= Terrain.WORLD_RADIUS
+		var inside := neighbour.length() <= _land_radius
 		if inside and (side[2].x < 0.0 or side[2].y < 0.0):
 			continue
 		var n_ground := _terrain.ground_at(neighbour)

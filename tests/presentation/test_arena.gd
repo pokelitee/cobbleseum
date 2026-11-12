@@ -1,6 +1,6 @@
 extends TestCase
-## Arenas (concepts_brief.md §12.7): which biome a battle gets, and that building one is
-## repeatable and leaves the battle floor clear.
+## Arenas (concepts_brief.md §12.7): the presets, which one a battle gets, and that building
+## one is repeatable and leaves the battle floor clear.
 
 
 func _arc_vertices(arena: Arena) -> Array:
@@ -11,23 +11,52 @@ func _arc_vertices(arena: Arena) -> Array:
 	return counts
 
 
-func test_a_requested_biome_wins() -> void:
-	for name in Terrain.BIOMES:
-		assert_eq(Terrain.choose_biome(name, ["Fire"], 3), name)
+func test_every_preset_file_is_valid() -> void:
+	var files := Array(DirAccess.get_files_at(Arenas.PRESETS_DIR)).filter(func(f: String) -> bool: return f.ends_with(".json"))
+	assert_eq(Arenas.names().size(), files.size(), "every preset loads: %s" % [Arenas.names()])
+	for name in ["grassland", "beach", "volcano", "snowfield", "cave", "stadium"]:
+		assert_true(Arenas.all().has(name), name)
+	assert_eq(Arenas._problem({"field": "lava", "venue": "open"}).is_empty(), false, "unknown fields are caught")
+	assert_eq(Arenas._problem({"field": "paved", "venue": "moon"}).is_empty(), false, "unknown venues are caught")
 
 
-func test_otherwise_the_seed_picks_from_biomes_that_suit_the_types() -> void:
+func test_a_requested_arena_wins() -> void:
+	for name in Arenas.names():
+		assert_eq(Arenas.choose(name, ["Fire"], 3), name)
+
+
+func test_otherwise_the_seed_picks_from_arenas_that_suit_the_types() -> void:
 	var picked := {}
-	for seed in 20:
-		picked[Terrain.choose_biome("", ["Fire", "Ice"], seed)] = true
-	assert_eq(picked.keys().size(), 4, "grassland, stadium, volcano and snowfield: %s" % [picked.keys()])
-	assert_true(picked.has("volcano") and picked.has("snowfield"))
-	assert_eq(Terrain.choose_biome("", ["Fire"], 5), Terrain.choose_biome("", ["Fire"], 5), "same seed, same arena")
-	assert_eq(Terrain.choose_biome("nowhere", ["Normal"], 0), Terrain.choose_biome("", ["Normal"], 0), "unknown names are ignored")
+	for seed in 40:
+		picked[Arenas.choose("", ["Fire", "Ice"], seed)] = true
+	# Grassland and stadium are always offered; volcano suits Fire, snowfield and the frost
+	# coliseum suit Ice.
+	assert_eq(picked.keys().size(), 5, "%s" % [picked.keys()])
+	assert_true(picked.has("volcano") and picked.has("snowfield") and picked.has("frost_coliseum"))
+	assert_eq(Arenas.choose("", ["Fire"], 5), Arenas.choose("", ["Fire"], 5), "same seed, same arena")
+	assert_eq(Arenas.choose("nowhere", ["Normal"], 0), Arenas.choose("", ["Normal"], 0), "unknown names are ignored")
 
 
-func test_every_biome_builds_the_same_way_twice_with_seats() -> void:
-	for name in Terrain.BIOMES:
+func test_a_coliseum_takes_any_field_and_theme() -> void:
+	var terrain := Terrain.generate("grassland", SimRandom.new(4), true)
+	assert_true(terrain.enclosed)
+	for cell in terrain.world_cells(Terrain.WORLD_RADIUS):
+		if cell.length() >= Rules.ARENA_RADIUS:
+			assert_eq(terrain.ground_at(cell), 0.0, "flat from the wall out, under the apron: %s" % cell)
+	assert_true(terrain.highest() > 0.0, "mounds and features inside")
+	var arena := Arena.create("garden_coliseum", 4, [], terrain)
+	assert_eq(arena.theme.stone, Color.html("#c9b48e"), "the preset's theme")
+	assert_eq(arena.theme.slab, Stadium.DEFAULT_THEME.slab, "defaults fill the rest")
+	assert_true(arena.camera_limit < Stadium.wall_radius())
+	assert_true(arena.seats.size() > 500, "seats are in the stands")
+	assert_false(arena._biome.has("water"))
+	assert_true(absf(arena.surface_at(Vector2(0.5, 0.5), -100.0) - terrain.ground_at(Vector2(0.5, 0.5))) < Terrain.STEP,
+		"the field is the faceted ground")
+	arena.free()
+
+
+func test_every_arena_builds_the_same_way_twice_with_seats() -> void:
+	for name in Arenas.names():
 		var first := Arena.create(name, 9)
 		var second := Arena.create(name, 9)
 		assert_eq(first._blocks.size(), second._blocks.size(), name)
@@ -81,7 +110,6 @@ func test_cameras_are_kept_inside_the_limit() -> void:
 
 func test_ring_segments_meet_without_gaps() -> void:
 	var arena := Arena.new()
-	arena._biome = ArenaBiomes.BIOMES.stadium
 	var rng := RandomNumberGenerator.new()
 	arena.add_arc_ring(5.0, 6.0, 0.0, 1.0, Color.WHITE, rng, 0.0)
 	var mesh: ArrayMesh = (arena._arcs[false] as SurfaceTool).commit()

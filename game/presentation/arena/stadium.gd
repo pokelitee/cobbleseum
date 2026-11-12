@@ -1,11 +1,12 @@
 class_name Stadium
 extends RefCounted
-## The stadium arena (concepts_brief.md §12.7): a round coliseum built from blocks around the
-## battle floor, big enough to read as a stadium rather than a low wall.
+## The coliseum venue (concepts_brief.md §12.7): a round coliseum built from blocks around the
+## battle's field, big enough to read as a stadium rather than a low wall. Its colours come from
+## the preset's theme (DEFAULT_THEME where it leaves one out).
 ##
 ## From the centre out:
 ## - the field: rings of pale stone paving with painted lines (boundary, halfway line,
-##   centre circle);
+##   centre circle), or the field's own faceted ground (Arena) inside a stone kerb;
 ## - an apron of grey-green paving with a trainer's box at each end;
 ## - a stone wall with a coping;
 ## - the lower stands, a concourse, the upper stands and a parapet, split into SECTIONS by
@@ -39,21 +40,28 @@ const SCREEN_WIDTH := 15.0
 const SCREEN_ANGLES: Array[float] = [-PI * 0.5, PI * 0.5]
 const SCREEN_RISE := 2.0
 
-const STONE := Color(0.62, 0.63, 0.6)
-const STONE_DARK := Color(0.48, 0.5, 0.47)
-const SLAB := Color(0.78, 0.71, 0.58)
-const SLAB_DARK := Color(0.73, 0.66, 0.53)
-const APRON := Color(0.48, 0.53, 0.48)
-const APRON_LIGHT := Color(0.54, 0.59, 0.54)
-const SEATS := Color(0.56, 0.57, 0.55)
-const SEATS_ALT := Color(0.5, 0.52, 0.5)
+## Around a field of terrain (not paving): the apron is raised this much, and a stone kerb
+## KERB wide and high runs along the field's edge, covering where the square ground cells end.
+const APRON_LIFT := 0.08
+const KERB := Vector2(0.4, 0.2)
+
+## A preset's theme may set any of these (colours as "#rrggbb"): stone (walls, pillars,
+## parapet), stone_dark, slab and slab_dark (the paving), apron and apron_light, seats and
+## seats_alt (alternate rows), trim (the wall's coping), ground (outside), banners (one colour
+## per side) and moss (0 to 1, on the stone's lower parts).
+const DEFAULT_THEME := {
+	"stone": Color(0.62, 0.63, 0.6), "stone_dark": Color(0.48, 0.5, 0.47),
+	"slab": Color(0.78, 0.71, 0.58), "slab_dark": Color(0.73, 0.66, 0.53),
+	"apron": Color(0.48, 0.53, 0.48), "apron_light": Color(0.54, 0.59, 0.54),
+	"seats": Color(0.56, 0.57, 0.55), "seats_alt": Color(0.5, 0.52, 0.5),
+	"trim": Color(0.33, 0.43, 0.38), "ground": Color(0.36, 0.48, 0.3),
+	"banners": [Color(0.78, 0.22, 0.2), Color(0.2, 0.38, 0.75)],
+	"moss": 0.35,
+}
 const LINE := Color(0.95, 0.95, 0.92)
 const TUNNEL := Color(0.08, 0.08, 0.09)
-const BRONZE := Color(0.33, 0.43, 0.38)
-const GROUND := Color(0.36, 0.48, 0.3)
 const FLOODLIGHT := Color(1.0, 0.97, 0.85)
 const SCREEN := Color(0.05, 0.07, 0.1)
-const SIDE_COLOURS: Array[Color] = [Color(0.78, 0.22, 0.2), Color(0.2, 0.38, 0.75)]
 
 
 static func field_radius() -> float:
@@ -83,16 +91,39 @@ static func top_height() -> float:
 	return row(LOWER_ROWS + UPPER_ROWS - 1).y + PARAPET
 
 
-## Builds everything into `arena`. `names` are the two fighters' names, for the scoreboard.
-static func build(arena: Arena, rng: RandomNumberGenerator, names: Array) -> void:
-	_field(arena, rng)
-	_apron(arena, rng)
+## The theme for a preset's `overrides` (JSON), filled in from DEFAULT_THEME.
+static func theme(overrides: Dictionary) -> Dictionary:
+	var result := DEFAULT_THEME.duplicate(true)
+	for key: String in overrides:
+		if not result.has(key):
+			push_error("unknown coliseum theme key '%s'" % key)
+			continue
+		var value: Variant = overrides[key]
+		if value is String:
+			result[key] = Color.html(value)
+		elif value is Array:
+			result[key] = (value as Array).map(func(c: String) -> Color: return Color.html(c))
+		else:
+			result[key] = float(value)
+	return result
+
+
+## Builds everything into `arena` in its theme. `names` are the two fighters' names, for the
+## scoreboard. With `terrain_field` the field is the arena's own ground rather than paving.
+static func build(arena: Arena, rng: RandomNumberGenerator, names: Array, terrain_field := false) -> void:
+	if terrain_field:
+		arena.build_landscape(field_radius() + 0.75)
+		var colours: Dictionary = arena.theme
+		arena.add_arc_ring(field_radius() - 0.05, field_radius() - 0.05 + KERB.x, -1.0, KERB.y, colours.stone, rng, 0.06, colours.stone_dark)
+	else:
+		_field(arena, rng)
+	_apron(arena, rng, APRON_LIFT if terrain_field else 0.0)
 	_wall(arena, rng)
 	_stands(arena, rng)
 	_roof(arena, rng)
 	_banners(arena)
 	_screens(arena, names)
-	arena.add_arc_ring(outer_radius(), GROUND_RADIUS, -1.0, -0.05, GROUND, rng, 0.06)
+	arena.add_arc_ring(outer_radius(), GROUND_RADIUS, -1.0, -0.05, arena.theme.ground, rng, 0.06)
 
 
 static func _field(arena: Arena, rng: RandomNumberGenerator) -> void:
@@ -100,7 +131,7 @@ static func _field(arena: Arena, rng: RandomNumberGenerator) -> void:
 	var ring := 0.0
 	while ring < radius:
 		var next := minf(ring + 1.0, radius)
-		arena.add_arc_ring(ring, next, -1.0, 0.0, SLAB, rng, 0.03, SLAB_DARK)
+		arena.add_arc_ring(ring, next, -1.0, 0.0, arena.theme.slab, rng, 0.03, arena.theme.slab_dark)
 		ring = next
 	# Painted lines a hair above the slabs.
 	var lift := 0.012
@@ -109,22 +140,22 @@ static func _field(arena: Arena, rng: RandomNumberGenerator) -> void:
 	arena.add_block(Transform3D(Basis.from_scale(Vector3((radius - 0.45) * 2.0, 0.02, LINE_WIDTH)), Vector3(0, lift - 0.01, 0)), LINE)
 
 
-static func _apron(arena: Arena, rng: RandomNumberGenerator) -> void:
-	arena.add_arc_ring(field_radius(), wall_radius(), -1.0, 0.0, APRON, rng, 0.05, APRON_LIGHT)
+static func _apron(arena: Arena, rng: RandomNumberGenerator, lift: float) -> void:
+	arena.add_arc_ring(field_radius(), wall_radius(), -1.0, lift, arena.theme.apron, rng, 0.05, arena.theme.apron_light)
 	# A trainer's box at each end, outlined in white.
 	for side in 2:
 		var z := (field_radius() + APRON_WIDTH * 0.5) * (-1.0 if side == 0 else 1.0)
 		var size := Vector2(2.4, 1.6)
 		for edge in [Vector3(0, 0, -size.y * 0.5), Vector3(0, 0, size.y * 0.5)]:
-			arena.add_block(Transform3D(Basis.from_scale(Vector3(size.x, 0.02, LINE_WIDTH)), Vector3(0, 0.002, z) + edge), LINE)
+			arena.add_block(Transform3D(Basis.from_scale(Vector3(size.x, 0.02, LINE_WIDTH)), Vector3(0, lift + 0.002, z) + edge), LINE)
 		for edge in [Vector3(-size.x * 0.5, 0, 0), Vector3(size.x * 0.5, 0, 0)]:
-			arena.add_block(Transform3D(Basis.from_scale(Vector3(LINE_WIDTH, 0.02, size.y)), Vector3(0, 0.002, z) + edge), LINE)
+			arena.add_block(Transform3D(Basis.from_scale(Vector3(LINE_WIDTH, 0.02, size.y)), Vector3(0, lift + 0.002, z) + edge), LINE)
 
 
 static func _wall(arena: Arena, rng: RandomNumberGenerator) -> void:
 	var inner := wall_radius()
-	arena.add_arc_ring(inner, inner + WALL_THICKNESS, -1.0, WALL_HEIGHT, STONE, rng, 0.07, STONE_DARK)
-	arena.add_arc_ring(inner - 0.12, inner + WALL_THICKNESS + 0.12, WALL_HEIGHT, WALL_HEIGHT + 0.25, BRONZE, rng, 0.04)
+	arena.add_arc_ring(inner, inner + WALL_THICKNESS, -1.0, WALL_HEIGHT, arena.theme.stone, rng, 0.07, arena.theme.stone_dark)
+	arena.add_arc_ring(inner - 0.12, inner + WALL_THICKNESS + 0.12, WALL_HEIGHT, WALL_HEIGHT + 0.25, arena.theme.trim, rng, 0.04)
 
 
 static func _section(angle: float) -> int:
@@ -159,7 +190,7 @@ static func _stands(arena: Arena, rng: RandomNumberGenerator) -> void:
 	var rows := LOWER_ROWS + UPPER_ROWS
 	for index in rows:
 		var at := row(index)
-		var colour := SEATS if index % 2 == 0 else SEATS_ALT
+		var colour: Color = arena.theme.seats if index % 2 == 0 else arena.theme.seats_alt
 		var segments := ceili(TAU * at.x / Arena.RING_BLOCK)
 		for s in segments:
 			var from := s * TAU / segments
@@ -171,22 +202,22 @@ static func _stands(arena: Arena, rng: RandomNumberGenerator) -> void:
 			if index < TUNNEL_ROWS and _in_tunnel(angle, at.x):
 				# The tunnel: a dark opening under the rows above.
 				arena.add_sector(from, to, at.x, at.x + ROW_DEPTH, -1.0, WALL_HEIGHT * 0.9, TUNNEL)
-				arena.add_sector(from, to, at.x, at.x + ROW_DEPTH, WALL_HEIGHT * 0.9, top, arena.vary(STONE_DARK))
+				arena.add_sector(from, to, at.x, at.x + ROW_DEPTH, WALL_HEIGHT * 0.9, top, arena.vary(arena.theme.stone_dark))
 				continue
 			arena.add_sector(from, to, at.x, at.x + ROW_DEPTH, -1.0, top, arena.vary(colour, 0.04))
 			if not _near_pillar(angle, at.x):
 				arena.add_seat(Vector2(cos(angle), sin(angle)) * (at.x + ROW_DEPTH * 0.5), top)
 	# The concourse between the tiers.
 	var concourse_start := row(LOWER_ROWS - 1).x + ROW_DEPTH
-	arena.add_arc_ring(concourse_start, concourse_start + CONCOURSE, -1.0, row(LOWER_ROWS - 1).y, STONE, rng, 0.05)
+	arena.add_arc_ring(concourse_start, concourse_start + CONCOURSE, -1.0, row(LOWER_ROWS - 1).y, arena.theme.stone, rng, 0.05)
 	# The parapet behind the top row.
 	var back := outer_radius()
-	arena.add_arc_ring(back, back + 0.6, -1.0, top_height(), STONE, rng, 0.07, STONE_DARK)
+	arena.add_arc_ring(back, back + 0.6, -1.0, top_height(), arena.theme.stone, rng, 0.07, arena.theme.stone_dark)
 	# Pillars between sections, a little proud of the rows, stepping up from the wall to the
 	# parapet without a break.
 	for section in SECTIONS:
 		var angle := section * TAU / SECTIONS
-		var shade := arena.vary(STONE_DARK, 0.05)
+		var shade := arena.vary(arena.theme.stone_dark, 0.05)
 		for index in rows:
 			var at := row(index)
 			if index >= LOWER_ROWS and _behind_screen(angle):
@@ -197,10 +228,10 @@ static func _stands(arena: Arena, rng: RandomNumberGenerator) -> void:
 static func _roof(arena: Arena, rng: RandomNumberGenerator) -> void:
 	var outer := outer_radius() + 0.6
 	var height := top_height() + ROOF_CLEARANCE
-	arena.add_arc_ring(outer - ROOF_DEPTH, outer, height, height + ROOF_THICKNESS, STONE_DARK, rng, 0.05)
+	arena.add_arc_ring(outer - ROOF_DEPTH, outer, height, height + ROOF_THICKNESS, arena.theme.stone_dark, rng, 0.05)
 	for section in SECTIONS:
 		var angle := section * TAU / SECTIONS
-		arena.add_arc(angle, outer - 0.3, outer + 0.5, -1.0, height, arena.vary(STONE, 0.05), 0.8)
+		arena.add_arc(angle, outer - 0.3, outer + 0.5, -1.0, height, arena.vary(arena.theme.stone, 0.05), 0.8)
 		for light in 2:
 			var along := angle + (light + 0.5) * TAU / SECTIONS / 2.0
 			arena.add_arc(along, outer - ROOF_DEPTH - 0.1, outer - ROOF_DEPTH + 0.5, height - 0.5, height, FLOODLIGHT, 1.8, true)
@@ -213,7 +244,7 @@ static func _banners(arena: Arena) -> void:
 		var side := 0 if sin(angle) < 0.0 else 1
 		if _behind_screen(angle):
 			continue
-		arena.add_arc(angle, radius - 0.08, radius, top_height() - 5.5, top_height() - 0.2, SIDE_COLOURS[side], 2.4)
+		arena.add_arc(angle, radius - 0.08, radius, top_height() - 5.5, top_height() - 0.2, arena.theme.banners[side], 2.4)
 
 
 ## A screen at each end, set into the upper stands where the rows are left out: a stone
@@ -226,7 +257,7 @@ static func _screens(arena: Arena, names: Array) -> void:
 	var screen_bottom := bottom + 0.6
 	var screen_top := top_height() + SCREEN_RISE
 	for centre in SCREEN_ANGLES:
-		arena.add_sector(centre - half, centre + half, front, outer_radius(), -1.0, screen_top + 0.5, STONE_DARK)
+		arena.add_sector(centre - half, centre + half, front, outer_radius(), -1.0, screen_top + 0.5, arena.theme.stone_dark)
 		var inset := 0.25 / front
 		arena.add_sector(centre - half + inset, centre + half - inset, front - 0.12, front,
 			screen_bottom, screen_top, SCREEN, true)

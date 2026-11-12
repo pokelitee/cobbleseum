@@ -1,0 +1,21 @@
+{
+	"name": "Volcano",
+	"field": "volcano",
+	"venue": "open",
+	"suits": ["Fire"],
+	"sky": ["#40140f", "#d95926"],
+	"sun": {
+		"angle": [-35, 60, 0],
+		"colour": "#ff9966",
+		"energy": 0.9
+	},
+	"ambient": {
+		"colour": "#cc7359",
+		"energy": 0.7
+	},
+	"fog": {
+		"colour": "#8c381f",
+		"density": 0.012
+	},
+	"particles": "embers"
+}

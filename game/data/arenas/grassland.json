@@ -1,0 +1,22 @@
+{
+	"name": "Grassland",
+	"field": "grassland",
+	"venue": "open",
+	"always": true,
+	"suits": ["Grass", "Bug", "Flying"],
+	"sky": ["#528ce6", "#b8d6f2"],
+	"sun": {
+		"angle": [-50, 35, 0],
+		"colour": "#fff5e0",
+		"energy": 1.1
+	},
+	"ambient": {
+		"colour": "#9eadbf",
+		"energy": 0.9
+	},
+	"fog": {
+		"colour": "#b8d6f2",
+		"density": 0.004
+	},
+	"particles": "petals"
+}
