@@ -1,11 +1,12 @@
 class_name Terrain
 extends RefCounted
 ## Battle terrain (concepts_brief.md §9.8): one continuous landscape, a ground height for every
-## 1 m cell in 0.5 m steps, generated from the battle seed for its biome. Inside the arena it
+## 1 m cell in 0.5 m steps, generated from the battle seed for its field. Inside the arena it
 ## stays gentle: noise mounds whose contours become terraces, walkable where neighbouring cells
 ## differ by a step and cliffs where they differ more. Beyond the arena's wall it rises into
 ## hills (or, at the beach, falls into the sea), so the battle area is part of the world rather
-## than a disc cut out of it. Features stand on the ground: rock clusters, trees, logs, basalt
+## than a disc cut out of it; an enclosed field (one with stands around it) eases down to flat
+## ground at the wall instead. Features stand on the ground: rock clusters, trees, logs, basalt
 ## columns, stalagmites, ice spikes and crystals. Each fighter's starting spot is kept level and
 ## open, and the two starts are always connected by walkable ground.
 ##
@@ -18,26 +19,18 @@ extends RefCounted
 ## presentation calls fill_world() for the rest of the land out to WORLD_RADIUS, from the same
 ## noise, and builds the world from the same heights and kinds.
 
-## Which arena a battle is in (the biome's look and its terrain).
-const BIOMES: Array[String] = ["grassland", "beach", "volcano", "snowfield", "cave", "stadium"]
-## Biomes that suit each type, for picking an arena from the fighters.
-const BY_TYPE := {
-	"Fire": "volcano", "Ice": "snowfield", "Water": "beach", "Rock": "cave", "Ground": "cave",
-	"Ghost": "cave", "Dark": "cave", "Grass": "grassland", "Bug": "grassland", "Flying": "grassland",
-	"Steel": "stadium", "Fighting": "stadium", "Normal": "stadium",
-}
 ## What stands in a cell, for the presentation (the battle only uses heights).
 enum Kind { GROUND, ROCK, TREE, PINE, PALM, LOG, BASALT, STALAGMITE, ICE, CRYSTAL }
-## Per biome: how high the arena's mounds rise (metres, before snapping to STEP), how high the
-## hills beyond the wall rise, and how many of each feature stand inside the arena. A feature
-## count is a range. The stadium is the flat classic.
-const SHAPES := {
+## The fields an arena can have (Arenas): how high the arena's mounds rise (metres, before
+## snapping to STEP), how high the hills beyond the wall rise, and how many of each feature
+## stand inside the arena. A feature count is a range. Paved is the flat classic.
+const FIELDS := {
 	"grassland": {"mounds": 1.6, "hills": 8.0, "features": {"tree": Vector2i(5, 8), "rock": Vector2i(3, 5), "log": Vector2i(1, 2)}},
 	"beach": {"mounds": 1.1, "hills": -5.0, "features": {"palm": Vector2i(3, 5), "rock": Vector2i(2, 4), "log": Vector2i(2, 3)}},
 	"volcano": {"mounds": 2.2, "hills": 10.0, "features": {"basalt": Vector2i(4, 6), "rock": Vector2i(3, 4)}},
 	"snowfield": {"mounds": 1.6, "hills": 9.0, "features": {"pine": Vector2i(5, 8), "ice": Vector2i(3, 5), "rock": Vector2i(2, 3)}},
 	"cave": {"mounds": 2.2, "hills": 15.0, "features": {"stalagmite": Vector2i(9, 13), "crystal": Vector2i(3, 5), "rock": Vector2i(2, 3)}},
-	"stadium": {"mounds": 0.0, "hills": 0.0, "features": {}},
+	"paved": {"mounds": 0.0, "hills": 0.0, "features": {}},
 }
 const STEP := 0.5
 ## How far the generated world reaches (the presentation's terrain).
@@ -45,6 +38,8 @@ const WORLD_RADIUS := Rules.ARENA_RADIUS + 30.0
 const BATTLE_RADIUS := Rules.ARENA_RADIUS + NEAR_CELLS + 2.0
 ## The hills rise over this distance beyond the wall.
 const HILL_RISE := 14.0
+## An enclosed field's mounds ease down to the ground over this distance inside the wall.
+const ENCLOSED_EASE := 3.0
 ## Noise frequencies: the arena's mounds and the hills beyond.
 const MOUND_FREQUENCY := 0.075
 const HILL_FREQUENCY := 0.045
@@ -63,7 +58,9 @@ const LINE_STEP := 0.25
 ## Cells within this many of another count as near it (see _nearby_top).
 const NEAR_CELLS := 3
 
-var biome := "stadium"
+var field := "paved"
+## Whether stands surround the field: no land beyond the wall, and none rising at it.
+var enclosed := false
 var _reach := 0
 var _size := 0
 var _heights := PackedFloat32Array()
@@ -81,24 +78,10 @@ var _scale := 1.0
 var _filled_to := 0.0
 
 
-## The arena for a battle: `requested` if it names a biome, else one picked by `seed` from the
-## biomes the fighters' types suit, plus grassland and stadium.
-static func choose_biome(requested: String, types: Array, seed: int) -> String:
-	if requested in BIOMES:
-		return requested
-	var options: Array[String] = ["grassland", "stadium"]
-	for type: String in types:
-		var suited: String = BY_TYPE.get(type, "")
-		if not suited.is_empty() and not options.has(suited):
-			options.append(suited)
-	options.sort()
-	return options[posmod(seed, options.size())]
-
-
-## A flat world (tests, and the stadium).
-static func flat(biome_name := "stadium") -> Terrain:
+## A flat world (tests, and paved fields).
+static func flat(field_name := "paved") -> Terrain:
 	var terrain := Terrain.new()
-	terrain.biome = biome_name
+	terrain.field = field_name
 	terrain._reach = ceili(WORLD_RADIUS) + 1
 	terrain._size = terrain._reach * 2
 	var cells := terrain._size * terrain._size
@@ -109,13 +92,18 @@ static func flat(biome_name := "stadium") -> Terrain:
 	return terrain
 
 
-## The terrain of `biome_name`, from the battle's terrain stream.
-static func generate(biome_name: String, random: SimRandom) -> Terrain:
-	var shape: Dictionary = SHAPES.get(biome_name, SHAPES.stadium)
+## The terrain of `field_name` (open, or `enclosed` by stands), from the battle's terrain stream.
+static func generate(field_name: String, random: SimRandom, enclosed_field := false) -> Terrain:
+	var shape: Dictionary = FIELDS.get(field_name, FIELDS.paved)
+	if enclosed_field:
+		shape = shape.duplicate()
+		shape.hills = 0.0
+		shape.enclosed = true
 	var noise_seed := int(random.next_u32() & 0x7fffffff)
 	var scale := 1.0
 	for attempt in RETRIES + 1:
-		var terrain := flat(biome_name)
+		var terrain := flat(field_name)
+		terrain.enclosed = enclosed_field
 		terrain._shape = shape
 		terrain._noise_seed = noise_seed
 		terrain._scale = scale
@@ -126,7 +114,8 @@ static func generate(biome_name: String, random: SimRandom) -> Terrain:
 		if terrain.starts_connected():
 			return terrain
 		scale *= RETRY_SCALE
-	var fallback := flat(biome_name)
+	var fallback := flat(field_name)
+	fallback.enclosed = enclosed_field
 	fallback._summarise()
 	return fallback
 
@@ -138,7 +127,7 @@ static func starts() -> Array[Vector2]:
 ## Extends the land beyond the battle's part out to WORLD_RADIUS (the presentation's world).
 ## The battle never looks there, so it only costs a battle that's shown.
 func fill_world() -> void:
-	if _filled_to < WORLD_RADIUS and (_shape.get("mounds", 0.0) > 0.0 or _shape.get("hills", 0.0) != 0.0):
+	if not enclosed and _filled_to < WORLD_RADIUS and (_shape.get("mounds", 0.0) > 0.0 or _shape.get("hills", 0.0) != 0.0):
 		_shape_land(WORLD_RADIUS, _filled_to)
 
 
@@ -172,10 +161,13 @@ func _shape_land(radius: float, inside: float) -> void:
 
 
 ## The land's height at `point` before snapping: mounds inside the arena (half of the ground
-## stays low, the rest rises in mounds), easing into hills beyond the wall.
+## stays low, the rest rises in mounds), easing into hills beyond the wall, or down to flat
+## ground at the wall where the field is enclosed.
 static func _raw_height(point: Vector2, shape: Dictionary, mounds: FastNoiseLite, hills: FastNoiseLite, scale: float) -> float:
 	var inner := float(shape.mounds) * scale * maxf(0.0, mounds.get_noise_2d(point.x, point.y)) * 2.0
 	var distance := point.length()
+	if shape.get("enclosed", false):
+		return inner * clampf((Rules.ARENA_RADIUS - distance) / ENCLOSED_EASE, 0.0, 1.0)
 	if distance <= Rules.ARENA_RADIUS:
 		return inner
 	var rise := smoothstep(0.0, 1.0, (distance - Rules.ARENA_RADIUS) / HILL_RISE)

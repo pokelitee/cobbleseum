@@ -1,0 +1,30 @@
+{
+	"name": "Night stadium",
+	"field": "paved",
+	"venue": "coliseum",
+	"suits": ["Dark", "Ghost", "Electric"],
+	"theme": {
+		"stone": "#5c6068",
+		"stone_dark": "#43474f",
+		"trim": "#8a7a4e",
+		"seats": "#4c5058",
+		"seats_alt": "#454950",
+		"banners": ["#c8382e", "#2f5fc8"],
+		"moss": 0.0
+	},
+	"sky": ["#050814", "#1a213d"],
+	"sun": {
+		"angle": [-70, 25, 0],
+		"colour": "#ebf2ff",
+		"energy": 0.85
+	},
+	"ambient": {
+		"colour": "#596699",
+		"energy": 0.4
+	},
+	"fog": {
+		"colour": "#141a2e",
+		"density": 0.004
+	},
+	"particles": ""
+}

@@ -1,0 +1,33 @@
+{
+	"name": "Frost coliseum",
+	"field": "snowfield",
+	"venue": "coliseum",
+	"suits": ["Ice", "Steel", "Water"],
+	"theme": {
+		"stone": "#b9c6d6",
+		"stone_dark": "#94a3b8",
+		"trim": "#5d7fa8",
+		"seats": "#a9b6c6",
+		"seats_alt": "#9eabbc",
+		"apron": "#8b9cb2",
+		"apron_light": "#96a7bc",
+		"ground": "#dfe8f2",
+		"banners": ["#7a3fb0", "#2f8fc8"],
+		"moss": 0.0
+	},
+	"sky": ["#7394bf", "#d9e6f2"],
+	"sun": {
+		"angle": [-34, 20, 0],
+		"colour": "#ebf2ff",
+		"energy": 0.85
+	},
+	"ambient": {
+		"colour": "#bfd1eb",
+		"energy": 0.7
+	},
+	"fog": {
+		"colour": "#d9e6f5",
+		"density": 0.004
+	},
+	"particles": "snow"
+}

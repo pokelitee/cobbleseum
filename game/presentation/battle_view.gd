@@ -5,9 +5,9 @@ extends Node3D
 ## AI debug overlay from the start; F3 toggles it in the window.
 ##
 ## Instead of a spec file, SpecFlags can describe the battle: --watch=<species> [--vs=<species>]
-## [--ai=<profile>] [--vs-ai=<profile>] [--seed=N] for AI against AI. --arena=<biome> (or a
-## spec's "arena") picks the arena (Terrain.BIOMES); otherwise the seed picks one that suits
-## the fighters' types. The arena is part of the battle: its terrain (§9.8).
+## [--ai=<profile>] [--vs-ai=<profile>] [--seed=N] for AI against AI. --arena=<name> (or a
+## spec's "arena") picks the arena (a preset in Arenas); otherwise the seed picks one that suits
+## the fighters' types. The arena is part of the battle: its field's terrain (§9.8).
 ##
 ## Play mode (--play=<species> [--vs=<species>] [--ai=<profile>] [--seed=N], or a spec with
 ## "ai": "player"): the battle runs live, one tick per 1/30 s, since a player's choices can't
@@ -120,7 +120,7 @@ func _ready() -> void:
 
 	var size := get_viewport().get_visible_rect().size
 	_portrait = VideoFormat.is_portrait(size)
-	_build_stage(battle.terrain.biome)
+	_build_stage(battle.arena)
 	if _player_camera != null:
 		_player_camera.limit = _arena.camera_limit
 	for side in 2:
@@ -528,8 +528,8 @@ func _sync_views() -> void:
 
 
 ## The arena (its own sky, sun and weather) and the camera.
-func _build_stage(biome: String) -> void:
-	_arena = Arena.create(biome, int(battle.spec.seed), [battle.fighters[0].name, battle.fighters[1].name], battle.terrain)
+func _build_stage(arena_name: String) -> void:
+	_arena = Arena.create(arena_name, int(battle.spec.seed), [battle.fighters[0].name, battle.fighters[1].name], battle.terrain)
 	add_child(_arena)
 	_camera = Camera3D.new()
 	_camera.far = Terrain.WORLD_RADIUS * 3.0

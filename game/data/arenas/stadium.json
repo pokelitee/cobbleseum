@@ -1,0 +1,22 @@
+{
+	"name": "Stadium",
+	"field": "paved",
+	"venue": "coliseum",
+	"always": true,
+	"suits": ["Steel", "Fighting", "Normal"],
+	"sky": ["#5280c7", "#b8cce0"],
+	"sun": {
+		"angle": [-56, 35, 0],
+		"colour": "#faf2e6",
+		"energy": 0.9
+	},
+	"ambient": {
+		"colour": "#99a8c2",
+		"energy": 0.75
+	},
+	"fog": {
+		"colour": "#b8c7d9",
+		"density": 0.0012
+	},
+	"particles": ""
+}

@@ -38,7 +38,7 @@ func _raise(terrain: Terrain, from: Vector2i, to: Vector2i, height: float) -> vo
 
 
 func test_generation_is_repeatable_and_keeps_the_starts_clear() -> void:
-	for biome in Terrain.BIOMES:
+	for biome: String in Terrain.FIELDS:
 		var first := Terrain.generate(biome, SimRandom.new(5))
 		var second := Terrain.generate(biome, SimRandom.new(5))
 		assert_eq(first._heights, second._heights, biome)
@@ -51,13 +51,17 @@ func test_generation_is_repeatable_and_keeps_the_starts_clear() -> void:
 		assert_true(first.starts_connected(), "%s: the starts can walk to each other" % biome)
 		for cell in first.cells():
 			assert_eq(fmod(first.height_at(cell), Terrain.STEP), 0.0, "heights come in steps")
-	assert_eq(Terrain.generate("stadium", SimRandom.new(5)).highest(), 0.0, "the stadium is flat")
+	assert_eq(Terrain.generate("paved", SimRandom.new(5)).highest(), 0.0, "paving is flat")
 	assert_true(Terrain.generate("cave", SimRandom.new(5)).highest() >= 3.0, "caves have tall pillars")
 
 
-func test_biome_choice() -> void:
-	assert_eq(Terrain.choose_biome("cave", ["Fire"], 1), "cave")
-	assert_eq(Terrain.choose_biome("", ["Fire"], 3), Terrain.choose_biome("", ["Fire"], 3))
+func test_the_battle_takes_its_field_from_the_arena() -> void:
+	assert_eq(_battle([]).arena, "stadium")
+	assert_eq(_battle([]).terrain.field, "paved")
+	var spec := {"seed": 2, "arena": "garden_coliseum", "fighters": [{"species": "squirt", "moves": ["jet"]}, {"species": "squirt", "moves": ["jet"]}]}
+	var battle: Battle = Battle.create(spec, BattleData.new(SPECIES, MOVES, {}), [Scripted.new([]), Scripted.new([])]).battle
+	assert_eq(battle.terrain.field, "grassland")
+	assert_true(battle.terrain.enclosed)
 
 
 func test_fighters_climb_small_steps_but_not_walls() -> void:

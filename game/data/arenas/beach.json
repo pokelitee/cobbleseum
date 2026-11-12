@@ -1,0 +1,21 @@
+{
+	"name": "Beach",
+	"field": "beach",
+	"venue": "open",
+	"suits": ["Water"],
+	"sky": ["#338cf2", "#bfe6ff"],
+	"sun": {
+		"angle": [-55, -20, 0],
+		"colour": "#fff5e0",
+		"energy": 0.95
+	},
+	"ambient": {
+		"colour": "#a8bdd6",
+		"energy": 0.6
+	},
+	"fog": {
+		"colour": "#bfe6ff",
+		"density": 0.003
+	},
+	"particles": "sand"
+}

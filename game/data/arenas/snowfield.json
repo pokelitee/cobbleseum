@@ -1,0 +1,21 @@
+{
+	"name": "Snowfield",
+	"field": "snowfield",
+	"venue": "open",
+	"suits": ["Ice"],
+	"sky": ["#7394bf", "#d9e6f2"],
+	"sun": {
+		"angle": [-30, 20, 0],
+		"colour": "#ebf2ff",
+		"energy": 0.8
+	},
+	"ambient": {
+		"colour": "#bfd1eb",
+		"energy": 0.7
+	},
+	"fog": {
+		"colour": "#d9e6f5",
+		"density": 0.014
+	},
+	"particles": "snow"
+}

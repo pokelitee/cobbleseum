@@ -584,6 +584,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 15** (arena presets): three new arenas join the seed's choice, so a seed can land in a different arena; fields play as before, and coliseums around terrain flatten at the wall. No new batch.
 - **Rules version 14** (the continuous landscape and features; 1,000 battles): median 40.4 s, 10th–90th percentile 20.9–76.0 s, draws 3.0%, side A 48.8%.
 - **Rules version 13** (a 14 m arena, more cover, the utility AI's terrain tactics; 1,000 battles): median 40.3 s, 10th–90th percentile 20.1–74.9 s, draws 3.0%, side A 48.0%.
 - **Rules version 12** (terrain, §9.8; 1,000 battles): median 40.3 s, draws 2.6%, side A 48.6%. Over 100 battles across biomes, 3% of shots were blocked and fighters spent 3% of the time on raised ground; terrain is mild until the AI uses cover on purpose.
@@ -597,11 +598,11 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 
 Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.gd`). The battle is still played on the floor plane, with a height for every 1 m cell on top:
 
-- **Generation** (since rules version 14): one continuous landscape from the battle seed for the arena's biome, a height per 1 m cell in 0.5 m steps. Inside the arena, noise mounds (half the ground stays low, the rest rises up to about 2 m by biome) whose contours become terraces: walkable where neighbouring cells differ by a step, cliffs where they differ more. Beyond the wall the land eases into hills over 14 m (into the sea at the beach), so the battle area is part of the world, not a disc cut out of it.
+- **Generation** (since rules version 14): one continuous landscape from the battle seed for the arena's field, a height per 1 m cell in 0.5 m steps. Inside the arena, noise mounds (half the ground stays low, the rest rises up to about 2 m by biome) whose contours become terraces: walkable where neighbouring cells differ by a step, cliffs where they differ more. Beyond the wall the land eases into hills over 14 m (into the sea at the beach), so the battle area is part of the world, not a disc cut out of it. In a coliseum (an enclosed field, rules version 15) the mounds ease down to flat ground over the last 3 m inside the wall instead, and nothing rises beyond it.
 - **Features** stand on the ground, by biome: rock clusters (a 2–3 m centre with lower stones around it), trees, pines and palms (trunks block), fallen logs (low enough to step onto), basalt column clusters, stalagmites, ice spikes and crystals; 5–17 per arena, at least 2.5 m apart.
 - **Fairness:** each starting spot is level and open for 2.5 m, blending back into the land over 2 m, and the two starts are always connected by walkable ground (checked both ways; otherwise the land and features are toned down and regenerated, falling back to flat ground). The stadium is flat.
 - **Cost:** the battle only generates the arena and a 5 m margin; the presentation extends the same noise to the rest of the world. Creating a battle takes about 25 ms.
-- **Biome:** the arena is chosen in the simulation (the spec's `"arena"`, else the seed from biomes that suit the fighters' types), since it decides the terrain.
+- **Arena:** the arena preset (§12.7) is chosen in the simulation (the spec's `"arena"`, else the seed from the presets that suit the fighters' types), since its field and venue decide the terrain.
 - **Moving:** a fighter stands at the height of the cell under its centre and can step up 0.5 m (fliers 1.5 m); stepping down is free. Higher ground is a wall it slides along.
 - **Projectiles** leave from and aim at chest height (0.8 m above the ground), rising or falling to reach the foe, and stop where the ground rises above them. They hit within 1 m of the target's chest height.
 - **Melee and area moves** only reach across height differences of 1 m and 1.5 m.
@@ -822,7 +823,14 @@ The camera director picks from a set of shot types based on battle events:
 
 ### 12.7 Arenas
 
-Battles take place in one of six biomes: grassland, beach, volcano, snowfield, cave and stadium (`game/presentation/arena/`). Arenas are presentation only; the battle is always the flat round arena of §9.1.
+An arena is a preset (`Arenas`): one JSON file in `game/data/arenas/`, named after the arena, so adding one is adding a file. A preset combines:
+
+- a **field** (`Terrain.FIELDS`), the ground the battle is fought on, which is the simulation's (§9.8): grassland, beach, volcano, snowfield, cave, or flat paving. `ArenaFields` holds each field's colours, props and details;
+- a **venue**: `open` (the field's own landscape all around) or `coliseum` (`Stadium`, around any field), with an optional **theme** for the coliseum's colours (stone, paving, apron, seats, trim, outside ground, a banner colour per side, moss);
+- its **look**: sky, sun, ambient light, fog and weather particles (colours as `"#rrggbb"`);
+- how a battle without a requested arena may get it: `"always"`, or `"suits"` with a list of types.
+
+The presets are grassland, beach, volcano, snowfield, cave and stadium (the open fields and the paved coliseum), plus a night stadium, a garden coliseum (grassland in sandstone stands) and a frost coliseum (snowfield in pale blue stands). Presets evoke kinds of places (a league stadium at night, a gym's battle hall) and never reproduce specific locations from the games or the anime.
 
 - **Style:** low-poly, flat-shaded scenery with pixel textures, which sits next to Cobblemon's blocky models without copying them. Built procedurally, so no outside art or licences are needed:
   - **Ground** (`Arena._ground_cell`): a faceted mesh with a vertex at every cell corner. The four cells around a corner are grouped by height (from the lowest, a group spans at most a 0.5 m step) the same way whichever cell asks, and each cell takes its group's average. So walkable ground slopes smoothly and shares its corners exactly, and the ground only parts at real steps and cliffs, closed by walls built once per edge and seen from both sides (small steps shaded ground, cliffs bare stone). Corners are nudged up to 0.18 m off the grid so it doesn't read as squares. The visible slope stays within a step of the battle's terraces; fighters are drawn on the slope.
@@ -831,16 +839,16 @@ Battles take place in one of six biomes: grassland, beach, volcano, snowfield, c
   - **Pixel grain:** the surface shader lays 16 pixels per metre on each face (UVs in metres), with grime toward the ground on upright faces (moss in the stadium). Cobblemon's own pixels are 16 per block before the roster's scale, which puts the models at 15–27 pixels per metre (20 at the median scale of 0.8), close to the arenas'.
   - **Light:** screen-space ambient occlusion, so creases and the bases of rocks read.
 - **Layout:**
-  - the battle's own landscape (§9.8) out to 44 m, with its features: no floor or kerb, the arena is part of the land;
+  - in the open, the battle's own landscape (§9.8) out to 44 m, with its features: no floor or kerb, the arena is part of the land. In a coliseum the field's ground is built only out to the field's edge, with a stone kerb along it and the apron raised a little;
   - the ground coloured by slope (bare stone on steep ground), height and patches (paths, gravel, ash, trampled snow), with small low-poly details the battle ignores, gathered in patches as clusters on the visible ground: grass tufts (a low mound with a few lighter blades, since thin blades shade dark), flowers on stems, faceted pebbles, shells, snow drifts, jagged glowing cracks and glowing mushrooms;
   - props on the land beyond the wall, three times as dense in the first 3 m, so a treeline or ring of rocks marks the edge;
   - the sea around the beach.
 
   Cameras may go 2 m past the wall; see-through keeps the fighters in view if the land is in the way.
-- **Look:** each biome sets its sky, sun angle and colour, ambient light, fog and weather particles (petals, blown sand, rising embers, snow, cave dust).
-- **Choice:** `"arena"` in a battle spec or `--arena=<biome>` picks one. Otherwise the battle seed picks from grassland, stadium and the biomes the fighters' types suit (Fire → volcano, Ice → snowfield, Water → beach, Rock, Ground, Ghost and Dark → cave, and so on). The choice is the simulation's, since each biome's terrain is part of the battle (§9.8); the floor, plateaus and pillars are built from that terrain, and fighters stand at its height.
-- **The stadium** (`Stadium`) is a coliseum rather than terrain, about 15 m tall and 75 m across:
-  - the field of concentric rings of pale paving with painted lines (boundary, halfway line, centre circle), then an apron of grey-green paving with a trainer's box at each end;
+- **Look:** each preset sets its sky, sun angle and colour, ambient light, fog and weather particles (petals, blown sand, rising embers, snow, cave dust).
+- **Choice:** `"arena"` in a battle spec or `--arena=<name>` picks one. Otherwise the battle seed picks from the presets offered always (grassland, stadium) and those that suit one of the fighters' types (Fire → volcano, Ice → snowfield and the frost coliseum, Water → beach and the frost coliseum, Rock, Ground, Ghost and Dark → cave, Dark, Ghost and Electric → the night stadium, and so on). The choice is the simulation's, since the field's terrain is part of the battle (§9.8); the ground and features are built from that terrain, and fighters stand at its height. New presets in the pool change which arena a seed gets, so they bump the rules version.
+- **The coliseum** (`Stadium`) is about 15 m tall and 75 m across:
+  - the field (concentric rings of pale paving with painted lines: boundary, halfway line, centre circle; or the preset's field of terrain inside a kerb), then an apron of grey-green paving with a trainer's box at each end;
   - a 2.4 m stone wall with a coping;
   - lower stands, a concourse, upper stands and a parapet, split into 16 sections by pillars, with a tunnel into the lower rows of every other section;
   - a roof ring on posts with a floodlight bank, and banners on the parapet in each side's colour;
@@ -848,7 +856,7 @@ Battles take place in one of six biomes: grassland, beach, volcano, snowfield, c
   - a cool, slightly dim day, so the moves' colours stand out.
 - **Cameras** stay inside a limit each arena sets (just inside the stadium's wall, or where the ground starts to rise elsewhere), so they never end up inside the scenery.
 - **Seats:** the arena offers seats facing the floor (on the stands' rows, else on low terrain nearby) for spectators.
-- **Determinism:** everything, the weather included (fixed particle seeds), comes from the biome and the battle seed, so every render of a battle is identical.
+- **Determinism:** everything, the weather included (fixed particle seeds), comes from the preset and the battle seed, so every render of a battle is identical.
 
 ## 13. Ranking
 
@@ -987,10 +995,10 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **Presentation-only life:** leaning into movement, head tracking, squash on landing and recoil.
 - Sim changes bump the rules version and get a balance batch and a new ranking.
 
-**M7: arenas.** Six procedural voxel biomes are done (§12.7).
+**M7: arenas.** Arena presets (a field, a venue and a look) are done, with nine presets (§12.7).
 
-- Three or four biomes (for example grassland, beach, cave, volcano, snowfield, stadium), each with its own ground, props, sky, lighting, fog and weather particles, picked at random or by the fighters' types.
-- Crowds: spectator stands with cheap animated spectators, including Cobblemon models at the edges, reacting to big hits and knockouts.
+- Biomes, each with its own ground, props, sky, lighting, fog and weather particles, picked at random or by the fighters' types. Done as presets: five open fields, the paved stadium, a night stadium and two coliseums around fields of terrain.
+- Crowds: cheap animated spectators in a venue's stands (coliseums only), including Cobblemon models at the edges, reacting to big hits and knockouts.
 - Cosmetic first; terrain that affects play (cover, water, elevation) only later, as a rules change the AI understands.
 - Environment art comes from openly licensed sets or is made in-house; Minecraft's own textures aren't usable.
 

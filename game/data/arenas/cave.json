@@ -1,0 +1,21 @@
+{
+	"name": "Cave",
+	"field": "cave",
+	"venue": "open",
+	"suits": ["Rock", "Ground", "Ghost", "Dark"],
+	"sky": ["#0a0a0f", "#14141a"],
+	"sun": {
+		"angle": [-80, 10, 0],
+		"colour": "#bfccff",
+		"energy": 0.55
+	},
+	"ambient": {
+		"colour": "#737399",
+		"energy": 0.6
+	},
+	"fog": {
+		"colour": "#0f0f17",
+		"density": 0.03
+	},
+	"particles": "dust"
+}

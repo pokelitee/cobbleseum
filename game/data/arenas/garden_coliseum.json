@@ -1,0 +1,33 @@
+{
+	"name": "Garden coliseum",
+	"field": "grassland",
+	"venue": "coliseum",
+	"suits": ["Grass", "Fairy", "Bug"],
+	"theme": {
+		"stone": "#c9b48e",
+		"stone_dark": "#a8936e",
+		"trim": "#7a8a4a",
+		"seats": "#bba783",
+		"seats_alt": "#ae9a77",
+		"apron": "#9c8a6a",
+		"apron_light": "#a99778",
+		"ground": "#5e8a44",
+		"banners": ["#d0593e", "#3f8fb0"],
+		"moss": 0.5
+	},
+	"sky": ["#4c8feb", "#c2dbf2"],
+	"sun": {
+		"angle": [-48, 30, 0],
+		"colour": "#fff2d9",
+		"energy": 1.05
+	},
+	"ambient": {
+		"colour": "#9eadbd",
+		"energy": 0.85
+	},
+	"fog": {
+		"colour": "#c2dbf2",
+		"density": 0.0015
+	},
+	"particles": "petals"
+}
