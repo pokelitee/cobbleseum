@@ -265,6 +265,7 @@ static func _screens(arena: Arena, names: Array) -> void:
 			continue
 		var label := Label3D.new()
 		label.text = "%s\nVS\n%s" % [str(names[0]).to_upper(), str(names[1]).to_upper()]
+		label.font = UiFonts.DISPLAY
 		label.font_size = 180
 		# Three lines filling about four fifths of the screen's height.
 		label.pixel_size = (screen_top - screen_bottom) * 0.8 / (3.0 * 1.3 * label.font_size)

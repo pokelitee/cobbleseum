@@ -36,6 +36,29 @@ func test_bar_colour_follows_health() -> void:
 	hud.free()
 
 
+func test_plates_show_types_and_the_hp_percentage() -> void:
+	var hud := Hud.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(hud)
+	hud.setup(["Left", "Right"], Vector2(1920, 1080), [["Fire", "Flying"], ["Water"]])
+	var pills := hud._badge_rows[0].get_children().map(func(l: Label) -> String: return l.text)
+	assert_eq(pills, ["FIRE", "FLYING"])
+	hud.set_status(0, "brn", true)
+	assert_eq(hud._badge_rows[0].get_child_count(), 3, "status badges follow the type pills")
+	hud.set_hp(1, 0.423)
+	assert_eq(hud._percents[1].text, "43%", "rounded up, so a fighter with HP left never shows 0%")
+	hud.set_hp(1, 0.0)
+	assert_eq(hud._percents[1].text, "0%")
+	hud.free()
+
+
+func test_plain_text_uses_the_body_font() -> void:
+	UiFonts.use_by_default()
+	var label := Label.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(label)
+	assert_eq(label.get_theme_font("font"), UiFonts.BODY)
+	label.free()
+
+
 func test_banners_stay_on_screen() -> void:
 	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
 		var hud := _hud(size)

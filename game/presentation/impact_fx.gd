@@ -125,6 +125,7 @@ func next_frame() -> void:
 func _callout(text: String, anchor: Vector3, colour: Color, font_size: int, offset: float) -> void:
 	var label := Label.new()
 	label.text = text
+	label.add_theme_font_override("font", UiFonts.DISPLAY)
 	label.add_theme_font_size_override("font_size", roundi(font_size * _ui_scale))
 	label.add_theme_color_override("font_color", colour)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
