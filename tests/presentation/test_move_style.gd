@@ -37,3 +37,24 @@ func test_parse_table_rejects_duplicates_and_unknown_styles() -> void:
 	assert_true(MoveStyle.parse_table('{"beam": ["a"], "orb": ["a"]}').get("error", "").contains("both beam and orb"))
 	assert_true(MoveStyle.parse_table('{"laser": ["a"]}').get("error", "").contains("unknown style"))
 	assert_eq(MoveStyle.parse_table('{"_comment": "x", "beam": ["a"]}'), {"table": {"a": "beam"}})
+
+
+func test_projectiles_still_in_flight_end_with_the_battle() -> void:
+	var species := {"squirt": {"name": "Squirt", "types": ["Water"], "baseStats": {"hp": 80, "atk": 80, "def": 100, "spa": 85, "spd": 100, "spe": 80}}}
+	var moves := {"jet": {"name": "Jet", "category": "Special", "type": "Water", "basePower": 80, "accuracy": 100, "pp": 15, "priority": 0, "flags": {}, "target": "normal"}}
+	var spec := {"seed": 1, "arena": "stadium", "fighters": [{"species": "squirt", "moves": ["jet"]}, {"species": "squirt", "moves": ["jet"]}]}
+	var battle: Battle = Battle.create(spec, BattleData.new(species, moves, {}), [Idle.new(), Idle.new()]).battle
+	battle.projectiles.append({"id": 0, "owner": 0, "move": 0, "position": Vector2(0, -2), "velocity": Vector2(0, 0.5), "height": 1.0})
+	var fx := MoveFX.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(fx)
+	fx.sync_projectiles(battle)
+	assert_eq(fx._projectiles.size(), 1, "a projectile in flight is drawn")
+	battle.result = Battle.Result.WIN_A
+	fx.sync_projectiles(battle)
+	assert_eq(fx._projectiles.size(), 0, "and ends when the battle does, though the simulation still lists it")
+	fx.free()
+
+
+class Idle extends RefCounted:
+	func decide(_battle: Battle, _side: int) -> Dictionary:
+		return {}

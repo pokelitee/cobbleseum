@@ -224,10 +224,13 @@ func dodge(view: FighterView, direction: Vector2) -> void:
 	_rush(view, Vector3(direction.x, 0, direction.y), Color(0.85, 0.95, 1.0))
 
 
-## Matches projectile visuals to the simulation's projectiles and moves them.
+## Matches projectile visuals to the simulation's projectiles and moves them. Once the battle
+## is over, the ones still in flight end: the simulation stops stepping, so they would hang in
+## the air through the knockout and the victory.
 func sync_projectiles(battle: Battle) -> void:
 	var alive: Array[Dictionary] = []
-	for projectile in battle.projectiles:
+	var flying: Array = [] if battle.is_over() else battle.projectiles
+	for projectile in flying:
 		var visual := _visual_for(projectile)
 		if visual.is_empty():
 			var move := battle.fighters[projectile.owner].moves[projectile.move]
