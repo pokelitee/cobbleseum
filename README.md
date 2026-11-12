@@ -34,13 +34,13 @@ Run a battle headless (prints the result, length and a checksum per seed). In a 
 godot --headless --path . --script res://tools/battle.gd -- game/data/battles/showcase.json --seeds=10
 ```
 
-Run a balance report: seeded random pairings of the whole roster with standard movesets. It prints battle length, draw rate, how often type advantage wins, move-kind use and side bias, and writes everything to `results/`:
+Run a balance report: seeded random matchups of the whole roster with standard movesets. It prints battle length, draw rate, how often type advantage wins, move-kind use and side bias, and writes everything to `results/`:
 
 ```bash
 godot --headless --path . --script res://tools/batch.gd -- --battles=500 --seed=1
 ```
 
-Pit two AIs against each other over random pairings (side A's win rate shows which is stronger):
+Pit two AIs against each other over random matchups (side A's win rate shows which is stronger):
 
 ```bash
 godot --headless --path . --script res://tools/batch.gd -- --battles=300 --ai-a=hard --ai-b=easy
@@ -68,7 +68,7 @@ Instead of a spec file, flags can describe an AI-vs-AI battle, here and in the w
 godot --headless --path . --script res://tools/record.gd -- --watch=garchomp --vs=hydreigon --ai=hard --vs-ai=easy --seed=7
 ```
 
-Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves; gamepad: left stick, A to dodge, X Y B RB for moves). R starts a rematch and Esc quits. Each battle's replay is saved to `recordings/replays/`, and `tools/record.gd` can render one like any spec:
+Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves; gamepad: left stick, A to dodge, X Y B RB for moves). R starts a rematch and Esc quits. Each battle's spec, with every tick's intents, is saved to `recordings/replays/`, and `tools/record.gd` can render one like any spec:
 
 ```bash
 godot --path . -- --play=cinderace --vs=blastoise --ai=normal
@@ -119,6 +119,7 @@ The design is described in the [concept brief](concepts_brief.md). In short:
 ## Documentation
 
 - [concepts_brief.md](concepts_brief.md): goals, decisions, asset sources, rules, architecture, milestones and open questions.
+- [GLOSSARY.md](GLOSSARY.md): the project's domain terms, which code, docs and discussion use.
 
 ## Contributing
 

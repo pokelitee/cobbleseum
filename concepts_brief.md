@@ -51,7 +51,7 @@ Non-goals:
   - Pokémon GO as an asset source.
 - **Left out of the first version:**
   - Abilities, held items, Terastallization, Mega Evolution and Gigantamax.
-  - Field effects such as weather, terrain, entry hazards and screens.
+  - Arena moves such as weather, Pokémon's terrains, entry hazards and screens.
 
 ## 4. Constraints
 
@@ -132,7 +132,7 @@ Modrinth publishes only SHA-1 and SHA-512 hashes, so the manifest records a SHA-
 
 **Terms used below:**
 
-- A **poser** says which clips a species plays in each pose, such as standing or flying in battle. It also lists one-off clips (physical attack, special attack, cry), head-tracking bones and idle quirks like blinking.
+- A **poser** says which animations a species plays in each pose, such as standing or flying in battle. It also lists one-off animations (physical attack, special attack, cry), head-tracking bones and idle quirks like blinking.
 - A **resolver** lists a species' visual **variations**. Each variation is selected by **aspects** (shiny, female, Alolan, …) and names a model, a texture, a poser and optional extra texture layers.
 
 **What we use:** geometry, animations, textures, posers, resolvers, cries and move sounds. From the species data we use only the `implemented` flag and `baseScale`. All battle data comes from Showdown, so stats and moves have a single source of truth.
@@ -143,7 +143,7 @@ Modrinth publishes only SHA-1 and SHA-512 hashes, so the manifest records a SHA-
 - **Forms:** regional forms exist as resolver variations: 66 Alolan, 43 Hisuian, 40 Galarian and 12 Paldean variation entries. There are no Mega or Gigantamax forms.
 - **Animation coverage is uneven.** Of the 904 species with animation files:
 
-  | Clip | Species with it |
+  | Animation | Species with it |
   |---|---|
   | `ground_idle` | 860 |
   | `cry` | 758 |
@@ -158,7 +158,7 @@ Modrinth publishes only SHA-1 and SHA-512 hashes, so the manifest records a SHA-
   | `special` | 103 |
 
   - Only 58 species have the full set of battle idle, physical, special, faint, cry and recoil.
-  - 316 species have no walk, run or fly clip.
+  - 316 species have no walk, run or fly animation.
 - **Posers:** 248 species have no JSON poser. Their pose logic is compiled into the mod's code, which we can't use.
 - **Molang:** 714 of the 1,010 animation files contain Molang expressions, Bedrock's small expression language.
   - Almost all of them are functions of animation time: `q.anim_time` with `math.sin`, `math.cos` and `math.clamp`.
@@ -240,7 +240,7 @@ godot --headless --path . --script tools/assets.gd -- [all|fetch|extract|convert
   - any binary over a size threshold.
 - Test fixtures are original, hand-made files.
 
-**Credits.** The pipeline collects the licence of every converted model into a credits file. The game's credits screen and the clip end card use it.
+**Credits.** The pipeline collects the licence of every converted model into a credits file. The game's credits screen and every clip's credits card use it.
 
 ## 7. Converting Cobblemon models
 
@@ -297,7 +297,7 @@ The geometry header gives the texture size.
 
 ### 7.3 Animations
 
-**The format.** An `.animation.json` file holds clips named `animation.<species>.<clip>`. Each clip has:
+**The format.** An `.animation.json` file holds animations named `animation.<species>.<name>`. Each animation has:
 
 - a length;
 - a loop mode: loop, play once, or hold on the last frame;
@@ -313,7 +313,7 @@ Each channel is either a constant or a set of timed keyframes:
 
 1. Every channel is evaluated at a fixed 60 Hz by our own evaluator. The evaluator matches Bedrock's interpolation: a Catmull-Rom segment uses the keys on either side as neighbours, duplicating the end keys at the edges.
 2. The samples are stored as Godot animation tracks with linear interpolation. Rotations are stored as quaternions relative to the bone's rest pose.
-3. `math.random` gets a fixed seed per clip, so converted clips are deterministic.
+3. `math.random` gets a fixed seed per animation, so converted animations are deterministic.
 
 **Molang.** A small parser and evaluator covers the subset found in the jar:
 
@@ -326,12 +326,12 @@ Unknown queries and variables, such as riding yaw and a few custom variables, ev
 **Posers:**
 
 - For the 657 species with a JSON poser, the converter reads:
-  - the clips for each battle pose;
-  - the named one-off clips: physical, special, status, cry and recoil;
+  - the animations for each battle pose;
+  - the named one-off animations: physical, special, status, cry and recoil;
   - head-tracking bones and their limits;
   - quirks such as blinking.
 - The 248 species without a poser use a name-based fallback: `battle_idle`, else `ground_idle`, with `air_idle` for species that fly.
-- **Air clips and parts:** the hover pose's clip becomes the `air_idle` role and the fly pose's `air_fly` (about 120 species), falling back to clips of those names. Poses also show or hide parts (`transformedParts`), mostly open or folded wings on about 40 birds; the standing pose's set and the hover (else fly) pose's set are stored as the model's `parts`. In the game, a `PartSwap` skeleton modifier scales the hidden parts' bones to zero after the clip has posed them, so either stance works with any clip. Before this, both sets of wings showed at once.
+- **Air animations and parts:** the hover pose's animation fills the `air_idle` role and the fly pose's animation fills `air_fly` (about 120 species), falling back to animations of those names. Poses also show or hide parts (`transformedParts`), mostly open or folded wings on about 40 birds; the standing pose's set and the hover (else fly) pose's set are stored as the model's `parts`. In the game, a `PartSwap` skeleton modifier scales the hidden parts' bones to zero after the animation has posed them, so either stance works with any animation. Before this, both sets of wings showed at once.
 
 **Resolvers:** the converter takes the base variation (no aspects) or the requested aspects (shiny, female, regional form).
 
@@ -339,28 +339,28 @@ Unknown queries and variables, such as riding yaw and a few custom variables, ev
 
 Animations play in three layers:
 
-1. **Base loop:** an idle or locomotion clip, crossfaded between states. Walk and run clips play faster or slower to match movement speed. Base clips are padded so that bones they don't key hold the idle pose; otherwise a crossfade passes through the rest pose and the model briefly looks like it's in a T-pose.
-2. **One-off actions** on top: attack clips, applied only to the bones they key.
+1. **Base loop:** an idle or locomotion animation, crossfaded between states. Walk and run animations play faster or slower to match movement speed. Base animations are padded so that bones they don't key hold the idle pose; otherwise a crossfade passes through the rest pose and the model briefly looks like it's in a T-pose.
+2. **One-off actions** on top: attack animations, applied only to the bones they key.
 3. **Additive reactions:** hit recoil, cries and blinking, applied as offsets from rest and faded in and out.
 
-**Procedural layer.** Most species lack attack, hit or faint clips, so a procedural layer on the model root fills the gaps:
+**Procedural layer.** Most species lack attack, hit or faint animations, so a procedural layer on the model root fills the gaps:
 
 - a hop, bob or glide for movement;
 - a lunge, spin or squash-and-stretch for attacks;
 - a tilt and knockback for hits;
-- a tip-over and fade for fainting.
+- a tip-over and fade for knockouts.
 
-Implemented in `game/presentation/procedural_motion.gd`, as a transform on a node between the fighter and its model, so it stacks with clips, knockback and the hit flash. It fills in only the roles a species has no clip for:
+Implemented in `game/presentation/procedural_motion.gd`, as a transform on a node between the fighter and its model, so it stacks with animations, knockback and the hit flash. It fills in only the animation roles a species has no animation for:
 
-- a hop while walking (408 entries have no walk clip);
+- a hop while walking (408 entries have no walk animation);
 - a lunge for physical moves, a rear-back with squash and stretch for special moves, and a spin for status moves;
 - a backward tilt for hits;
 - slow breathing while asleep;
-- tipping over and sinking for fainting, instead of fading.
+- tipping over and sinking for knockouts, instead of fading.
 
-Flying types hover and bob throughout. The layer advances per video frame at the clips' speed, so it freezes in hit-stop and slows in slow motion.
+Flying types hover and bob throughout. The layer advances per video frame at the animations' speed, so it freezes in hit-stop and slows in slow motion.
 
-Since M6 it also adds life on top of every clip, for every species:
+Since M6 it also adds life on top of every animation, for every species:
 
 - leaning into movement: pitched forward by forward speed and banked by sideways speed, twice as much for fliers;
 - fliers swooping low when moving faster than walking (from 4 m/s, fully at a 10 m/s melee dash);
@@ -369,31 +369,31 @@ Since M6 it also adds life on top of every clip, for every species:
 
 Knockback is the simulation's own since rules version 9, so the view no longer fakes it.
 
-**More of Cobblemon's clips** (presentation only):
+**More of Cobblemon's animations** (presentation only):
 
-- **Cries:** each fighter plays its cry clip when the battle opens, in time with its cry sound.
-- **Blinks and fidgets:** a second animation player layers the blink clip (about 930 species), and now and then one of the standing pose's idle quirks (look around, sniff, tail twitch; about 200 species, only while idling), every 2–6 s. It's seeded by the model, so renders repeat exactly, and it only touches the bones those clips animate.
-- **Emotions:** a crit or super-effective hit plays `shock` (falling back to `surprised`) instead of the hit clip, a stat drop while ready plays `angry`, the winner loops `happy`, and a time-up draw plays `sad` on both (about 100–210 species each).
-- **Running:** grounded fighters with a `ground_run` clip run above 3.5 m/s.
+- **Cries:** each fighter plays its cry animation when the battle opens, in time with its cry sound.
+- **Blinks and fidgets:** a second animation player layers the blink animation (about 930 species), and now and then one of the standing pose's idle quirks (look around, sniff, tail twitch; about 200 species, only while idling), every 2–6 s. It's seeded by the model, so renders repeat exactly, and it only touches the bones those animations move.
+- **Emotions:** a crit or super-effective hit plays `shock` (falling back to `surprised`) instead of the hit animation, a stat drop while ready plays `angry`, the winner loops `happy`, and a time-up draw plays `sad` on both (about 100–210 species each).
+- **Running:** grounded fighters with a `ground_run` animation run above 3.5 m/s.
 - **Sleeping in the air:** hovering species with `air_sleep` sleep in mid-air.
 
 ### 7.5 Quality checks
 
 A QA pass over every roster species reports:
 
-- clips that leave the model in its rest pose;
+- animations that leave the model in its rest pose;
 - feet sinking below the floor;
 - wrong facing;
 - unknown Molang;
-- missing clips.
+- missing animations.
 
 The report feeds the roster flags (§8). The QA runs locally, and its reports stay in the cache.
 
-**Visual review.** `tools/preview_roster.gd` renders roster species as they appear in battle: at roster scale, partway into the idle clip, beside their hitbox capsule. It writes a contact sheet, either for named species or for every species with a QA flag. The first pass, in M2, covered every flagged species and all 100 forms, and found:
+**Visual review.** `tools/preview_roster.gd` renders roster species as they appear in battle: at roster scale, partway into the idle animation, beside their hitbox capsule. It writes a contact sheet, either for named species or for every species with a QA flag. The first pass, in M2, covered every flagged species and all 100 forms, and found:
 
-- **Rest poses aren't real faults.** Comparing rest-pose height with the hitbox flagged 73 species, but rest poses are often stretched out (Seviper's is 10.6 m tall), and every one looked right in its idle pose. The QA now samples the idle clip instead (`pose_mismatch`, 33 species). These are models that are genuinely bigger than their hitbox because of wings, flames, claws or tails, and they also look right.
+- **Rest poses aren't real faults.** Comparing rest-pose height with the hitbox flagged 73 species, but rest poses are often stretched out (Seviper's is 10.6 m tall), and every one looked right in its idle pose. The QA now samples the idle animation instead (`pose_mismatch`, 33 species). These are models that are genuinely bigger than their hitbox because of wings, flames, claws or tails, and they also look right.
 - **Missing texture layers.** Resolver variations can add texture layers over the model: emissive eyes, flames and markings, Vivillon's wing patterns, manes and translucent parts. 186 roster entries use them. The converter now draws them as extra material passes: emissive layers unshaded, the rest shaded with alpha.
-- **Clips in the wrong animation group.** Forms with a poser of their own (Gourgeist's sizes) still use the species' animations, and some species' idle clips are named `air_idle`, `water_idle` or `idle`. Clip lookup now searches the poser's group, then the species', then any other group in the files. It accepts those names, and uses a non-battle standing pose when there's no battle one. Species without an idle clip went from 58 to 7.
+- **Animations in the wrong group.** Forms with a poser of their own (Gourgeist's sizes) still use the species' animations, and some species' idle animations are named `air_idle`, `water_idle` or `idle`. Animation lookup now searches the poser's group, then the species', then any other group in the files. It accepts those names, and uses a non-battle standing pose when there's no battle one. Species without an idle animation went from 58 to 7.
 
 ## 8. Roster and species identity
 
@@ -412,16 +412,16 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - **Roster file:** the pipeline writes one entry per species:
   - Showdown ID, Cobblemon folder and aspects;
   - scaled height and capsule;
-  - available clips and whether a poser exists;
+  - available animations and whether a poser exists;
   - QA flags and licence.
 
   Headless simulation reads only this file and never loads models.
-- **QA report:** `report.json` counts species per flag: missing clip roles (`no_idle`, `no_faint`, …), `no_poser`, `no_hitbox`, `no_licence_file` (410 entries whose model folder has no licence file), Molang and bone problems, and `pose_mismatch` (33 entries whose height in their idle pose differs from their hitbox by more than 2×; reviewed in M2 and all correct, see §7.5).
+- **QA report:** `report.json` counts species per flag: missing animation roles (`no_idle`, `no_faint`, …), `no_poser`, `no_hitbox`, `no_licence_file` (410 entries whose model folder has no licence file), Molang and bone problems, and `pose_mismatch` (33 entries whose height in their idle pose differs from their hitbox by more than 2×; reviewed in M2 and all correct, see §7.5).
 - **Caching:** each converted model has a key over its input files and the converter scripts. Rebuilds reuse models whose key still matches, from the previous build or an interrupted one.
 
 ## 9. Battle rules
 
-### 9.1 Format
+### 9.1 Battle setup
 
 - One-on-one, in a round arena with walls (no ring-outs), 14 m in radius since rules version 13 (8 m until version 11, then 11 m), with fighters starting 10 m apart. Once fighters kept their distance (version 9), 8 m was cramped: they spent 11% of the time within a metre of the wall, 6% at 11 m. With terrain (§9.8) the extra room holds plateaus and cover; fighters don't use all of it at once, and needn't. Rankings use this one size.
 - The simulation runs at a fixed 30 ticks per second.
@@ -443,7 +443,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - **Facing:** fighters turn at 360° a second (900° while winding up, to aim). Walking, they face between the foe and where they're going, so they turn away to run and square up to fight, instead of always staring at each other.
 - **Agility** (rules version 10): acceleration and turning scale with body, by the square root of the Speed stat over 120 (a base-100 species) times (50 kg / weight)^0.15, within ×0.6 to ×1.5. Heavy, slow species lumber; light, fast ones dart, and the utility AI switches strafe direction more often for them. Flying types brake at half their acceleration, so they glide to a stop.
 - **Knockback:** a hit pushes the defender away at up to 5 m/s (at 8% of max HP or more, less for smaller hits), scaled by weight: lighter species fly further, heavier ones barely move (within ×0.5 to ×1.5 of a 50 kg species).
-- **Flying:** Flying-type species, and species whose only idle is an air idle, hover above the ground. Hovering species with air clips play `air_idle` and `air_fly` instead of idle and walk, with their air parts (open wings). Species with air clips only for being ridden in flight (Blastoise, Garchomp) stay grounded. This is presentation only.
+- **Flying:** Flying-type species, and species whose only idle is an air idle, hover above the ground. Hovering species with air animations play `air_idle` and `air_fly` instead of idle and walk, with their air parts (open wings). Species with air animations only for being ridden in flight (Blastoise, Garchomp) stay grounded. This is presentation only.
 
 All constants in this section are starting points for tuning (§9.7).
 
@@ -471,12 +471,12 @@ In the code, multi-hit, charge and recharge are properties of the melee, project
 - **Multi-hit:** strikes 0.12 s apart. Moves that hit 2–5 times use the main-series weights (2 and 3 hits 35% each, 4 and 5 hits 15% each). Cooldowns use the move's total expected power.
 - **Charge:** 0.9 s longer wind-up. **Recharge:** 1 s longer recovery. Fly and Dig's semi-invulnerable charge turn isn't modelled.
 - **Fixed damage** (Seismic Toss, Night Shade, Dragon Rage, Sonic Boom) deals its main-series amount, unscaled, like every other move's damage, so it keeps its balance against them.
-- **Self-destructing moves** (Explosion, Self-Destruct, Misty Explosion) faint the user.
+- **Self-destructing moves** (Explosion, Self-Destruct, Misty Explosion) knock out the user.
 
-For the 850 standard moves, 616 are playable: 243 melee, 238 projectile, 64 area, 26 self-buff, 18 debuff, 17 status and 10 heal. The rest are field moves, special cases and moves whose power is computed in code.
+For the 850 standard moves, 616 are playable: 243 melee, 238 projectile, 64 area, 26 self-buff, 18 debuff, 17 status and 10 heal. The rest are arena moves, special cases and moves whose power is computed in code.
 
 **Not in the first version:**
-- 30 field moves: weather, terrain, hazards and screens.
+- 30 arena moves: weather, Pokémon's terrains, hazards and screens.
 - 106 special-case moves, such as Protect, Substitute, Counter and Transform.
 
 **Phases.** Every move has a wind-up, an active window and a recovery.
@@ -567,7 +567,7 @@ All rules constants live in one committed data file. Batch simulation (§13) rep
 - win rate for the side with type advantage;
 - how often each move kind is used.
 
-Constants are tuned against targets for these numbers. `tools/batch.gd` runs seeded random pairings of every roster species with its standard moveset and writes the report to `results/`.
+Constants are tuned against targets for these numbers. `tools/batch.gd` runs seeded random matchups of every roster species with its standard moveset and writes the report to `results/`.
 
 **First tuning pass** (rules version 6, including stage decay; 500 battles each, two seeds; about 57 ms per battle):
 
@@ -580,14 +580,14 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 
 - **Changes:** the HP multiplier went from 8 to 22, which put the median in range. That pushed the slowest 10% (resisted matchups and weak unevolved species) into the 90 s cap, so overtime was added to finish them.
 - **Move use:** melee 43–44%, projectile 35%, area 12–13%, self-buff 7%, heal 1%, status 1%. Debuffs are almost never in a generated moveset.
-- **Side bias:** with every pairing run both ways round, side A wins 49.2% of 571 decided battles.
+- **Side bias:** with every matchup run both ways round, side A wins 49.2% of 571 decided battles.
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
 - **Rules version 15** (arena presets): three new arenas join the seed's choice, so a seed can land in a different arena; fields play as before, and coliseums around terrain flatten at the wall. No new batch.
 - **Rules version 14** (the continuous landscape and features; 1,000 battles): median 40.4 s, 10th–90th percentile 20.9–76.0 s, draws 3.0%, side A 48.8%.
 - **Rules version 13** (a 14 m arena, more cover, the utility AI's terrain tactics; 1,000 battles): median 40.3 s, 10th–90th percentile 20.1–74.9 s, draws 3.0%, side A 48.0%.
-- **Rules version 12** (terrain, §9.8; 1,000 battles): median 40.3 s, draws 2.6%, side A 48.6%. Over 100 battles across biomes, 3% of shots were blocked and fighters spent 3% of the time on raised ground; terrain is mild until the AI uses cover on purpose.
+- **Rules version 12** (terrain, §9.8; 1,000 battles): median 40.3 s, draws 2.6%, side A 48.6%. Over 100 battles across fields, 3% of shots were blocked and fighters spent 3% of the time on raised ground; terrain is mild until the AI uses cover on purpose.
 - **Rules version 11** (an 11 m arena, fighters starting 10 m apart; 1,000 battles): median 39.7 s, 10th–90th percentile 20.7–72.9 s, draws 2.2%, side A 48.8%, melee 38% and projectiles 40% of move uses (unchanged). The average gap went from 3.5 m to 3.8 m.
 - **Rules version 10** (agility and gliding, 1,000 battles): median 38.0 s, 10th–90th percentile 20.2–71.9 s, draws 1.8%, side A 48.8%.
 - **Rules version 9** (facing, acceleration, knockback, and the utility AI's wider, varied spacing; 1,000 battles): median 37.8 s, 10th–90th percentile 20.1–70.9 s, draws 2.2%, side A 50.4%, misses up from 5.7 to 10 per battle. The average gap between fighters went from 1.6 m to 3.4 m, and the share of time more than 3 m apart from 13% to 51%.
@@ -598,8 +598,8 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 
 Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.gd`). The battle is still played on the floor plane, with a height for every 1 m cell on top:
 
-- **Generation** (since rules version 14): one continuous landscape from the battle seed for the arena's field, a height per 1 m cell in 0.5 m steps. Inside the arena, noise mounds (half the ground stays low, the rest rises up to about 2 m by biome) whose contours become terraces: walkable where neighbouring cells differ by a step, cliffs where they differ more. Beyond the wall the land eases into hills over 14 m (into the sea at the beach), so the battle area is part of the world, not a disc cut out of it. In a coliseum (an enclosed field, rules version 15) the mounds ease down to flat ground over the last 3 m inside the wall instead, and nothing rises beyond it.
-- **Features** stand on the ground, by biome: rock clusters (a 2–3 m centre with lower stones around it), trees, pines and palms (trunks block), fallen logs (low enough to step onto), basalt column clusters, stalagmites, ice spikes and crystals; 5–17 per arena, at least 2.5 m apart.
+- **Generation** (since rules version 14): one continuous landscape from the battle seed for the arena's field, a height per 1 m cell in 0.5 m steps. Inside the arena, noise mounds (half the ground stays low, the rest rises up to about 2 m by field) whose contours become terraces: walkable where neighbouring cells differ by a step, cliffs where they differ more. Beyond the wall the land eases into hills over 14 m (into the sea at the beach), so the battle area is part of the world, not a disc cut out of it. In a coliseum (an enclosed field, rules version 15) the mounds ease down to flat ground over the last 3 m inside the wall instead, and nothing rises beyond it.
+- **Features** stand on the ground, by field: rock clusters (a 2–3 m centre with lower stones around it), trees, pines and palms (trunks block), fallen logs (low enough to step onto), basalt column clusters, stalagmites, ice spikes and crystals; 5–17 per arena, at least 2.5 m apart.
 - **Fairness:** each starting spot is level and open for 2.5 m, blending back into the land over 2 m, and the two starts are always connected by walkable ground (checked both ways; otherwise the land and features are toned down and regenerated, falling back to flat ground). The stadium is flat.
 - **Cost:** the battle only generates the arena and a 5 m margin; the presentation extends the same noise to the rest of the world. Creating a battle takes about 25 ms.
 - **Arena:** the arena preset (§12.7) is chosen in the simulation (the spec's `"arena"`, else the seed from the presets that suit the fighters' types), since its field and venue decide the terrain.
@@ -607,7 +607,7 @@ Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.g
 - **Projectiles** leave from and aim at chest height (0.8 m above the ground), rising or falling to reach the foe, and stop where the ground rises above them. They hit within 1 m of the target's chest height.
 - **Melee and area moves** only reach across height differences of 1 m and 1.5 m.
 - **AI:** both AIs only use a move that can connect (a clear line for projectiles and status moves, a small enough height difference otherwise), and steer around ground they can't climb. The utility AI also has two terrain tactics where the ground rises at least 1 m somewhere: with no attack ready while the foe can see it and has a ranged attack coming, it heads for the nearest spot out of sight; with a ranged move ready and in range but no clear line, it heads for the nearest spot with one (spots are tried 16 ways at 1.5 and 3 m). They're chosen about 3–4% of the time in caves; their main effect is not getting stuck without a line of sight.
-- **Effect** (rules version 14, 60 battles per biome): 6% (beach) to 14% (cave) of shots hit rock, the fighters are out of each other's sight 10–26% of the time and on raised ground 14–20% of it.
+- **Effect** (rules version 14, 60 battles per field): 6% (beach) to 14% (cave) of shots hit rock, the fighters are out of each other's sight 10–26% of the time and on raised ground 14–20% of it.
 - **See-through:** in the view, anything between the camera and a fighter (above that fighter's ground) dissolves with a screen-door dither, so cover never hides the battle.
 - **Cost:** each cell keeps the highest ground within 3 cells, so collision and sight checks stop early where nothing rises; battles take about 20% longer to simulate.
 
@@ -626,7 +626,7 @@ Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.g
 - **Randomness** comes from our own small pseudo-random generator, implemented in GDScript and checked against published test vectors. Replays therefore never depend on engine internals.
   - Separate streams are derived from the battle seed: battle (crits, damage rolls, secondary effects), AI side A, AI side B, and cosmetics.
   - Changing the AI or the visuals never shifts battle luck.
-- **Animation never affects gameplay.** Hit timing comes from move data. Every species plays correctly whatever clips it has, and headless runs never load models.
+- **Animation never affects gameplay.** Hit timing comes from move data. Every species plays correctly whatever animations it has, and headless runs never load models.
 
 **Battle spec** (input):
 - rules version and data versions (manifest hashes);
@@ -675,7 +675,7 @@ The AI is a utility AI. At each decision step it scores every candidate action a
   - An action's score is the product of its considerations, with a compensation factor so actions with more considerations aren't unfairly penalised.
   - The current action gets a commitment bonus, plus a minimum hold time, so the AI doesn't flip between choices every tick.
 - **Choosing:** the highest score wins. Exact ties are broken by the side's AI random stream, never by list order.
-- **Difficulty profiles** are resources. Each sets reaction delay, aim error, decision interval and mistake chance.
+- **AI profiles** are resources. Each sets reaction delay, aim error, decision interval and mistake chance.
 - **Rankings** use one fixed "ranked" profile on both sides.
 - **Debugging:** an overlay shows each candidate's per-consideration scores. It's implemented in `game/presentation/ai_overlay.gd`: a panel per side listing the last decision's candidates, best first, each with a score bar and its considerations, and the chosen action highlighted. F3 toggles it in the window, and `--ai-debug` shows it from the start or records it (`tools/record.gd -- … --ai-debug`). It only reads scores the AI keeps when asked, so it never changes a battle.
 - **Tests:**
@@ -702,7 +702,7 @@ The AI is a utility AI. At each decision step it scores every candidate action a
 
   Scores are products with the compensation factor. Movement scores sit below any usable attack's. The commitment bonus and minimum hold time apply only between ways of moving.
 - **Not modelled:** aim error. The sim aims projectiles itself.
-- **First results** (300 random pairings each, corrected for side order):
+- **First results** (300 random matchups each, corrected for side order):
   - hard beats easy about 55% of the time;
   - the ranked utility AI is about level with the stand-in AI.
 
@@ -758,7 +758,7 @@ The camera director picks from a set of shot types based on battle events:
 | Projectile tracking | While a projectile is in flight |
 | Impact punch-in | On a heavy hit, critical hit or super-effective hit |
 | Low angle | On big hits from large fighters |
-| Knockout orbit | Around the faint, in slow motion |
+| Knockout orbit | Around the knockout, in slow motion |
 | Victory | After the knockout (2.5 s at normal speed): in front of the winner, a little to one side, slowly pushing in. The winner celebrates, the crowd cheers again, and the HUD's victory card slides in below: "WINNER", the name outlined in its side's colour, its HP left and the battle's length, while the name plates fade. Play mode keeps the plain "wins!" line, since a live battle has no planned ending. |
 
 - **Cuts:** timed to events, with a minimum shot length so the edit never jitters.
@@ -790,7 +790,7 @@ The camera director picks from a set of shot types based on battle events:
   - A name plate per fighter: dark and rounded, with a stripe in the side's colour (red for side A, blue for side B), the name, a pill per type in its type colour, and status badges as pills after them.
   - A rounded HP bar under the name with a light band along its top, its percentage (rounded up, so a fighter with HP left never shows 0%), and a lagging "damage taken" segment. Bars drain and shake on big hits; side B's mirrors in landscape so both drain toward the middle.
   - Move-name banners in the move's type colour, and callouts over the fighters.
-  - **Fonts** (`UiFonts`, `game/presentation/fonts/`, SIL Open Font License with the licences beside them): Lilita One, a chunky display face, for names, titles, banners, callouts and the stadium's screens; Nunito ExtraBold for everything else. The body font is set at startup, not as the project's custom font, because Godot loads that before a fresh checkout has imported the font files.
+  - **Fonts** (`UiFonts`, `game/presentation/fonts/`, SIL Open Font License with the licences beside them): Lilita One, a chunky display face, for names, titles, banners, callouts and the coliseum's screens; Nunito ExtraBold for everything else. The body font is set at startup, not as the project's custom font, because Godot loads that before a fresh checkout has imported the font files.
   - The intro card puts the two names, outlined in their sides' colours, either side of a gold "VS" (stacked in portrait). The winner's line sits on a dark band.
   - Intro and outro cards. Every clip ends with the credits card (§14).
 
@@ -811,7 +811,7 @@ The camera director picks from a set of shot types based on battle events:
 
 1. Choose a matchup and seed, which gives a battle spec.
 2. Run it headless to get the battle record.
-3. Choose the clip window from the event log: at most 60 seconds, usually ending shortly after the knockout. `Highlights` scores events (hits by damage share, plus crits, super-effective hits and comebacks; misses a little; the faint or time-up a lot) and keeps the best-scoring window of the requested length. A window ends either a short linger after a hit or at the end of the plan, and one that reaches the faint always plays the whole knockout and the victory after it. The victory comes on top of the requested length, so it never pushes the knockout out of the window.
+3. Choose the clip window from the event log: at most 60 seconds, usually ending shortly after the knockout. `Highlights` scores events (hits by damage share, plus crits, super-effective hits and comebacks; misses a little; the knockout or time-up a lot) and keeps the best-scoring window of the requested length. A window ends either a short linger after a hit or at the end of the plan, and one that reaches the knockout always plays the whole knockout and the victory after it. The victory comes on top of the requested length, so it never pushes the knockout out of the window.
 4. For each requested format, start a second Godot process under Movie Maker with that format's `override.cfg`. The process:
    - skips ahead to the window's start without drawing;
    - renders the window;
@@ -831,17 +831,17 @@ An arena is a preset (`Arenas`): one JSON file in `game/data/arenas/`, named aft
 
 - a **field** (`Terrain.FIELDS`), the ground the battle is fought on, which is the simulation's (§9.8): grassland, beach, volcano, snowfield, cave, or flat paving. `ArenaFields` holds each field's colours, props and details;
 - a **venue**: `open` (the field's own landscape all around) or `coliseum` (`Stadium`, around any field), with an optional **theme** for the coliseum's colours (stone, paving, apron, seats, trim, outside ground, a banner colour per side, moss);
-- its **look**: sky, sun, ambient light, fog and weather particles (colours as `"#rrggbb"`);
+- its **look**: sky, sun, ambient light, fog and particles (colours as `"#rrggbb"`);
 - how a battle without a requested arena may get it: `"always"`, or `"suits"` with a list of types;
-- for a coliseum, an optional `"crowd"`: `"fill"`, the share of seats taken (0 for empty stands, 1 for a sell-out; 0.75 by default), and `"watchers"`, how many Cobblemon sit in the front row (0–8; 4 by default). The night stadium is half full, with two.
+- for a coliseum, an optional `"crowd"`: `"fill"`, the share of seats taken (0 for empty stands, 1 for a sell-out; 0.75 by default), and `"watchers"`, how many watchers sit in the front row (0–8; 4 by default). The night stadium is half full, with two.
 
 The presets are grassland, beach, volcano, snowfield, cave and stadium (the open fields and the paved coliseum), plus a night stadium, a garden coliseum (grassland in sandstone stands) and a frost coliseum (snowfield in pale blue stands). Presets evoke kinds of places (a league stadium at night, a gym's battle hall) and never reproduce specific locations from the games or the anime.
 
 - **Style:** low-poly, flat-shaded scenery with pixel textures, which sits next to Cobblemon's blocky models without copying them. Built procedurally, so no outside art or licences are needed:
   - **Ground** (`Arena._ground_cell`): a faceted mesh with a vertex at every cell corner. The four cells around a corner are grouped by height (from the lowest, a group spans at most a 0.5 m step) the same way whichever cell asks, and each cell takes its group's average. So walkable ground slopes smoothly and shares its corners exactly, and the ground only parts at real steps and cliffs, closed by walls built once per edge and seen from both sides (small steps shaded ground, cliffs bare stone). Corners are nudged up to 0.18 m off the grid so it doesn't read as squares. The visible slope stays within a step of the battle's terraces; fighters are drawn on the slope.
   - **Features and props** (`LowPoly`): faceted frustums, cones, balls and logs: irregular six-sided rocks, hexagonal basalt columns, stalagmite and ice cones, faceted canopies, layered pine cones with snowy tips, palms with leaf blades. Bases sink 0.3 m so they sit in the faceted ground.
-  - **Stadium:** exact ring segments (meshes with their own top, underside, curved faces and ends).
-  - **Pixel grain:** the surface shader lays 16 pixels per metre on each face (UVs in metres), with grime toward the ground on upright faces (moss in the stadium). Cobblemon's own pixels are 16 per block before the roster's scale, which puts the models at 15–27 pixels per metre (20 at the median scale of 0.8), close to the arenas'.
+  - **Coliseum:** exact ring segments (meshes with their own top, underside, curved faces and ends).
+  - **Pixel grain:** the surface shader lays 16 pixels per metre on each face (UVs in metres), with grime toward the ground on upright faces (moss in the coliseum). Cobblemon's own pixels are 16 per block before the roster's scale, which puts the models at 15–27 pixels per metre (20 at the median scale of 0.8), close to the arenas'.
   - **Light:** screen-space ambient occlusion, so creases and the bases of rocks read.
 - **Layout:**
   - in the open, the battle's own landscape (§9.8) out to 44 m, with its features: no floor or kerb, the arena is part of the land. In a coliseum the field's ground is built only out to the field's edge, with a stone kerb along it and the apron raised a little;
@@ -850,7 +850,7 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
   - the sea around the beach.
 
   Cameras may go 2 m past the wall; see-through keeps the fighters in view if the land is in the way.
-- **Look:** each preset sets its sky, sun angle and colour, ambient light, fog and weather particles (petals, blown sand, rising embers, snow, cave dust).
+- **Look:** each preset sets its sky, sun angle and colour, ambient light, fog and particles (petals, blown sand, rising embers, snow, cave dust).
 - **Choice:** `"arena"` in a battle spec or `--arena=<name>` picks one. Otherwise the battle seed picks from the presets offered always (grassland, stadium) and those that suit one of the fighters' types (Fire → volcano, Ice → snowfield and the frost coliseum, Water → beach and the frost coliseum, Rock, Ground, Ghost and Dark → cave, Dark, Ghost and Electric → the night stadium, and so on). The choice is the simulation's, since the field's terrain is part of the battle (§9.8); the ground and features are built from that terrain, and fighters stand at its height. New presets in the pool change which arena a seed gets, so they bump the rules version.
 - **The coliseum** (`Stadium`) is about 15 m tall and 75 m across:
   - the field (concentric rings of pale paving with painted lines: boundary, halfway line, centre circle; or the preset's field of terrain inside a kerb), then an apron of grey-green paving with a trainer's box at each end;
@@ -859,13 +859,13 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
   - a roof ring on posts with a floodlight bank, and banners on the parapet in each side's colour;
   - a big screen set into the upper stands at each end, behind each side's starting point, rising a little above them, with the fighters' names, where the battle's cameras see it;
   - a cool, slightly dim day, so the moves' colours stand out.
-- **Cameras** stay inside a limit each arena sets (just inside the stadium's wall, or where the ground starts to rise elsewhere), so they never end up inside the scenery.
+- **Cameras** stay inside a limit each arena sets (just inside the coliseum's wall, or where the ground starts to rise elsewhere), so they never end up inside the scenery.
 - **Seats:** the arena offers seats facing the floor (on the stands' rows, else on low terrain nearby) for spectators.
 - **Crowd** (`Crowd`), in coliseums only (a crowd on an open hillside would look odd):
   - low-poly figures (legs, a shirt in one of eight colours, arms, a head in one of four skin tones) in the preset's share of the stands' seats (three quarters by default), drawn as one MultiMesh and animated in a shader (`crowd.gdshader`), so thousands cost one draw;
-  - the preset's number of Cobblemon (four by default) of the arena's types (its `suits`, 0.4–2.2 m tall, never the fighters themselves) spread around the front row, each watching one fighter with its head;
+  - the preset's number of watchers (four by default) of the arena's types (its `suits`, 0.4–2.2 m tall, never the fighters themselves) spread around the front row, each watching one fighter with its head;
   - they sway while they wait. Hits that take at least 15% of the defender's HP, critical hits and super-effective hits make them cheer: figures hop and raise their arms, more of them the bigger the hit, and the cheer calms over a couple of seconds. A knockout brings everyone to their feet for 3 s, and the Cobblemon cry. Hit-stop freezes the crowd along with the fighters.
-- **Determinism:** everything, the weather included (fixed particle seeds), comes from the preset and the battle seed, so every render of a battle is identical.
+- **Determinism:** everything, the particles included (fixed particle seeds), comes from the preset and the battle seed, so every render of a battle is identical.
 
 ## 13. Ranking
 
@@ -875,31 +875,31 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
   - A new rules version starts a new ranking.
 - **Method:**
   - A Bradley–Terry model is fitted to all results, with each draw counting as half a win for both sides.
-  - Unlike Elo, the fit doesn't depend on the order games were played. It uses every result and copes with incomplete schedules.
+  - Unlike Elo, the fit doesn't depend on the order battles were played. It uses every result and copes with incomplete schedules.
   - Glicko-2 can be added later to show uncertainty.
   - A matchup matrix of head-to-head win rates is published next to the ratings, because one-on-one matchups are often non-transitive.
 - **Fairness:**
-  - Every pairing is played from both sides with the same seeds.
+  - Every matchup is played from both sides with the same seeds.
   - An AI-sensitivity check re-ranks with a second AI profile and compares the rank correlation. A large change means the AI, not the Pokémon, is driving results.
-- **Scale:** 905 species make about 409,000 pairings, or about 819,000 battles played from both sides.
+- **Scale:** 1,005 species make about 504,000 matchups, or about 1,009,000 battles played from both sides.
   - Throughput is measured in milestone 1.
-  - If a full round-robin is too slow, pairings are sampled adaptively, with more games where ratings are uncertain.
+  - If a full round-robin is too slow, matchups are sampled adaptively, with more battles where ratings are uncertain.
   - Headless processes run in parallel.
 - **Balance tool:** the same machinery tunes the rules (§9.7).
 
 **Implementation (M5)** in `tools/ranking/ranking.gd` (the maths) and `tools/rank.gd` (the command line).
 
 - **Store:** one JSON Lines file per run and shard in `results/rank/v<rules>/<profile>/`. Each line is one battle: `{a, b, seed, result, ticks, rules, profile}`. Runs resume by skipping battles already stored.
-- **Schedule:** a sampled round robin. Every species meets 20 random others (more in practice, as others pick it too), every pairing from both sides with one seed derived from the pair and the schedule seed.
+- **Schedule:** a sampled round robin. Every species meets 20 random others (more in practice, as others pick it too), every matchup from both sides with one seed derived from the pair and the schedule seed.
 - **Fit:**
   - Bradley–Terry by the MM algorithm, with one virtual draw per species against an average opponent, so an unbeaten species still gets a finite rating.
   - Ratings use an Elo-like scale: 400 points is 10:1 odds, and the mean is 1500.
-- **Matchup matrix:** a full round robin among the top 24 species, 5 seeds per pairing, each played from both sides (10 games per cell).
-- **Report:** `ranking.json` and `ranking.md` with ratings, games, scores and the matrix.
+- **Matchup matrix:** a full round robin among the top 24 species, 5 seeds per matchup, each played from both sides (10 battles per cell).
+- **Report:** `ranking.json` and `ranking.md` with ratings, battles, scores and the matrix.
 - **AI-sensitivity check:** `compare` ranks the species two profiles both played and prints the Spearman rank correlation.
 - **Pilot** (60 species, 10 opponents each, 1,200 battles in 38 s on 11 processes, about 32 battles a second):
   - The ranked and hard profiles agree closely (Spearman 0.971), so species, not the AI, drive results.
-  - Mirrored pairings don't show a side bias: the same side won both games in 37 of 600.
+  - Mirrored matchups don't show a side bias: the same side won both battles in 37 of 600.
   - A full run of every species with 20 opponents is about 40,000 battles, roughly 20 minutes on 11 processes.
 
 ## 14. Licensing and attribution
@@ -913,7 +913,7 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
 - **Pokémon IP:** names and designs belong to Nintendo, Creatures Inc. and GAME FREAK. Cobbleseum is an unaffiliated fan project.
 - **Consequences:**
   - The repository never redistributes assets.
-  - Every clip credits Cobblemon on its end card and in generated description text.
+  - Every clip credits Cobblemon on its credits card and in generated description text.
   - Commercial use of clips needs permission. Whether clips will be monetised is an open question (§19).
 
 ## 15. Proposed project layout
@@ -959,7 +959,7 @@ results/                git-ignored
 **M1: vertical slice. Done (2026-11-09).**
 
 - **Pipeline:** fetches, verifies and extracts Cobblemon 1.8.4 and Showdown 0.11.11, exports Showdown's data to JSON, and checks both layouts.
-- **Converter:** Blastoise and Cinderace convert with working clips, and all 905 species pass a dry run.
+- **Converter:** Blastoise and Cinderace convert with working animations, and all 905 species pass a dry run.
 - **Simulation core:**
   - Fixed tick, melee and projectile moves, the damage formula, cooldowns and knockouts, with a placeholder AI.
   - About 37 ms per battle headless, with identical checksums across processes.
@@ -989,7 +989,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 **M4: AI and play.**
 
 - The utility AI, with profiles and a debug overlay. The AI, profiles and overlay are done.
-- Player-vs-AI controls (keyboard and gamepad) and a player camera. Done: `--play=<species> --vs=<species> --ai=<profile>` runs the battle live (no pre-planned presentation, since a player's choices can't be known ahead), with a camera over the player's shoulder, live hit-stop that pauses the battle itself, a move bar with keys and cooldowns, and a replay saved per battle (the spec plus every tick's intents, played back by `ReplayController` and renderable by `tools/record.gd`). AI-vs-AI battles start the same way with `--watch=<species> --vs=<species> --ai=<profile> --vs-ai=<profile>` (`SpecFlags`), in the window and in `tools/record.gd`, without a spec file.
+- Player-vs-AI controls (keyboard and gamepad) and a player camera. Done: `--play=<species> --vs=<species> --ai=<profile>` runs the battle live (no pre-planned presentation, since a player's choices can't be known ahead), with a camera over the player's shoulder, live hit-stop that pauses the battle itself, a move bar with keys and cooldowns, and each battle saved as its battle spec with every tick's intents, which `ReplayController` replays and `tools/record.gd` can render. AI-vs-AI battles start the same way with `--watch=<species> --vs=<species> --ai=<profile> --vs-ai=<profile>` (`SpecFlags`), in the window and in `tools/record.gd`, without a spec file.
 
 **M5: rankings.**
 
@@ -1006,8 +1006,8 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 
 **M7: arenas.** Arena presets (a field, a venue and a look) are done, with nine presets (§12.7).
 
-- Biomes, each with its own ground, props, sky, lighting, fog and weather particles, picked at random or by the fighters' types. Done as presets: five open fields, the paved stadium, a night stadium and two coliseums around fields of terrain.
-- Crowds: cheap animated spectators in a venue's stands (coliseums only), including Cobblemon models at the edges, reacting to big hits and knockouts. Done (§12.7).
+- Arenas, each with its own field, props, sky, lighting, fog and particles, picked at random or by the fighters' types. Done as presets: five open fields, the paved stadium, a night stadium and two coliseums around fields of terrain.
+- Crowds: cheap animated spectators in a venue's stands (coliseums only), including watchers in the front row, reacting to big hits and knockouts. Done (§12.7).
 - Cosmetic first; terrain that affects play (cover, water, elevation) only later, as a rules change the AI understands.
 - Environment art comes from openly licensed sets or is made in-house; Minecraft's own textures aren't usable.
 
@@ -1016,14 +1016,14 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - Rendering: environment lighting, soft shadows, ambient occlusion, bloom, and shading that matches Cobblemon's look.
 - A designed HUD (styled HP bars, type icons, portraits, status badges), intro title cards, and a victory screen with the winner's pose. Done: name plates with type and status pills, rounded HP bars with percentages, the intro card (§12.5), and the victory shot and card (§12.3). Types are text pills rather than icons; portraits are still to do.
 - Openly licensed display and body fonts, never the official Pokémon fonts or logo styling. Done: Lilita One and Nunito.
-- Music and crowd sound; for clips, title cards, captions and a slow-motion replay of the knockout.
+- Music and crowd sound; for clips, title cards, captions and an instant replay of the knockout.
 
 **Later:**
 
 - Abilities (starting with a data-driven set: type immunities and absorbs, damage modifiers, Intimidate), then items.
 - Cobblemon's move effects.
 - Guarding.
-- Field moves and weather.
+- Arena moves and weather.
 - Tournament mode seeded from the ranking.
 - Team battles (2v2 and up).
 - Shiny and form variants in clips.
@@ -1034,9 +1034,9 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 |---|---|
 | Licence and IP: Cobblemon assets are non-commercial, and Pokémon designs belong to their owners | No assets in git; attribution on every clip; monetisation decided explicitly |
 | Conversion rules (axes, rotation order, UVs) are wrong in some cases | Golden tests on original fixtures; `.glb` debug export; QA pass over the whole roster |
-| Most species lack attack, hit or faint clips | Procedural animation layer from M2 |
+| Most species lack attack, hit or faint animations | Procedural animation layer from M2 |
 | Forms or species rendered wrong (parts, layers, poses) | M2 review of every flagged species and all 100 forms with `tools/preview_roster.gd` (§7.5); rerun it after converter or source updates |
-| GDScript simulation too slow for full round-robins | After M2, about 57 ms per battle with the full rules and 30–45 s battles (a full round robin of about 500,000 pairings is roughly 8 hours, or 1 hour on 8 processes); profiled and optimised once in M2; sample pairings before considering other options |
+| GDScript simulation too slow for full round-robins | After M2, about 57 ms per battle with the full rules and 30–45 s battles (a full round robin of about 504,000 matchups is roughly 8 hours, or 1 hour on 8 processes); profiled and optimised once in M2; sample pairings before considering other options |
 | Replays differ across platforms | Guarantee replays per platform only; checksums fail loudly |
 | Real-time balance is our own design | Rankings are framed as "under Cobbleseum's rules"; batch-simulation tuning; AI-sensitivity check |
 | A new Cobblemon release changes the layout | The pinned version never changes silently; layout checks give clear errors |
