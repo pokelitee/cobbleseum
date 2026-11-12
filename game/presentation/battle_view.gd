@@ -554,12 +554,12 @@ func _build_stage(arena_name: String) -> void:
 	add_child(_camera)
 
 
-## Spectators, if the arena has stands: figures in most seats, and Cobblemon that suit the
-## arena in the front row, watching the fighters (half each).
+## Spectators, if the arena has stands: figures in a share of the seats, and Cobblemon that
+## suit the arena in the front row, watching the fighters (half each), as many as its preset says.
 func _add_crowd(data: BattleData) -> void:
-	_crowd = Crowd.create(_arena, int(battle.spec.seed))
+	_crowd = Crowd.create(_arena, int(battle.spec.seed), Arenas.preset(battle.arena).get("crowd", {}))
 	add_child(_crowd)
-	var seats := _crowd.watcher_seats(Crowd.WATCHERS)
+	var seats := _crowd.watcher_seats(_crowd.watcher_count)
 	if not seats.is_empty():
 		var rng := RandomNumberGenerator.new()
 		rng.seed = hash("%d|%d" % [int(battle.spec.seed), WATCHER_STREAM])

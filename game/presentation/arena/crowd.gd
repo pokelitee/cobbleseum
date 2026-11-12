@@ -8,10 +8,11 @@ extends Node3D
 ## the battle.
 
 const SHADER := preload("res://game/presentation/arena/crowd.gdshader")
-## Share of the seats taken.
+## A preset's "crowd" may set "fill" (the share of seats taken, 0 to 1) and "watchers" (how
+## many Cobblemon watch, up to Arenas.MAX_WATCHERS); these are the defaults.
 const FILL := 0.75
-## How many Cobblemon watch, and the heights (metres) that fit a seat.
 const WATCHERS := 4
+## The heights (metres) of Cobblemon that fit a seat.
 const WATCHER_HEIGHT := Vector2(0.4, 2.2)
 ## Figures this close to a Cobblemon's seat make room for it.
 const WATCHER_ROOM := 1.6
@@ -30,6 +31,9 @@ const SHIRTS: Array[Color] = [
 var watchers: Array[FighterView] = []
 var figures: MultiMeshInstance3D
 var excitement := 0.0
+## This arena's share of seats taken and number of Cobblemon watching.
+var fill := FILL
+var watcher_count := WATCHERS
 
 var _material: ShaderMaterial
 var _time := 0.0
@@ -45,10 +49,13 @@ var _watcher_heights: Array[float] = []
 
 
 ## The crowd for `arena`, seeded by `seed`: figures in the seats of a venue with stands, none
-## in the open. Add Cobblemon with add_watcher() before the figures are placed by build().
-static func create(arena: Arena, seed: int) -> Crowd:
+## in the open, as the preset's crowd `settings` say. Add Cobblemon with add_watcher() before
+## the figures are placed by build().
+static func create(arena: Arena, seed: int, settings: Dictionary = {}) -> Crowd:
 	var crowd := Crowd.new()
 	crowd.name = "Crowd"
+	crowd.fill = float(settings.get("fill", FILL))
+	crowd.watcher_count = int(settings.get("watchers", WATCHERS))
 	crowd._rng.seed = hash("crowd|%d" % seed)
 	if arena.theme.is_empty():
 		return crowd
@@ -109,12 +116,12 @@ func add_watcher(view: FighterView, seat: Transform3D, fighter: FighterView) -> 
 
 ## Places the figures in a share of the remaining seats.
 func build() -> void:
-	if _seats.is_empty():
-		return
 	var taken: Array[Transform3D] = []
 	for seat in _seats:
-		if _rng.randf() < FILL:
+		if _rng.randf() < fill:
 			taken.append(seat)
+	if taken.is_empty():
+		return
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.use_custom_data = true
