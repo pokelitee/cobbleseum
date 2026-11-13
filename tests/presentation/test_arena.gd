@@ -87,6 +87,26 @@ func test_the_visible_ground_follows_the_battle_ground() -> void:
 	arena.free()
 
 
+func test_detail_patches_are_mostly_one_kind_in_proportion_to_the_weights() -> void:
+	var arena := Arena.create("grassland", 4)
+	var kinds := {"grass": 6, "flower": 2, "pebble": 1}
+	assert_eq(arena._pick_detail(kinds, 0.0), "flower", "names are taken in order")
+	assert_eq(arena._pick_detail(kinds, 0.3), "grass")
+	assert_eq(arena._pick_detail(kinds, 0.95), "pebble")
+	var counts := {}
+	var same := 0
+	for i in 2000:
+		var at := Vector2(i * 13.7, i * 5.3)
+		var kind := arena._pick_detail(kinds, arena._patch_roll(at))
+		counts[kind] = counts.get(kind, 0) + 1
+		if kind == arena._pick_detail(kinds, arena._patch_roll(at + Vector2(0.4, 0.0))):
+			same += 1
+	assert_true(same > 1800, "spots a cluster apart share their patch's kind: %d" % same)
+	assert_almost_eq(counts.grass / 2000.0, 6.0 / 9.0, 0.08, "grass patches")
+	assert_almost_eq(counts.flower / 2000.0, 2.0 / 9.0, 0.08, "flower patches")
+	arena.free()
+
+
 func test_the_coliseum_rises_around_the_field_with_seats_in_the_stands() -> void:
 	var arena := Arena.create("stadium", 3, ["Garchomp", "Greninja"])
 	assert_true(Coliseum.top_height() > 12.0, "tall enough to read as a coliseum: %.1f m" % Coliseum.top_height())

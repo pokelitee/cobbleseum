@@ -854,7 +854,11 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
   - **Fighters:** lit by the arena but matte (no specular, like Cobblemon's models in Minecraft), with a soft rim in the light's colour so they stand out from busy ground.
 - **Layout:**
   - in the open, the battle's own landscape (§9.8) out to 44 m, with its features: no floor or kerb, the arena is part of the land. In a coliseum the field's ground is built only out to the field's edge, with a stone kerb along it and the apron raised a little;
-  - the ground coloured by slope (bare stone on steep ground), height and patches (paths, gravel, ash, trampled snow), with small low-poly details the battle ignores, gathered in patches as clusters on the visible ground: grass tufts (a low mound with a few lighter blades, since thin blades shade dark), flowers on stems, faceted pebbles, shells, snow drifts, jagged glowing cracks and glowing mushrooms;
+  - the ground coloured by slope (bare stone on steep ground), height and patches (paths, gravel, ash, trampled snow), with small low-poly details the battle ignores, sized to read at the battle camera's distance:
+    - grass tufts: five to seven broad blades fanned out from a small mound, from the meadow's green to yellow-green tips. Blades are lit as if they faced up and out like the ground, since a thin blade's own normal shades it into a dark spike;
+    - flowers about 0.3 m tall, with a leaf or two and a cupped head of petals around a centre;
+    - faceted pebbles, shells, snow drifts, jagged glowing cracks, and glowing mushrooms with wide caps;
+    - they gather as clusters in patches over about a quarter of the ground, densest in a patch's core and thinning toward its edge, with bare ground between. Each patch is mostly one kind (a grass patch, a flower bed, a pebble scatter), weighted by the field's details, with a few strays;
   - props on the land beyond the wall, three times as dense in the first 3 m, so a treeline or ring of rocks marks the edge;
   - the sea around the beach.
 

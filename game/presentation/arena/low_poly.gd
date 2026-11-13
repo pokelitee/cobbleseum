@@ -64,6 +64,28 @@ static func frustum(tool: SurfaceTool, colour: Color, base: Vector3, bottom_radi
 		face(tool, colour, top, uvs, Vector3.UP)
 
 
+## A flat blade (of grass, a leaf) from `base` along `direction` for `length`, `width` wide at
+## the base and pointed, shaded from `base_colour` to `tip_colour`. Both sides are drawn with
+## one normal, nearly straight up, so it's lit about like the ground it grows from: with its
+## real normal, a thin blade faces away from the sun on one side and reads as a dark spike, and
+## tilted well toward the sun it blows out. The slight lean along the blade lets a tuft's sides
+## shade a little differently.
+static func blade(tool: SurfaceTool, base_colour: Color, tip_colour: Color, base: Vector3, direction: Vector3,
+		length: float, width: float) -> void:
+	var outward := Vector3(direction.x, 0, direction.z)
+	var across := outward.cross(Vector3.UP).normalized() if outward.length_squared() > 1e-6 else Vector3.RIGHT
+	var normal := (Vector3.UP + outward.normalized() * 0.15).normalized()
+	var corners := [base - across * width * 0.5, base + across * width * 0.5, base + direction * length]
+	var colours := [base_colour, base_colour, tip_colour]
+	var uvs := [Vector2(0, 0), Vector2(width, 0), Vector2(width * 0.5, length)]
+	for order: Array in [[0, 1, 2], [0, 2, 1]]:
+		for i: int in order:
+			tool.set_color(colours[i])
+			tool.set_normal(normal)
+			tool.set_uv(uvs[i])
+			tool.add_vertex(corners[i])
+
+
 ## A faceted ball (a canopy, a boulder): a short widening frustum, a band, and a cap closing in.
 static func ball(tool: SurfaceTool, colour: Color, centre: Vector3, radius: float, height: float, sides: int,
 		turn: float, random: RandomNumberGenerator) -> void:
