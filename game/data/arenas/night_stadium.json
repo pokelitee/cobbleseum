@@ -13,19 +13,23 @@
 		"banners": ["#c8382e", "#2f5fc8"],
 		"moss": 0.0
 	},
-	"sky": ["#050814", "#1a213d"],
+	"sky": ["#02040b", "#0c1226"],
 	"sun": {
-		"angle": [-70, 25, 0],
-		"colour": "#ebf2ff",
-		"energy": 0.85
+		"angle": [-55, 25, 0],
+		"colour": "#9db0e6",
+		"energy": 0.15
 	},
 	"ambient": {
-		"colour": "#596699",
-		"energy": 0.4
+		"colour": "#3d4870",
+		"energy": 0.25
 	},
 	"fog": {
-		"colour": "#141a2e",
+		"colour": "#0a0e1c",
 		"density": 0.004
+	},
+	"floodlights": {
+		"colour": "#fff2d9",
+		"energy": 0.25
 	},
 	"particles": ""
 }

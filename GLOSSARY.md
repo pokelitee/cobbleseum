@@ -167,7 +167,7 @@ A Pokémon in a coliseum's front row, watching a fighter.
 _Avoid_: Cobblemon (for the creature), spectator Pokémon
 
 **Look**:
-An arena's sky, light, fog and particles.
+An arena's sky, light (sun, ambient light, and a coliseum's floodlights), fog and particles.
 _Avoid_: weather
 
 ### Presentation and clips

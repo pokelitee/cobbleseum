@@ -39,6 +39,8 @@ const GROUND_RADIUS := 70.0
 const SCREEN_WIDTH := 15.0
 const SCREEN_ANGLES: Array[float] = [-PI * 0.5, PI * 0.5]
 const SCREEN_RISE := 2.0
+## Where floodlights on the roof light the field from (radians, between the screens).
+const FLOODLIGHT_ANGLES: Array[float] = [PI * 0.25, PI * 0.75, PI * 1.25, PI * 1.75]
 
 ## Around a field of terrain (not paving): the apron is raised this much, and a stone kerb
 ## KERB wide and high runs along the field's edge, covering where the square ground cells end.
@@ -235,6 +237,29 @@ static func _roof(arena: Arena, rng: RandomNumberGenerator) -> void:
 		for light in 2:
 			var along := angle + (light + 0.5) * TAU / SECTIONS / 2.0
 			arena.add_arc(along, outer - ROOF_DEPTH - 0.1, outer - ROOF_DEPTH + 0.5, height - 0.5, height, FLOODLIGHT, 1.8, true)
+
+
+## Lights the field from the roof's floodlight bank (for a preset with floodlights): spotlights
+## at FLOODLIGHT_ANGLES aimed at the centre, each covering the whole field. Only the first casts
+## shadows: each shadowed spotlight cost live play a few frames a second in a full coliseum.
+## Their light doesn't fade with distance over the field, so `energy` compares with the sun's.
+static func add_floodlights(arena: Arena, colour: Color, energy: float) -> void:
+	var radius := outer_radius() + 0.6 - ROOF_DEPTH
+	var height := top_height() + ROOF_CLEARANCE - 0.5
+	var reach := Vector2(radius, height).length()
+	for i in FLOODLIGHT_ANGLES.size():
+		var angle := FLOODLIGHT_ANGLES[i]
+		var light := SpotLight3D.new()
+		light.light_color = colour
+		light.light_energy = energy
+		light.spot_attenuation = 0.0
+		light.spot_range = reach * 1.6
+		light.spot_angle = rad_to_deg(atan2(field_radius() + APRON_WIDTH, reach)) * 1.3
+		light.spot_angle_attenuation = 0.6
+		light.shadow_enabled = i == 0
+		var at := Vector3(cos(angle) * radius, height, sin(angle) * radius)
+		light.transform = Transform3D(Basis.looking_at(-at), at)
+		arena.add_child(light)
 
 
 static func _banners(arena: Arena) -> void:

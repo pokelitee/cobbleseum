@@ -832,7 +832,7 @@ An arena is a preset (`Arenas`): one JSON file in `game/data/arenas/`, named aft
 
 - a **field** (`Terrain.FIELDS`), the ground the battle is fought on, which is the simulation's (§9.8): grassland, beach, volcano, snowfield, cave, or flat paving. `ArenaFields` holds each field's colours, props and details;
 - a **venue**: `open` (the field's own landscape all around) or `coliseum` (`Coliseum`, around any field), with an optional **theme** for the coliseum's colours (stone, paving, apron, seats, trim, outside ground, a banner colour per side, moss);
-- its **look**: sky, sun, ambient light, fog and particles (colours as `"#rrggbb"`);
+- its **look**: sky, sun, ambient light, fog and particles (colours as `"#rrggbb"`), with an optional exposure (1 by default; the cave is 0.75) and, for a coliseum, optional floodlights (`{"colour", "energy"}`);
 - how a battle without a requested arena may get it: `"always"`, or `"suits"` with a list of types;
 - for a coliseum, an optional `"crowd"`: `"fill"`, the share of seats taken (0 for empty stands, 1 for a sell-out; 0.75 by default), and `"watchers"`, how many watchers sit in the front row (0–8; 4 by default). The night stadium is half full, with two.
 
@@ -843,7 +843,15 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
   - **Features and props** (`LowPoly`): faceted frustums, cones, balls and logs: irregular six-sided rocks, hexagonal basalt columns, stalagmite and ice cones, faceted canopies, layered pine cones with snowy tips, palms with leaf blades. Bases sink 0.3 m so they sit in the faceted ground.
   - **Coliseum:** exact ring segments (meshes with their own top, underside, curved faces and ends).
   - **Pixel grain:** the surface shader lays 16 pixels per metre on each face (UVs in metres), with grime toward the ground on upright faces (moss in the coliseum). Cobblemon's own pixels are 16 per block before the roster's scale, which puts the models at 15–27 pixels per metre (20 at the median scale of 0.8), close to the arenas'.
-  - **Light:** screen-space ambient occlusion, so creases and the bases of rocks read.
+  - **Light** (`ArenaLighting`): Cobblemon in Minecraft under a gentle shader pack. It's the same in every arena, so a preset only sets the place:
+    - a Filmic tonemap with saturation 1.1, so highlights roll off without washing out type colours;
+    - bloom only past an HDR threshold that daylit surfaces never reach. Glowing blocks (floodlights, screens, cracks, mushrooms), move visuals and models' emissive layers draw brighter than their colour, so only they bloom;
+    - soft sun shadows that harden toward contact (PCSS, a 1.5° sun), out to 45 m;
+    - screen-space ambient occlusion, so creases and the bases of rocks read;
+    - MSAA 4× for edges, since TAA and FXAA would blur the pixel textures.
+
+    Screen-space indirect light was tried and left out: it cost live play about a fifth of its frame rate in a full coliseum for a barely visible tint.
+  - **Fighters:** lit by the arena but matte (no specular, like Cobblemon's models in Minecraft), with a soft rim in the light's colour so they stand out from busy ground.
 - **Layout:**
   - in the open, the battle's own landscape (§9.8) out to 44 m, with its features: no floor or kerb, the arena is part of the land. In a coliseum the field's ground is built only out to the field's edge, with a stone kerb along it and the apron raised a little;
   - the ground coloured by slope (bare stone on steep ground), height and patches (paths, gravel, ash, trampled snow), with small low-poly details the battle ignores, gathered in patches as clusters on the visible ground: grass tufts (a low mound with a few lighter blades, since thin blades shade dark), flowers on stems, faceted pebbles, shells, snow drifts, jagged glowing cracks and glowing mushrooms;
@@ -852,6 +860,8 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
 
   Cameras may go 2 m past the wall; see-through keeps the fighters in view if the land is in the way.
 - **Look:** each preset sets its sky, sun angle and colour, ambient light, fog and particles (petals, blown sand, rising embers, snow, cave dust).
+  - The night stadium is lit by a dim moon and the roof's floodlights: four spotlights aimed at the field, only one with shadows, since each shadowed spotlight cost live play a few frames a second.
+  - Day coliseums leave their floodlights off.
 - **Choice:** `"arena"` in a battle spec or `--arena=<name>` picks one. Otherwise the battle seed picks from the presets offered always (grassland, stadium) and those that suit one of the fighters' types (Fire → volcano, Ice → snowfield and the frost coliseum, Water → beach and the frost coliseum, Rock, Ground, Ghost and Dark → cave, Dark, Ghost and Electric → the night stadium, and so on). The choice is the simulation's, since the field's terrain is part of the battle (§9.8); the ground and features are built from that terrain, and fighters stand at its height. New presets in the pool change which arena a seed gets, so they bump the rules version.
 - **The coliseum** (`Coliseum`) is about 15 m tall and 75 m across:
   - the field (concentric rings of pale paving with painted lines: boundary, halfway line, centre circle; or the preset's field of terrain inside a kerb), then an apron of grey-green paving with a trainer's box at each end;
@@ -1014,7 +1024,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 
 **M8: visual polish.**
 
-- Rendering: environment lighting, soft shadows, ambient occlusion, bloom, and shading that matches Cobblemon's look.
+- Rendering: environment lighting, soft shadows, ambient occlusion, bloom, and shading that matches Cobblemon's look. Done (§12.7): Filmic grading, HDR bloom on glowing things only, soft sun shadows, SSAO, MSAA, matte rim-lit fighters, and a floodlit night stadium. Recording takes about 1.1× as long as before.
 - A designed HUD (styled HP bars, type icons, portraits, status badges), intro title cards, and a victory screen with the winner's pose. Done: name plates with type and status pills, rounded HP bars with percentages, the intro card (§12.5), and the victory shot and card (§12.3). Types are text pills rather than icons; portraits are still to do.
 - Openly licensed display and body fonts, never the official Pokémon fonts or logo styling. Done: Lilita One and Nunito.
 - Music and crowd sound; for clips, title cards, captions and an instant replay of the knockout.

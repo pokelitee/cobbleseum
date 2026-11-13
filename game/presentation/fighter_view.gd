@@ -23,6 +23,15 @@ const RUN_SPEED := 3.5
 ## and the share of them that are fidgets (quirks) when the species has any.
 const OVERLAY_GAP := Vector2i(60, 180)
 const QUIRK_SHARE := 0.25
+## Shading (concepts_brief.md §12.7): models stay lit by the arena but matte, like Cobblemon in
+## Minecraft, with a soft rim of the light's colour on edges seen side-on, so they stand out
+## from busy ground. Godot narrows the rim with lower roughness, which otherwise barely shows
+## once specular is off. Emissive layers (glowing eyes, flames) draw
+## EMISSIVE_ENERGY brighter than their texture, so they bloom.
+const RIM := 0.35
+const RIM_TINT := 0.5
+const RIM_ROUGHNESS := 0.6
+const EMISSIVE_ENERGY := 2.0
 
 ## Rendered height in metres, from the roster.
 var height := 1.0
@@ -78,6 +87,8 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 	view._animations = model.get_meta("animations", {})
 	var mesh: MeshInstance3D = model.get_node("Skeleton/Mesh")
 	view._mesh = mesh
+	if mesh.mesh != null:
+		shade(mesh.mesh)
 	view._flash_material = StandardMaterial3D.new()
 	view._flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	view._flash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -106,6 +117,23 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 	view._overlay_wait = view._rng.randi_range(OVERLAY_GAP.x, OVERLAY_GAP.y)
 	view.play_idle()
 	return view
+
+
+## Sets the shading of a converted model's materials (each surface's and its layer passes).
+## The materials are shared by every instance of the model, and setting them again is harmless.
+static func shade(mesh: Mesh) -> void:
+	for surface in mesh.get_surface_count():
+		var material := mesh.surface_get_material(surface) as BaseMaterial3D
+		while material != null:
+			if material.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+				material.albedo_color = Color(EMISSIVE_ENERGY, EMISSIVE_ENERGY, EMISSIVE_ENERGY, material.albedo_color.a)
+			else:
+				material.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+				material.roughness = RIM_ROUGHNESS
+				material.rim_enabled = true
+				material.rim = RIM
+				material.rim_tint = RIM_TINT
+			material = material.next_pass as BaseMaterial3D
 
 
 ## Hovering fighters float above the ground (§9.2), play their air animations when the species

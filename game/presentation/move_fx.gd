@@ -15,6 +15,9 @@ extends Node3D
 ## projectile, so point_blank() draws a short version of its style instead.
 
 const SWIPE_SHADER := preload("res://game/presentation/shaders/swipe.gdshader")
+## Effects draw this much brighter than their type colour, past ArenaLighting.HDR_THRESHOLD
+## where they're dense, so they bloom.
+const GLOW := 1.6
 const WINDUP_FRAMES := 14
 const SWIPE_FRAMES := 9
 const BURST_FRAMES := 14
@@ -314,7 +317,7 @@ func _swipe(centre: Vector3, size: float, colour: Color, tilt: float) -> void:
 	quad.mesh.size = Vector2.ONE * size
 	var material := ShaderMaterial.new()
 	material.shader = SWIPE_SHADER
-	material.set_shader_parameter("tint", colour)
+	material.set_shader_parameter("tint", _glowing(colour))
 	quad.material_override = material
 	add_child(quad)
 	quad.position = centre
@@ -691,11 +694,15 @@ static func _mesh(mesh: Mesh, colour: Color, alpha: float) -> MeshInstance3D:
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	material.albedo_color = Color(colour, alpha)
+	material.albedo_color = Color(_glowing(colour), alpha)
 	material.set_meta("peak", alpha)
 	instance.material_override = material
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return instance
+
+
+static func _glowing(colour: Color) -> Color:
+	return Color(colour.r * GLOW, colour.g * GLOW, colour.b * GLOW, colour.a)
 
 
 ## Sets an alpha directly, ignoring the material's peak, for effects that pulse.

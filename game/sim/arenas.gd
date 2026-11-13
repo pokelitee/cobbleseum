@@ -5,7 +5,8 @@ extends RefCounted
 ## - a field (Terrain.FIELDS): the ground the battle is fought on, which is the simulation's;
 ## - a venue: "open" (the field's own landscape all around) or "coliseum" (stands around the
 ##   field, with an optional "theme" of colours, see Coliseum);
-## - its look, for the presentation: sky, sun, ambient light, fog and particles;
+## - its look, for the presentation: sky, sun, ambient light, fog and particles, an optional
+##   exposure and, for a coliseum, optional floodlights (see Arena._read_look);
 ## - how a battle without a requested arena may get it: "always" (any fighters) or "suits"
 ##   (fighters with one of these types);
 ## - for a coliseum, an optional "crowd": {"fill": share of seats taken, "watchers": how many

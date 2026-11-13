@@ -44,6 +44,9 @@ const CAMERA_OVERHANG := 2.0
 const ARC_STEP := 0.25
 ## Ring blocks are about this long.
 const RING_BLOCK := 1.0
+## Glowing blocks (floodlights, screens, glowing cracks and mushrooms) draw this much brighter
+## than their colour, so they bloom.
+const GLOW_ENERGY := 2.0
 
 var preset_name := ""
 ## The coliseum's colours (Coliseum.theme), for an enclosed venue.
@@ -101,7 +104,8 @@ static func create(name: String, seed: int, names: Array = [], terrain: Terrain 
 
 
 ## The field's look (ArenaFields) under the preset's sky, light, fog and particles, read from
-## its JSON (colours as "#rrggbb").
+## its JSON (colours as "#rrggbb"), with its optional exposure (1 by default) and a coliseum's
+## optional floodlights ({"colour", "energy"}; off when absent).
 static func _read_look(preset: Dictionary) -> Dictionary:
 	var look: Dictionary = ArenaFields.FIELDS[preset.field].duplicate()
 	look.sky = (preset.sky as Array).map(func(c: String) -> Color: return Color.html(c))
@@ -110,6 +114,9 @@ static func _read_look(preset: Dictionary) -> Dictionary:
 	look.ambient = [Color.html(preset.ambient.colour), float(preset.ambient.energy)]
 	look.fog = [Color.html(preset.fog.colour), float(preset.fog.density)]
 	look.particles = str(preset.get("particles", ""))
+	look.exposure = float(preset.get("exposure", 1.0))
+	var floodlights: Dictionary = preset.get("floodlights", {})
+	look.floodlights = {"colour": Color.html(floodlights.get("colour", "#ffffff")), "energy": float(floodlights.get("energy", 0.0))}
 	return look
 
 
@@ -127,7 +134,7 @@ func _build(names: Array) -> void:
 			_add_arc_mesh(_arcs[glow], glow)
 	if _look.has("water"):
 		_add_water(float(_look.water))
-	_add_environment()
+	ArenaLighting.add(self, _look)
 	_add_particles(str(_look.particles))
 
 
@@ -613,13 +620,15 @@ func _add_arc_mesh(tool: SurfaceTool, glow: bool) -> void:
 	add_child(instance)
 
 
-## Glowing blocks are unshaded; the rest get the surface shader, reading face metres from UV
+## Glowing blocks are unshaded and pushed past ArenaLighting.HDR_THRESHOLD by GLOW_ENERGY, so
+## they bloom; the rest get the surface shader, reading face metres from UV
 ## for ring segments (`face_uv`) or from the box's size for MultiMesh boxes.
 func _material(glow: bool, face_uv: bool) -> Material:
 	if glow:
 		var unshaded := StandardMaterial3D.new()
 		unshaded.vertex_color_use_as_albedo = true
 		unshaded.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		unshaded.albedo_color = Color(GLOW_ENERGY, GLOW_ENERGY, GLOW_ENERGY)
 		return unshaded
 	var surface := ShaderMaterial.new()
 	surface.shader = SURFACE_SHADER
@@ -654,44 +663,6 @@ func _add_water(level: float) -> void:
 	water.material_override = material
 	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(water)
-
-
-func _add_environment() -> void:
-	var sun_data: Dictionary = _look.sun
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = sun_data.angle
-	sun.light_color = sun_data.colour
-	sun.light_energy = sun_data.energy
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 60.0
-	add_child(sun)
-	var environment := Environment.new()
-	var sky_colours: Array = _look.sky
-	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = sky_colours[0]
-	sky_material.sky_horizon_color = sky_colours[1]
-	sky_material.ground_horizon_color = sky_colours[1]
-	sky_material.ground_bottom_color = _colour(4)
-	var sky := Sky.new()
-	sky.sky_material = sky_material
-	environment.background_mode = Environment.BG_SKY
-	environment.sky = sky
-	var ambient: Array = _look.ambient
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = ambient[0]
-	environment.ambient_light_energy = ambient[1]
-	var fog: Array = _look.fog
-	environment.fog_enabled = true
-	environment.fog_light_color = fog[0]
-	environment.fog_density = fog[1]
-	environment.fog_sky_affect = 0.3
-	# Contact shadows in creases and under rocks, so faceted shapes read.
-	environment.ssao_enabled = true
-	environment.ssao_radius = 1.2
-	environment.ssao_intensity = 1.8
-	var world := WorldEnvironment.new()
-	world.environment = environment
-	add_child(world)
 
 
 func _add_particles(kind: String) -> void:

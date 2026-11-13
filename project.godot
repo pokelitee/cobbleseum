@@ -22,3 +22,12 @@ window/size/viewport_height=1080
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="viewport"
+
+[rendering]
+
+; M8 rendering (concepts_brief.md §12.7): MSAA smooths geometry edges without blurring the
+; nearest-filtered pixel textures (TAA and FXAA would); softer shadow filtering for the sun's
+; and floodlights' soft shadows.
+anti_aliasing/quality/msaa_3d=2
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+lights_and_shadows/positional_shadow/soft_shadow_filter_quality=3
