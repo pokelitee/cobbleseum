@@ -1,6 +1,10 @@
 # Agent skills
 
-Claude Code project skills, copied unchanged from [mattpocock/skills](https://github.com/mattpocock/skills) at commit `5863806dd4e15c63174bee4e7515a4256792ecfa` (MIT, see `LICENSE-mattpocock-skills`). The Codex-only `agents/openai.yaml` files are left out.
+Claude Code project skills, copied from [mattpocock/skills](https://github.com/mattpocock/skills) at commit `5863806dd4e15c63174bee4e7515a4256792ecfa` (MIT, see `LICENSE-mattpocock-skills`). The Codex-only `agents/openai.yaml` files are left out.
+
+Local changes, to keep when updating:
+
+- `grilling/SKILL.md` asks each round with the `AskUserQuestion` tool (options, recommended first) instead of numbered questions in chat.
 
 | Skill | Invoked by | Use |
 | --- | --- | --- |
