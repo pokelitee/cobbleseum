@@ -144,3 +144,45 @@ func test_features_reach_their_battle_height() -> void:
 		assert_true(top >= terrain.height_at(cell) - 0.05, "%s reaches %.1f (got %.2f)" % [cell, terrain.height_at(cell), top])
 	arena.free()
 
+
+
+func _lights(arena: Arena, type: Variant) -> Array:
+	return arena.get_children().filter(func(child: Node) -> bool: return is_instance_of(child, type))
+
+
+func test_every_arena_is_lit_and_graded_alike() -> void:
+	for name in Arenas.names():
+		var arena := Arena.create(name, 2)
+		var world: WorldEnvironment = _lights(arena, WorldEnvironment)[0]
+		var environment := world.environment
+		assert_eq(environment.tonemap_mode, Environment.TONE_MAPPER_FILMIC, name)
+		assert_true(environment.glow_enabled and environment.glow_hdr_threshold > 1.0, "%s: only glowing things bloom" % name)
+		assert_true(environment.ssao_enabled, name)
+		var sun: DirectionalLight3D = _lights(arena, DirectionalLight3D)[0]
+		assert_true(sun.shadow_enabled and sun.light_angular_distance > 0.0, "%s: soft sun shadows" % name)
+		arena.free()
+
+
+func test_glowing_blocks_draw_past_the_bloom_threshold() -> void:
+	var arena := Arena.create("volcano", 3)
+	var glow := arena._material(true, false) as StandardMaterial3D
+	assert_true(glow.albedo_color.r > ArenaLighting.HDR_THRESHOLD, "glowing cracks bloom")
+	arena.free()
+
+
+func test_only_floodlit_presets_light_the_field_from_the_roof() -> void:
+	var night := Arena.create("night_stadium", 5)
+	var floodlights := _lights(night, SpotLight3D)
+	assert_eq(floodlights.size(), Coliseum.FLOODLIGHT_ANGLES.size())
+	assert_eq(floodlights.filter(func(l: SpotLight3D) -> bool: return l.shadow_enabled).size(), 1, "one casts shadows")
+	for light: SpotLight3D in floodlights:
+		assert_true(light.position.y > Coliseum.top_height(), "from the roof")
+		var aim := -light.transform.basis.z
+		assert_true(aim.dot(-light.position.normalized()) > 0.99, "aimed at the centre")
+	var sun: DirectionalLight3D = _lights(night, DirectionalLight3D)[0]
+	assert_true(sun.light_energy < 0.3, "a dim moon, not a sun")
+	night.free()
+	var day := Arena.create("stadium", 5)
+	assert_eq(_lights(day, SpotLight3D).size(), 0, "day stadiums leave them off")
+	assert_eq(day._look.exposure, 1.0, "exposure defaults to 1")
+	day.free()
