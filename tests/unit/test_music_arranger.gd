@@ -21,7 +21,7 @@ func test_build_lists_every_score_as_a_dependency() -> void:
 		assert_true("res://tools/music/scores/%s.json" % id in constants.DEPENDENCIES, id)
 
 
-func test_tracks_fill_every_layer_and_loop_after_the_intro() -> void:
+func test_tracks_fill_every_layer_and_play_the_loop_twice() -> void:
 	for id in SCORES:
 		var arranged := MusicArranger.new().arrange(_score(id))
 		var layers := {}
@@ -29,8 +29,11 @@ func test_tracks_fill_every_layer_and_loop_after_the_intro() -> void:
 			layers[note.layer] = true
 		for layer in MusicArranger.LAYERS:
 			assert_true(layers.has(layer), "%s has no %s" % [id, layer])
-		assert_eq(arranged.loop_start, MusicArranger.INTRO_BARS * MusicArranger.STEPS_PER_BAR, id)
-		assert_eq(arranged.loop_end, (MusicArranger.INTRO_BARS + 3 * MusicArranger.SECTION_BARS) * MusicArranger.STEPS_PER_BAR, id)
+		var bar := MusicArranger.STEPS_PER_BAR
+		var loop := 3 * MusicArranger.SECTION_BARS * bar
+		assert_eq(arranged.intro_end, MusicArranger.INTRO_BARS * bar, id)
+		assert_eq(arranged.loop_start, arranged.intro_end + loop, "the loop kept is the second pass")
+		assert_eq(arranged.loop_end, arranged.loop_start + loop, id)
 
 
 func test_arranging_is_repeatable() -> void:
@@ -84,6 +87,9 @@ func test_problems_are_reported() -> void:
 	long_line.sections[0].melody[0] = "D5:20"
 	assert_true(MusicArranger.problem(long_line).contains("20 steps"))
 	assert_true(MusicArranger.problem({"title": "x"}).contains("missing"))
+	var bad_eq := score.duplicate(true)
+	bad_eq.eq = [{"type": "notch", "hz": 300.0}]
+	assert_true(MusicArranger.problem(bad_eq).contains("eq"))
 
 
 func test_the_sting_arranges_every_part() -> void:

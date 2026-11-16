@@ -49,8 +49,8 @@ static func validate_source(id: String, source: Variant) -> String:
 		return "source '%s' needs a 64-character hex \"sha256\"" % id
 	if not source.extract is Array or source.extract.is_empty():
 		return "source '%s' needs a non-empty \"extract\" list" % id
-	if source.archive == "file" and (source.extract.size() != 1 or not ArchiveFiles.is_safe_path(str(source.extract[0]))
-			or str(source.extract[0]).ends_with("/")):
+	if source.archive == "file" and (source.extract.size() != 1 or not source.extract[0] is String
+			or not ArchiveFiles.is_safe_path(source.extract[0]) or source.extract[0].ends_with("/")):
 		return "source '%s' is a single file, so \"extract\" must be one safe file name" % id
 	if not source.layout is Array or source.layout.is_empty():
 		return "source '%s' needs a non-empty \"layout\" list" % id

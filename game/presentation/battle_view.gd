@@ -207,6 +207,9 @@ func _ready() -> void:
 		battle.step()
 	_tick = battle.tick
 	_event_index = battle.events.size()
+	# A clip that skips past the start of overtime never sees its event.
+	if battle.tick >= roundi(Rules.OVERTIME_SECONDS * Rules.TICK_RATE):
+		_music.overtime()
 	_begin_tick()
 	_sync_views()
 	for side in 2:
@@ -257,6 +260,7 @@ func _next_frame() -> void:
 		if _credits_frames == 0:
 			_hud.show_credits()
 			_music.fade_out(Hud.CREDITS_FRAMES)
+			_arena_sound.set_level(BattleMusic.SILENT_DB, Hud.CREDITS_FRAMES)
 			_fx.visible = false  # callouts stop animating here and draw above the HUD
 		if _credits_frames < Hud.CREDITS_FRAMES:
 			_credits_frames += 1
@@ -510,6 +514,7 @@ func _play_events() -> void:
 				if _live:
 					_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
 					_music.victory(BattleMusic.CUT_FRAMES)
+					_arena_sound.set_level(ArenaSound.STING_DUCK_DB, ArenaSound.DUCK_FRAMES)
 			"overtime":
 				_hud.flash_title("Overtime!", Color(1.0, 0.55, 0.3))
 				_music.overtime()
@@ -529,6 +534,7 @@ func _show_victory(side: int) -> void:
 	_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
 	_arena_sound.cheer()
 	_arena_sound.roar()
+	_arena_sound.set_level(ArenaSound.STING_DUCK_DB, ArenaSound.DUCK_FRAMES)
 	_music.victory()
 
 

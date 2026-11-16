@@ -194,7 +194,8 @@ func _voice(zone: Dictionary, key: int, velocity: int, duration: float) -> Array
 	var sample := _sample(zone[SAMPLE_ID])
 	var loop_start: int = header.loop_start - header.start + zone.get(2, 0) + 32768 * zone.get(45, 0)
 	var loop_end: int = header.loop_end - header.start + zone.get(3, 0) + 32768 * zone.get(50, 0)
-	var looping: bool = (int(zone[54]) & 1) == 1 and loop_end > loop_start
+	var mode: int = int(zone[54]) & 3
+	var looping: bool = (mode & 1) == 1 and loop_end > loop_start
 	var root: int = zone[58] if zone[58] >= 0 else header.pitch
 	var cents: float = (key - root) * zone[56] + zone[51] * 100 + zone[52] + header.correction
 	var step: float = pow(2.0, cents / 1200.0) * header.rate / rate
@@ -218,11 +219,12 @@ func _voice(zone: Dictionary, key: int, velocity: int, duration: float) -> Array
 	var right := PackedFloat32Array()
 	left.resize(total)
 	right.resize(total)
-	var position := 0.0
+	# Banks trim a sample's lead-in with start offsets (generators 0 and 4) and its end with 1 and 12.
+	var position := float(maxi(0, zone.get(0, 0) + 32768 * zone.get(4, 0)))
 	var smoothed := 0.0
 	var level_db := 0.0
 	var release_db := 0.0
-	var length := sample.size()
+	var length := clampi(sample.size() + zone.get(1, 0) + 32768 * zone.get(12, 0), 0, sample.size())
 	var used := total
 	for i in total:
 		var t := float(i) / rate
@@ -259,7 +261,8 @@ func _voice(zone: Dictionary, key: int, velocity: int, duration: float) -> Array
 		left[i] = x * envelope * gain_left
 		right[i] = x * envelope * gain_right
 		position += step
-		if looping and position >= loop_end:
+		# Mode 3 loops only while the key is held, then plays on to the sample's end.
+		if looping and position >= loop_end and not (mode == 3 and i >= release_at):
 			position -= loop_end - loop_start
 	left.resize(used)
 	right.resize(used)

@@ -17,14 +17,17 @@ const CHEERS: Array[Dictionary] = [
 	{"source": "crowd_cheer_2", "file": "crowd_cheer_2.mp3", "db": -8.5},
 	{"source": "crowd_cheer_3", "file": "crowd_cheer_3.mp3", "db": 5.0},
 ]
-const ROAR := {"source": "crowd_roar", "file": "crowd_roar.mp3", "db": -4.0}
+const ROAR := {"source": "crowd_roar", "file": "crowd_roar.mp3", "db": -11.0}
 const FIELDS := {
 	"grassland": {"source": "ambience_grassland", "file": "grassland.ogg", "db": 1.5},
-	"beach": {"source": "ambience_beach", "file": "beach.mp3", "db": -9.5},
+	"beach": {"source": "ambience_beach", "file": "beach.mp3", "db": -3.5},
 	"volcano": {"source": "ambience_volcano", "file": "volcano.mp3", "db": -0.5},
 	"snowfield": {"source": "ambience_snowfield", "file": "snowfield.ogg", "db": -2.0},
 	"cave": {"source": "ambience_cave", "file": "cave.ogg", "db": -2.5},
 }
+## How far the crowd dips while the victory sting plays, and how quickly.
+const STING_DUCK_DB := -6.0
+const DUCK_FRAMES := 15
 ## Excitement below this lets a cheer end, so the next one starts fresh.
 const QUIET := 0.05
 const SILENT_DB := -60.0
@@ -36,6 +39,9 @@ var _cheer: AudioStreamPlayer
 var _cheer_db := 0.0
 var _cheers_played := 0
 var _roar: AudioStreamPlayer
+## An offset (dB) on everything this plays, moved by set_level() over a few frames.
+var level_db := 0.0
+var _level_fade := {}
 
 
 ## The bed for an arena: the crowd's murmur in a coliseum with `fill` of its seats taken,
@@ -47,8 +53,6 @@ func setup(enclosed: bool, field: String, fill: float, root := SOURCES_DIR) -> v
 	if bed.is_empty():
 		return
 	_bed = _player(bed, true)
-	if _bed != null:
-		_bed.volume_db = bed.db
 
 
 ## The bed's recording and volume (dB) for an arena, or {} for none: the murmur in a coliseum,
@@ -98,14 +102,28 @@ func roar() -> void:
 		_roar.play()
 
 
+## Moves the level of everything this plays to `db` over `frames`: down under the victory
+## sting, to silence over the credits.
+func set_level(db: float, frames: int) -> void:
+	_level_fade = {"from": level_db, "to": db, "frames": maxi(frames, 1), "done": 0}
+
+
 ## Follows the crowd's excitement (0 to 1) this frame.
 func next_frame(excitement: float) -> void:
+	if not _level_fade.is_empty():
+		_level_fade.done += 1
+		level_db = BattleMusic.fade_db(_level_fade.from, _level_fade.to, float(_level_fade.done) / _level_fade.frames)
+		if _level_fade.done >= _level_fade.frames:
+			_level_fade = {}
+	for player: AudioStreamPlayer in [_bed, _roar]:
+		if player != null:
+			player.volume_db = maxf(player.get_meta("db") + level_db, SILENT_DB)
 	if _cheer == null or not _cheer.playing:
 		return
 	if excitement < QUIET:
 		_cheer.stop()
 		return
-	_cheer.volume_db = cheer_volume(_cheer_db, excitement)
+	_cheer.volume_db = maxf(cheer_volume(_cheer_db, excitement) + level_db, SILENT_DB)
 
 
 func _player(sound: Dictionary, loop: bool) -> AudioStreamPlayer:
@@ -124,5 +142,7 @@ func _player(sound: Dictionary, loop: bool) -> AudioStreamPlayer:
 	var player := AudioStreamPlayer.new()
 	player.stream = stream
 	player.bus = BUS
+	player.volume_db = float(sound.db) + level_db
+	player.set_meta("db", float(sound.db))
 	add_child(player)
 	return player

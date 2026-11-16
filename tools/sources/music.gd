@@ -34,7 +34,7 @@ func build(source_dir: String, out_dir: String) -> String:
 			return loaded.error
 		var score: Dictionary = loaded.score
 		var started := Time.get_ticks_msec()
-		var track := renderer.render_track(MusicArranger.new().arrange(score), score.bpm)
+		var track := renderer.render_track(MusicArranger.new().arrange(score), score.bpm, score.get("eq", []))
 		var dir := out_dir.path_join(id)
 		DirAccess.make_dir_recursive_absolute(dir)
 		var files := {}
