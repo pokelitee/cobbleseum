@@ -429,7 +429,8 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - **Controls:** both fighters are controlled through the same intents:
   - a movement direction;
   - dodge;
-  - use move 1–4.
+  - use move 1–4;
+  - feint move 1–4 (§9.2).
 
   The AI and the player produce identical intents.
 
@@ -439,6 +440,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - **HP:** the HP stat times a global HP multiplier (22 after the first tuning pass, §9.7). Tuning the multiplier sets battle length.
 - **Speed:** the Speed stat maps into a band of movement speeds. It also sets how quickly dodges recharge.
 - **Dodges:** each fighter has 2 dodge charges, each recharging in 3 s (slowest) to 1.5 s (fastest, by Speed). A dodge is a 2.5 m dash over 0.2 s, invulnerable throughout: projectiles fly on through and melee strikes whiff. A fighter can't dodge while winding up or recovering, so attacking commits it.
+- **Feints** (rules version 16): a fighter can fake the wind-up of a ready melee or area move that's in reach. A melee feint dashes in like the real thing. The feint breaks off, unreleased, with 3 ticks of the wind-up left, so to the foe it looks like a strike until its last moments, and both AIs dodge it as one. It deals no damage and spends none of the move's cooldown, but the fighter can't feint again for 3 s, and it can't dodge while feinting. The point is to draw a dodge, ideally the foe's last charge, and strike while the foe can't dodge. Projectile, heal and status wind-ups can't be feinted: nothing reacts to them before the release. In play, hold Shift (or LB) with a move key.
 - **Movement:** fighters walk at their speed, can't pass through each other (they slide around) and stay inside the wall. Since rules version 9 they speed up and slow down (14 m/s²) rather than starting and stopping instantly, and the slide out of a dodge carries on briefly.
 - **Facing:** fighters turn at 360° a second (900° while winding up, to aim). Walking, they face between the foe and where they're going, so they turn away to run and square up to fight, instead of always staring at each other.
 - **Agility** (rules version 10): acceleration and turning scale with body, by the square root of the Speed stat over 120 (a base-100 species) times (50 kg / weight)^0.15, within ×0.6 to ×1.5. Heavy, slow species lumber; light, fast ones dart, and the utility AI switches strafe direction more often for them. Flying types brake at half their acceleration, so they glide to a stop.
@@ -584,6 +586,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 16** (feints, §9.2; 1,000 battles, same seed as a version 15 batch): median 41.1 s (40.0 s under version 15), 10th–90th percentile 21.2–75.3 s, draws 2.4% (2.8%), side A 48.2% (50.3%), hits 50.8 a battle (50.3), dodges 8.5 (8.5). The ranked AI feints 0.54 times a battle. 20% of feints draw a dodge, and half of those dodges are punished by a hit. Openings are rare: the foe has to be down to its last dodge charge while a melee or area move is ready and in reach. Hard against ranked (1,000 battles): hard wins 58.6% of decided battles, against 58.3% under version 15, with 1.1 feints a battle. Feints add a tactic you can see without moving results.
 - **Rules version 15** (arena presets): three new arenas join the seed's choice, so a seed can land in a different arena; fields play as before, and coliseums around terrain flatten at the wall. No new batch.
 - **Rules version 14** (the continuous landscape and features; 1,000 battles): median 40.4 s, 10th–90th percentile 20.9–76.0 s, draws 3.0%, side A 48.8%.
 - **Rules version 13** (a 14 m arena, more cover, the utility AI's terrain tactics; 1,000 battles): median 40.3 s, 10th–90th percentile 20.1–74.9 s, draws 3.0%, side A 48.0%.
@@ -667,6 +670,7 @@ The AI is a utility AI. At each decision step it scores every candidate action a
 - **Candidate actions:**
   - approach to a move's range, back off, or circle;
   - use move N;
+  - feint move N;
   - dodge;
   - hold.
 - **Considerations:**
@@ -676,7 +680,7 @@ The AI is a utility AI. At each decision step it scores every candidate action a
   - An action's score is the product of its considerations, with a compensation factor so actions with more considerations aren't unfairly penalised.
   - The current action gets a commitment bonus, plus a minimum hold time, so the AI doesn't flip between choices every tick.
 - **Choosing:** the highest score wins. Exact ties are broken by the side's AI random stream, never by list order.
-- **AI profiles** are resources. Each sets reaction delay, aim error, decision interval and mistake chance.
+- **AI profiles** are resources. Each sets reaction delay, aim error, decision interval, mistake chance, dodge chance and feint chance.
 - **Rankings** use one fixed "ranked" profile on both sides.
 - **Debugging:** an overlay shows each candidate's per-consideration scores. It's implemented in `game/presentation/ai_overlay.gd`: a panel per side listing the last decision's candidates, best first, each with a score bar and its considerations, and the chosen action highlighted. F3 toggles it in the window, and `--ai-debug` shows it from the start or records it (`tools/record.gd -- … --ai-debug`). It only reads scores the AI keeps when asked, so it never changes a battle.
 - **Tests:**
@@ -687,19 +691,20 @@ The AI is a utility AI. At each decision step it scores every candidate action a
 
 - **Profiles** (`game/ai/profiles/*.tres`):
 
-  | Profile | Reaction delay | Decision interval | Mistake chance | Dodge chance |
-  |---|---|---|---|---|
-  | easy | 12 ticks (0.4 s) | 6 | 25% | 30% |
-  | normal | 8 | 4 | 10% | 50% |
-  | hard | 4 | 2 | 2% | 80% |
-  | ranked | 6 | 3 | 5% | 60% |
+  | Profile | Reaction delay | Decision interval | Mistake chance | Dodge chance | Feint chance |
+  |---|---|---|---|---|---|
+  | easy | 12 ticks (0.4 s) | 6 | 25% | 30% | 0% |
+  | normal | 8 | 4 | 10% | 50% | 0% |
+  | hard | 4 | 2 | 2% | 80% | 40% |
+  | ranked | 6 | 3 | 5% | 60% | 25% |
 
-  The dodge chance is rolled once per threat.
+  The dodge chance is rolled once per threat, and the feint chance once per opening.
 - **Perception:** the AI sees the opponent's position and wind-ups one reaction delay late, and notices a projectile only once it has flown that long. After noticing an attack, it judges the time left correctly.
 - **Considerations:**
   - moves: in range (a veto), expected damage as a share of the foe's max HP (power, STAB, stats, stages and type at once), finishing potential, and whether it's safe to commit while an attack it could dodge is incoming; non-damaging moves use the stand-in AI's situational value;
   - dodges: urgency, charges left and danger;
-  - movement: distance outside the range its ready moves want.
+  - movement: distance outside the range its ready moves want;
+  - feints (rules version 16): an opening comes when the foe is down to its last dodge charge and a melee or area move is ready and in reach. The AI rolls its feint chance once for the opening. If the roll succeeds, the feint outscores every attack (it is still weighed against an incoming attack, like committing to a move), and once the foe has dodged, the AI's usual scoring picks the real strike against a foe with no dodge left. The feinted move is never spent, so it can be that strike. The stand-in AI never feints.
 
   Scores are products with the compensation factor. Movement scores sit below any usable attack's. The commitment bonus and minimum hold time apply only between ways of moving.
 - **Not modelled:** aim error. The sim aims projectiles itself.
@@ -1026,7 +1031,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 **M6: battle feel.** Battles should read as two creatures fighting, not two models sliding into contact and staring at each other.
 
 - **Facing and momentum:** a turn rate instead of always facing the foe (fighters face where they walk and turn to attack), acceleration and braking, and knockback scaled by damage and the defender's weight.
-- **Spacing rhythm:** the AI keeps wider, varied distances, circles in arcs, backs off after a melee exchange, and on harder profiles feints to draw a dodge.
+- **Spacing rhythm:** the AI keeps wider, varied distances, circles in arcs, backs off after a melee exchange, and on harder profiles feints to draw a dodge. Feints are done (rules version 16, §9.2, §11).
 - **Movement styles by body:** fliers hover, swoop and dive; heavy species lumber and plant themselves; fast ones dart.
 - **Presentation-only life:** leaning into movement, head tracking, squash on landing and recoil.
 - Sim changes bump the rules version and get a balance batch and a new ranking.

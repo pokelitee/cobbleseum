@@ -331,6 +331,13 @@ func play_role(role: String) -> void:
 		_motion.start(PROCEDURAL_ROLES[role])
 
 
+## Breaks off a one-off animation (a feint's wind-up), blending back to the idle or walk.
+func break_off() -> void:
+	if _one_off and not _fainted:
+		_one_off = false
+		play_idle()
+
+
 func _play(role: String, looping: bool) -> bool:
 	if not _animations.has(role):
 		return false

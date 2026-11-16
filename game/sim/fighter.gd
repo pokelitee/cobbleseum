@@ -36,6 +36,10 @@ var action_move := -1
 var dodge_charges := Rules.DODGE_CHARGES
 var dodge_recharge_ticks := 0
 var dodge_recharge_total := 0
+## Ticks until the fighter can feint again, and whether its wind-up is a feint. Opponents'
+## controllers must not read `feinting`: a feint looks like any other wind-up.
+var feint_cooldown := 0
+var feinting := false
 ## Per-tick dash while dodging.
 var dodge_step := Vector2.ZERO
 ## Stat stages, -6 to +6, and ticks since they last changed (for decay).
@@ -116,3 +120,8 @@ func can_dodge() -> bool:
 
 func move_ready(index: int) -> bool:
 	return index >= 0 and index < moves.size() and cooldowns[index] == 0
+
+
+## Whether move `index` can be feinted now: a ready melee or area move, feints off cooldown.
+func can_feint(index: int) -> bool:
+	return can_act() and feint_cooldown == 0 and move_ready(index) and moves[index].can_feint()

@@ -11,3 +11,6 @@ extends Resource
 @export_range(0.0, 1.0) var mistake_chance := 0.05
 ## Chance of dodging a given incoming attack at all, rolled once per threat.
 @export_range(0.0, 1.0) var dodge_chance := 0.6
+## Chance of feinting when the chance comes up (the foe down to its last dodge charge, a
+## melee or area move ready and in reach), rolled once per chance.
+@export_range(0.0, 1.0) var feint_chance := 0.0

@@ -263,6 +263,11 @@ func expected_hits() -> float:
 	return (hits_min + hits_max) / 2.0
 
 
+## Melee and area moves can be feinted: theirs are the wind-ups a foe dodges.
+func can_feint() -> bool:
+	return kind == Kind.MELEE or kind == Kind.AREA
+
+
 ## The largest gap between hitboxes this move can be started from.
 func reach() -> float:
 	if kind == Kind.MELEE:

@@ -11,11 +11,17 @@ extends SceneTree
 ## results/balance_<rules version>_<seed>.json:
 ## - battle length (median and spread) and draw rate;
 ## - how often the side with the type advantage wins;
-## - how often each move kind is used, plus dodges, statuses and side bias.
+## - how often each move kind is used, plus dodges, statuses and side bias;
+## - feints: how many, how many drew a dodge, and how many of those the feinter followed with
+##   a hit.
 ## Matchups and battle seeds come from --seed, so a report can be reproduced exactly.
 
 const DEFAULT_BATTLES := 500
 const RESULTS_DIR := "res://results"
+## A dodge this soon after a feint breaks off was drawn by it (the foe sees the wind-up a
+## reaction delay late), and a hit this soon after a drawn dodge punishes it.
+const FEINT_DRAW_TICKS := 15
+const FEINT_PUNISH_TICKS := 45
 ## Targets from the brief: battles of 30-45 s, few draws.
 const TARGET_SECONDS := Vector2(30.0, 45.0)
 const TARGET_DRAW_RATE := 0.05
@@ -80,11 +86,35 @@ static func run(spec: Dictionary, data: BattleData) -> Dictionary:
 		if event.type == "windup":
 			var kind: String = BattleMove.Kind.keys()[moves_by_id[event.move].kind].to_lower()
 			kinds[kind] = kinds.get(kind, 0) + 1
+	counts.merge(feint_outcomes(battle.events))
 	return {
 		"a": spec.fighters[0].species, "b": spec.fighters[1].species, "seed": spec.seed,
 		"result": Battle.Result.keys()[battle.result], "seconds": battle.tick / float(Rules.TICK_RATE),
 		"advantage": advantage(battle, data), "kinds": kinds, "events": counts,
 	}
+
+
+## {"feint_drew_dodge", "feint_punished"}: feints the foe dodged soon after they broke off,
+## and those dodges the feinter followed with a hit.
+static func feint_outcomes(events: Array[Dictionary]) -> Dictionary:
+	var drew := 0
+	var punished := 0
+	for i in events.size():
+		if events[i].type != "feint_end":
+			continue
+		var side := int(events[i].side)
+		var dodge := -1
+		for j in range(i + 1, events.size()):
+			var event: Dictionary = events[j]
+			if event.tick > (events[i].tick if dodge < 0 else dodge) + (FEINT_DRAW_TICKS if dodge < 0 else FEINT_PUNISH_TICKS):
+				break
+			if dodge < 0 and event.type == "dodge" and int(event.side) == 1 - side:
+				dodge = event.tick
+				drew += 1
+			elif dodge >= 0 and event.type == "hit" and int(event.side) == side:
+				punished += 1
+				break
+	return {"feint_drew_dodge": drew, "feint_punished": punished}
 
 
 ## 0 or 1 for the side whose best super-effective hit on the other is stronger, -1 if even.
@@ -133,7 +163,8 @@ static func summarise(rows: Array[Dictionary]) -> Dictionary:
 	for kind: String in kinds:
 		kind_shares[kind] = float(kinds[kind]) / maxi(uses, 1)
 	var per_battle := {}
-	for type in ["hit", "miss", "dodge", "dodged", "status", "boost", "heal", "knockout", "time_up"]:
+	for type in ["hit", "miss", "dodge", "dodged", "status", "boost", "heal", "knockout", "time_up", "feint",
+			"feint_drew_dodge", "feint_punished"]:
 		per_battle[type] = float(events.get(type, 0)) / rows.size()
 	return {
 		"battles": rows.size(),
