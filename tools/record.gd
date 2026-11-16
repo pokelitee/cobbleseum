@@ -28,6 +28,7 @@ var _view_args: PackedStringArray = []
 const CREDITS := """Pokémon models, textures, animations and sounds: Cobblemon (https://cobblemon.com),
 licensed CC BY-NC 3.0. Non-commercial use only.
 Battle data: Pokémon Showdown (MIT).
+Music: original, made for Cobbleseum; instruments from the GeneralUser GS SoundFont by S. Christian Collins.
 Fonts: Lilita One and Nunito (SIL Open Font License 1.1).
 Pokémon and Pokémon character names are trademarks of Nintendo, Creatures Inc. and GAME FREAK.
 Made with Cobbleseum, an unaffiliated fan project.
@@ -101,9 +102,21 @@ func _initialize() -> void:
 		"events": battle.events,
 	}
 	_write(out_dir.path_join("battle.json"), JSON.stringify(record, "  "))
-	_write(out_dir.path_join("credits.txt"), CREDITS)
+	_write(out_dir.path_join("credits.txt"), credits())
 	print("wrote %s" % out_dir)
 	quit(0)
+
+
+## The clip's credits: CREDITS, then each CC0 crowd and ambience recording by title and author.
+static func credits() -> String:
+	var lines: PackedStringArray = [CREDITS.strip_edges(), "Crowd and ambience sounds (CC0):"]
+	var manifest := AssetPipeline.load_manifest("res://sources.json")
+	for source: Dictionary in manifest.get("sources", {}).values():
+		if source.license.begins_with("CC0"):
+			lines.append("- \"%s\" by %s (%s)" % [source.title, source.author, source.page])
+	return "
+".join(lines) + "
+"
 
 
 ## Renders one format to <out_dir>/clip_<format>.mp4. Returns an error message or "".

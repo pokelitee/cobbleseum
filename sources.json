@@ -51,6 +51,172 @@
         {"pattern": "data/cobblemon/species/*.json", "min_count": 1000}
       ],
       "build": "res://tools/sources/cobblemon.gd"
+    },
+    "generaluser_gs": {
+      "version": "2.0.3",
+      "url": "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/97049183643d5fc5a9322a69c5b09efb667c6c3a/GeneralUser-GS.sf2",
+      "size": 32319396,
+      "sha256": "9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe",
+      "archive": "file",
+      "license": "GeneralUser GS License v2.0: free use in music and software, private or commercial",
+      "title": "GeneralUser GS",
+      "author": "S. Christian Collins",
+      "page": "https://www.schristiancollins.com/generaluser.php",
+      "extract": ["GeneralUser-GS.sf2"],
+      "layout": [
+        {"pattern": "GeneralUser-GS.sf2", "min_count": 1}
+      ],
+      "build": "res://tools/sources/music.gd"
+    },
+    "crowd_murmur": {
+      "version": "1",
+      "url": "https://cdn.freesound.org/previews/635/635492_612689-hq.mp3",
+      "size": 1883616,
+      "sha256": "b521eebe0ee561308060bbd54e296d398aa1ce2d19b9c44c83c5c3f2eb975902",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "crowd int large dense arena stadium hall with cool shouting scalper left.flac",
+      "author": "kyles",
+      "page": "https://freesound.org/people/kyles/sounds/635492/",
+      "extract": ["crowd_murmur.mp3"],
+      "layout": [
+        {"pattern": "crowd_murmur.mp3", "min_count": 1}
+      ]
+    },
+    "crowd_cheer_1": {
+      "version": "1",
+      "url": "https://cdn.freesound.org/previews/397/397434_4019029-hq.mp3",
+      "size": 558324,
+      "sha256": "b621e391cb850ff79d8c215faf295119e747340803429ffbb383b5eaf4a132d2",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "Crowd Cheer",
+      "author": "FoolBoyMedia",
+      "page": "https://freesound.org/people/FoolBoyMedia/sounds/397434/",
+      "extract": ["crowd_cheer_1.mp3"],
+      "layout": [
+        {"pattern": "crowd_cheer_1.mp3", "min_count": 1}
+      ]
+    },
+    "crowd_cheer_2": {
+      "version": "1",
+      "url": "https://cdn.freesound.org/previews/397/397435_4019029-hq.mp3",
+      "size": 558635,
+      "sha256": "efe57f1e7dbed21e1561b8090cf54301a78775b4b8bf8ff418507c7e364f7f56",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "Crowd Cheer II",
+      "author": "FoolBoyMedia",
+      "page": "https://freesound.org/people/FoolBoyMedia/sounds/397435/",
+      "extract": ["crowd_cheer_2.mp3"],
+      "layout": [
+        {"pattern": "crowd_cheer_2.mp3", "min_count": 1}
+      ]
+    },
+    "crowd_cheer_3": {
+      "version": "1",
+      "url": "https://cdn.freesound.org/previews/480/480765_2524442-hq.mp3",
+      "size": 605760,
+      "sha256": "67627a730690fa4f4a5e3be3a25d4d8ed6bedaa7503b4f13dfc33a5e8ff17618",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "R08-54-Large Crowd Cheering at Event.wav",
+      "author": "craigsmith",
+      "page": "https://freesound.org/people/craigsmith/sounds/480765/",
+      "extract": ["crowd_cheer_3.mp3"],
+      "layout": [
+        {"pattern": "crowd_cheer_3.mp3", "min_count": 1}
+      ]
+    },
+    "crowd_roar": {
+      "version": "1",
+      "url": "https://cdn.freesound.org/previews/130/130568_2024417-hq.mp3",
+      "size": 360081,
+      "sha256": "b75957f07b5702256004beb31a59a8dd762785a197e2133bbf8fcf7d92fc6714",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "RoaringCrowd.wav",
+      "author": "benfree",
+      "page": "https://freesound.org/people/benfree/sounds/130568/",
+      "extract": ["crowd_roar.mp3"],
+      "layout": [
+        {"pattern": "crowd_roar.mp3", "min_count": 1}
+      ]
+    },
+    "ambience_grassland": {
+      "version": "1",
+      "url": "https://opengameart.org/sites/default/files/Birds%20and%20Wind%20-%20Ambient_0.ogg",
+      "size": 1883864,
+      "sha256": "28f99f536a0772d80052f03bcb22c9ed8fd7c6e4db7f2e8356efcf26a8e24f01",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "Birds and Wind - Ambient, Birds, Wind and Synth",
+      "author": "Spring Spring",
+      "page": "https://opengameart.org/content/birds-and-wind-ambient-birds-wind-and-synth",
+      "extract": ["grassland.ogg"],
+      "layout": [
+        {"pattern": "grassland.ogg", "min_count": 1}
+      ]
+    },
+    "ambience_snowfield": {
+      "version": "1",
+      "url": "https://opengameart.org/sites/default/files/wind%20woosh%20loop.ogg",
+      "size": 251584,
+      "sha256": "0cfdbd3f21ed449689a9024264edf267d0037a6495813a7010827672ec191dac",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "wind whoosh loop",
+      "author": "SketchMan3",
+      "page": "https://opengameart.org/content/wind-whoosh-loop",
+      "extract": ["snowfield.ogg"],
+      "layout": [
+        {"pattern": "snowfield.ogg", "min_count": 1}
+      ]
+    },
+    "ambience_cave": {
+      "version": "1",
+      "url": "https://opengameart.org/sites/default/files/dungeon_ambient_1.ogg",
+      "size": 1626352,
+      "sha256": "df491823e4877371c34dbda4e9321cd83a4a14fa7573cee0ebca1ae423b70e6e",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "Loopable Dungeon Ambience",
+      "author": "JaggedStone",
+      "page": "https://opengameart.org/content/loopable-dungeon-ambience",
+      "extract": ["cave.ogg"],
+      "layout": [
+        {"pattern": "cave.ogg", "min_count": 1}
+      ]
+    },
+    "ambience_beach": {
+      "version": "1",
+      "url": "https://cdn.freesound.org/previews/578/578524_5487341-hq.mp3",
+      "size": 4107072,
+      "sha256": "fd505dbd43cb1c3508f884279bf5d3e060bb14f2bc3d9b4cce334eb7a75b5d7f",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "Calm ocean waves",
+      "author": "SamsterBirdies",
+      "page": "https://freesound.org/people/SamsterBirdies/sounds/578524/",
+      "extract": ["beach.mp3"],
+      "layout": [
+        {"pattern": "beach.mp3", "min_count": 1}
+      ]
+    },
+    "ambience_volcano": {
+      "version": "1",
+      "url": "https://cdn.freesound.org/previews/474/474852_9395330-hq.mp3",
+      "size": 919152,
+      "sha256": "ed61f8fc1fdbb3fbb4ce1325f61ec5391dde23562649e9bdb81d8d1e3d97f546",
+      "archive": "file",
+      "license": "CC0 1.0",
+      "title": "Lava Loop 4",
+      "author": "Fission9",
+      "page": "https://freesound.org/people/Fission9/sounds/474852/",
+      "extract": ["volcano.mp3"],
+      "layout": [
+        {"pattern": "volcano.mp3", "min_count": 1}
+      ]
     }
   }
 }

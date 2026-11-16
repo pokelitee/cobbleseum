@@ -1,0 +1,20 @@
+{
+  "title": "Victory",
+  "bpm": 150,
+  "parts": [
+    {"program": 56, "velocity": 115, "gain": 0.8, "line": "A4:1 A4:1 A4:1 D5:3 F#5:2 E5:2 F#5:1 A5:5 r:2 D6:16"},
+    {"program": 56, "velocity": 100, "gain": 0.55, "pan": 0.3, "line": "F#4:1 F#4:1 F#4:1 A4:3 D5:2 C#5:2 D5:1 F#5:5 r:2 A5:16"},
+    {"program": 61, "velocity": 110, "gain": 0.4, "pan": -0.3, "line": "r:3 D4:5 G4:4 r:2 A4:16"},
+    {"program": 61, "velocity": 110, "gain": 0.4, "pan": 0.3, "line": "r:3 F#4:5 B4:4 r:2 D5:16"},
+    {"program": 61, "velocity": 110, "gain": 0.35, "line": "r:16 F#4:16"},
+    {"program": 49, "velocity": 85, "gain": 0.3, "line": "r:3 D4:11 D4:16"},
+    {"program": 49, "velocity": 85, "gain": 0.3, "line": "r:3 A4:11 A4:16"},
+    {"program": 49, "velocity": 85, "gain": 0.3, "line": "r:3 F#5:11 F#5:16"},
+    {"program": 38, "velocity": 115, "gain": 1.0, "line": "r:3 D2:5 G2:4 r:2 D2:16"},
+    {"program": 55, "velocity": 115, "gain": 0.45, "line": "r:3 D5:4 r:7 D5:4"},
+    {"program": 47, "velocity": 70, "gain": 0.6, "line": "A2:1 A2:1 A2:1 D2:4 r:5 A2:1 A2:1 D2:16"},
+    {"program": 0, "bank": 128, "velocity": 115, "gain": 0.6, "line": "r:3 C#3:11 C#3:16"},
+    {"program": 0, "bank": 128, "velocity": 115, "gain": 0.9, "line": "r:3 C2:5 C2:4 r:2 C2:16"},
+    {"program": 0, "bank": 128, "velocity": 90, "gain": 0.5, "line": "D2:1 D2:1 D2:1 r:9 D2:1 D2:1 D2:1 D2:1"}
+  ]
+}

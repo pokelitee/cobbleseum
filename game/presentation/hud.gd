@@ -37,7 +37,7 @@ const STATUS_BADGES := {
 	"tox": ["TOX", Color("8e3fb0")], "slp": ["SLP", Color("8a8a9a")], "frz": ["FRZ", Color("5cc8e0")],
 	"confusion": ["CNF", Color("ff5f9e")],
 }
-const CREDITS_TEXT := "Models, animations and sounds: Cobblemon (CC BY‑NC 3.0)\nBattle data: Pokémon Showdown\nAn unaffiliated, non-commercial fan project"
+const CREDITS_TEXT := "Models, animations and sounds: Cobblemon (CC BY‑NC 3.0)\nBattle data: Pokémon Showdown\nOriginal music · Crowd and ambience: CC0, see description\nAn unaffiliated, non-commercial fan project"
 
 var _size := Vector2.ZERO
 var _scale := 1.0
