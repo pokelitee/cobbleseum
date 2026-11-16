@@ -3,15 +3,30 @@ extends RefCounted
 ## Renders arranged notes (MusicArranger) through a SoundFont into one stereo buffer per layer,
 ## with an echo on the lead and a shared reverb, at RATE.
 ##
-## A track's buffers run from the start of the intro to the end of its loop. Whatever rings
-## past the loop's end (releases, echoes, reverb) is folded back onto the loop's start, so the
-## loop repeats seamlessly; the first pass also hears it, faintly, over the intro's own tail.
+## A track is arranged as its intro and two passes of its loop. Its buffers keep the intro and
+## the second pass: that pass starts with the end of the first still ringing (releases, echoes,
+## reverb), as every repeat does, so the loop repeats seamlessly. The first time through, the
+## loop's start hears that ring-out instead of the intro's, under the main theme's big downbeat.
+##
+## Every layer gets the same tone shaping (TILT, plus a score's own "eq") and one gain that
+## brings the track's default mix to TARGET_LOUDNESS, so tracks match each other.
 
 const RATE := 48000
-## Loudness of a track's default mix (drums, bass, harmony and lead variant 0), as RMS.
-const TARGET_RMS_DB := -18.0
-## The loudest any mix of layers, the climax included, may peak.
-const PEAK := 0.95
+## Weighted loudness (dB, roughly LUFS) of a track's default mix: drums, bass, harmony and lead 0.
+const TARGET_LOUDNESS := -18.0
+## No single layer may peak above this, so none clips in its 16-bit file.
+const LAYER_PEAK := 0.98
+## Tone shaping every layer gets: less boom, more presence for small speakers.
+const TILT: Array[Dictionary] = [
+	{"type": "low_shelf", "hz": 120.0, "db": -3.0, "q": 0.71},
+	{"type": "high_shelf", "hz": 3500.0, "db": 3.0, "q": 0.71},
+]
+## An approximation of the K-weighting loudness meters use (ITU-R BS.1770): a high shelf and a
+## high-pass, so bass counts for less than it does in plain RMS.
+const WEIGHTING: Array[Dictionary] = [
+	{"type": "high_shelf", "hz": 1680.0, "db": 4.0, "q": 0.71},
+	{"type": "high_pass", "hz": 38.0, "db": 0.0, "q": 0.5},
+]
 const ECHO_FEEDBACK := 0.28
 const ECHO_LEVEL := 0.22
 const ECHO_SPREAD := 0.011
@@ -37,17 +52,18 @@ static func step_samples(bpm: float) -> float:
 	return RATE * 15.0 / bpm
 
 
-## Renders a looping track. Returns {"layers": {name: [left, right]}, "loop_begin": sample,
-## "loop_end": sample}; every layer is loop_end samples long and shares one gain.
-func render_track(arranged: Dictionary, bpm: float) -> Dictionary:
+## Renders a looping track arranged by MusicArranger, with an optional `eq` (see _equalize).
+## Returns {"layers": {name: [left, right]}, "loop_begin": sample, "loop_end": sample}; every
+## layer is loop_end samples long and shares one gain.
+func render_track(arranged: Dictionary, bpm: float, eq: Array = []) -> Dictionary:
 	var per_step := step_samples(bpm)
-	var loop_begin := roundi(arranged.loop_start * per_step)
-	var loop_end := roundi(arranged.loop_end * per_step)
-	var layers := _render_layers(arranged.notes, per_step, loop_end + roundi(TAIL * RATE))
+	var intro_end := roundi(arranged.intro_end * per_step)
+	var second_pass := Vector2i(roundi(arranged.loop_start * per_step), roundi(arranged.loop_end * per_step))
+	var layers := _render_layers(arranged.notes, per_step, second_pass.y, eq)
 	for name: String in layers:
-		layers[name] = _fold(layers[name], loop_begin, loop_end)
-	_normalize(layers)
-	return {"layers": layers, "loop_begin": loop_begin, "loop_end": loop_end}
+		layers[name] = splice(layers[name], intro_end, second_pass)
+	normalize(layers)
+	return {"layers": layers, "loop_begin": intro_end, "loop_end": intro_end + second_pass.y - second_pass.x}
 
 
 ## Renders a one-shot piece (the victory sting) into a single stereo buffer, ending once it
@@ -57,7 +73,7 @@ func render_once(notes: Array, bpm: float, peak := 0.8) -> Array[PackedFloat32Ar
 	var last := 0.0
 	for note: Dictionary in notes:
 		last = maxf(last, note.step + note.length)
-	var layers := _render_layers(notes, per_step, roundi(last * per_step) + roundi(TAIL * RATE))
+	var layers := _render_layers(notes, per_step, roundi(last * per_step) + roundi(TAIL * RATE), [])
 	var mixed: Array[PackedFloat32Array] = [PackedFloat32Array(), PackedFloat32Array()]
 	for name: String in layers:
 		mixed = _sum(mixed, layers[name])
@@ -93,7 +109,7 @@ static func write_wav(path: String, buffer: Array[PackedFloat32Array]) -> String
 	return ""
 
 
-func _render_layers(notes: Array, per_step: float, length: int) -> Dictionary:
+func _render_layers(notes: Array, per_step: float, length: int, eq: Array) -> Dictionary:
 	var dry := {}
 	var reverb := {}
 	var echo := {}
@@ -123,7 +139,8 @@ func _render_layers(notes: Array, per_step: float, length: int) -> Dictionary:
 		_add_echo(dry[layer], echo[layer], per_step)
 		_add_reverb(dry[layer], reverb[layer])
 		for channel in 2:
-			dry[layer][channel] = _high_pass(_high_pass(dry[layer][channel]))
+			var shaped := _equalize(dry[layer][channel], TILT + eq)
+			dry[layer][channel] = _high_pass(_high_pass(shaped))
 	return dry
 
 
@@ -192,31 +209,83 @@ static func _high_pass(buffer: PackedFloat32Array) -> PackedFloat32Array:
 	return buffer
 
 
-static func _fold(buffer: Array, loop_begin: int, loop_end: int) -> Array[PackedFloat32Array]:
+## The intro (samples before `intro_end`) followed by the samples in `loop` [start, end).
+static func splice(buffer: Array, intro_end: int, loop: Vector2i) -> Array[PackedFloat32Array]:
 	var out: Array[PackedFloat32Array] = []
 	for channel in 2:
 		var samples: PackedFloat32Array = buffer[channel]
-		var loop_length := loop_end - loop_begin
-		for i in range(loop_end, samples.size()):
-			samples[loop_begin + (i - loop_end) % loop_length] += samples[i]
-		samples.resize(loop_end)
-		out.append(samples)
+		out.append(samples.slice(0, intro_end) + samples.slice(loop.x, loop.y))
 	return out
 
 
-## Scales every layer by one gain: the default mix to TARGET_RMS_DB, unless some mix of
-## variants and the climax would then peak above PEAK.
-static func _normalize(layers: Dictionary) -> void:
+## Scales every layer by one gain that brings the default mix (drums_0, bass, harmony, lead_0)
+## to TARGET_LOUDNESS, unless a layer would then peak above LAYER_PEAK.
+static func normalize(layers: Dictionary) -> void:
 	var default := _sum(_sum(_sum(layers.drums_0, layers.bass), layers.harmony), layers.lead_0)
-	var rms := _rms(default)
-	var gain := db_to_linear(TARGET_RMS_DB) / maxf(rms, 1e-6)
+	var gain := db_to_linear(TARGET_LOUDNESS - loudness(default))
 	var loudest := 0.0
-	for drums in ["drums_0", "drums_1"]:
-		for lead in ["lead_0", "lead_1"]:
-			var mix := _sum(_sum(_sum(_sum(layers[drums], layers.bass), layers.harmony), layers[lead]), layers.climax)
-			loudest = maxf(loudest, _peak(mix))
-	gain = minf(gain, PEAK / maxf(loudest, 1e-6))
+	for layer: Array in layers.values():
+		loudest = maxf(loudest, _peak(layer))
+	gain = minf(gain, LAYER_PEAK / maxf(loudest, 1e-6))
 	_scale(layers.values(), gain)
+
+
+## Weighted loudness of a stereo buffer in dB (roughly LUFS, without gating).
+static func loudness(buffer: Array) -> float:
+	var total := 0.0
+	var count := 0
+	for channel in 2:
+		var weighted := _equalize(buffer[channel].duplicate(), WEIGHTING)
+		for x: float in weighted:
+			total += x * x
+		count = weighted.size()
+	return -0.691 + 10.0 * log(maxf(total / maxi(count, 1), 1e-12)) / log(10.0)
+
+
+## Runs EQ bands (RBJ-cookbook biquads) over a buffer, in order. Each band is {"type":
+## "low_shelf" | "high_shelf" | "peak" | "high_pass", "hz", "db", "q"}.
+static func _equalize(buffer: PackedFloat32Array, bands: Array) -> PackedFloat32Array:
+	for band: Dictionary in bands:
+		var c := _biquad(band)
+		var x1 := 0.0
+		var x2 := 0.0
+		var y1 := 0.0
+		var y2 := 0.0
+		for i in buffer.size():
+			var x := buffer[i]
+			var y: float = c[0] * x + c[1] * x1 + c[2] * x2 - c[3] * y1 - c[4] * y2
+			x2 = x1
+			x1 = x
+			y2 = y1
+			y1 = y
+			buffer[i] = y
+	return buffer
+
+
+## Normalised biquad coefficients [b0, b1, b2, a1, a2] for an EQ band.
+static func _biquad(band: Dictionary) -> Array[float]:
+	var a := pow(10.0, float(band.get("db", 0.0)) / 40.0)
+	var w := TAU * float(band.hz) / RATE
+	var cw := cos(w)
+	var alpha := sin(w) / (2.0 * float(band.get("q", 0.71)))
+	var b: Array[float] = []
+	var d: Array[float] = []
+	match band.type:
+		"peak":
+			b = [1.0 + alpha * a, -2.0 * cw, 1.0 - alpha * a]
+			d = [1.0 + alpha / a, -2.0 * cw, 1.0 - alpha / a]
+		"low_shelf":
+			var k := 2.0 * sqrt(a) * alpha
+			b = [a * ((a + 1.0) - (a - 1.0) * cw + k), 2.0 * a * ((a - 1.0) - (a + 1.0) * cw), a * ((a + 1.0) - (a - 1.0) * cw - k)]
+			d = [(a + 1.0) + (a - 1.0) * cw + k, -2.0 * ((a - 1.0) + (a + 1.0) * cw), (a + 1.0) + (a - 1.0) * cw - k]
+		"high_shelf":
+			var k := 2.0 * sqrt(a) * alpha
+			b = [a * ((a + 1.0) + (a - 1.0) * cw + k), -2.0 * a * ((a - 1.0) + (a + 1.0) * cw), a * ((a + 1.0) + (a - 1.0) * cw - k)]
+			d = [(a + 1.0) - (a - 1.0) * cw + k, 2.0 * ((a - 1.0) - (a + 1.0) * cw), (a + 1.0) - (a - 1.0) * cw - k]
+		_:  # high_pass
+			b = [(1.0 + cw) / 2.0, -(1.0 + cw), (1.0 + cw) / 2.0]
+			d = [1.0 + alpha, -2.0 * cw, 1.0 - alpha]
+	return [b[0] / d[0], b[1] / d[0], b[2] / d[0], d[1] / d[0], d[2] / d[0]]
 
 
 static func _silence(length: int) -> Array[PackedFloat32Array]:
@@ -238,16 +307,6 @@ static func _sum(a: Array, b: Array) -> Array[PackedFloat32Array]:
 			x[i] += y[i]
 		out.append(x)
 	return out
-
-
-static func _rms(buffer: Array) -> float:
-	var total := 0.0
-	var count := 0
-	for channel in 2:
-		for x: float in buffer[channel]:
-			total += x * x
-		count += buffer[channel].size()
-	return sqrt(total / maxi(count, 1))
 
 
 static func _peak(buffer: Array) -> float:

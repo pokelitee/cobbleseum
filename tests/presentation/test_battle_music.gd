@@ -92,6 +92,23 @@ func test_the_sting_waits_for_its_delay() -> void:
 	music.free()
 
 
+func test_fades_move_evenly_in_amplitude() -> void:
+	assert_almost_eq(BattleMusic.fade_db(0.0, BattleMusic.SILENT_DB, 0.5), -6.02, 0.05, "halfway is half the amplitude")
+	assert_almost_eq(BattleMusic.fade_db(BattleMusic.SILENT_DB, 0.0, 0.5), -6.02, 0.05)
+	assert_eq(BattleMusic.fade_db(-12.0, 0.0, 1.0), 0.0)
+	assert_eq(BattleMusic.fade_db(0.0, BattleMusic.SILENT_DB, 1.0), BattleMusic.SILENT_DB)
+
+
+func test_the_credits_cancel_a_sting_still_waiting() -> void:
+	var music := _music()
+	music.start()
+	music.victory(10)
+	music.fade_out(60)
+	_frames(music, 20)
+	assert_false(music.sting_started())
+	music.free()
+
+
 func test_a_draw_fades_out() -> void:
 	var music := _music()
 	music.start()

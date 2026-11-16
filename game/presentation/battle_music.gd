@@ -103,12 +103,14 @@ func victory(delay := 0) -> void:
 	_sting_frame = _frame + delay
 
 
-## Fades out the music and the sting, if either is playing.
+## Fades out the music and the sting, if either is playing; a sting still waiting won't start.
 func fade_out(frames: int) -> void:
 	if _music != null and _music.playing:
 		_fade("music", SILENT_DB, frames)
 	if _sting != null:
 		_fade("sting", SILENT_DB, frames)
+	elif _sting_frame > _frame:
+		_sting_frame = -1
 
 
 ## The music's volume (dB) now, SILENT_DB without music.
@@ -130,13 +132,22 @@ func next_frame() -> void:
 	for key: String in _fades.keys():
 		var fade: Dictionary = _fades[key]
 		fade.done += 1
-		var db := lerpf(fade.from, fade.to, minf(1.0, float(fade.done) / fade.frames))
+		var db := fade_db(fade.from, fade.to, float(fade.done) / fade.frames)
 		_set_db(key, db)
 		if fade.done >= fade.frames:
 			_fades.erase(key)
 			if db <= SILENT_DB:
 				_stop(key)
 	_frame += 1
+
+
+## The volume (dB) a fade from `from` to `to` has reached at `progress` (0 to 1). It moves in
+## amplitude, not in dB, so it sounds even: a fade in dB spends half its time almost silent.
+static func fade_db(from: float, to: float, progress: float) -> float:
+	if progress >= 1.0:
+		return to
+	var amplitude := lerpf(db_to_linear(from), db_to_linear(to), clampf(progress, 0.0, 1.0))
+	return maxf(linear_to_db(maxf(amplitude, 1e-6)), SILENT_DB)
 
 
 func _build_stream() -> bool:

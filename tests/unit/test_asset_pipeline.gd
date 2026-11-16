@@ -130,7 +130,7 @@ func test_a_single_file_source_is_stored_under_its_name() -> void:
 
 func test_a_single_file_source_needs_one_safe_name() -> void:
 	var source := _source("x".to_utf8_buffer(), "file")
-	for extract: Array in [["a.ogg", "b.ogg"], ["../a.ogg"], ["sounds/"]]:
+	for extract: Array in [["a.ogg", "b.ogg"], ["../a.ogg"], ["sounds/"], [3]]:
 		source.extract = extract
 		assert_true(AssetPipeline.validate_source("s", source).contains("one safe file name"), str(extract))
 

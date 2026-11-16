@@ -7,8 +7,8 @@ const PERIOD := 10
 
 
 ## A minimal SoundFont: one preset (bank 0, program 0) whose instrument plays one looping
-## sample for keys 48 to 84.
-static func _bank() -> PackedByteArray:
+## sample for keys 48 to 84, skipping `start_offset` samples of it.
+static func _bank(start_offset := 0) -> PackedByteArray:
 	var sample := PackedByteArray()
 	sample.resize(SAMPLE_COUNT * 2)
 	for i in SAMPLE_COUNT:
@@ -18,8 +18,11 @@ static func _bank() -> PackedByteArray:
 	var pbag := _u16(0) + _u16(0) + _u16(1) + _u16(0)
 	var pgen := _gen(41, 0) + _gen(0, 0)
 	var inst := _record("Inst", 20) + _u16(0) + _record("EOI", 20) + _u16(1)
-	var ibag := _u16(0) + _u16(0) + _u16(4) + _u16(0)
-	var igen := _range(43, 48, 84) + _gen(54, 1) + _gen(58, 60) + _gen(53, 0) + _gen(0, 0)
+	var gens := _range(43, 48, 84) + _gen(54, 1) + _gen(58, 60)
+	if start_offset != 0:
+		gens += _gen(0, start_offset)
+	var ibag := _u16(0) + _u16(0) + _u16(gens.size() / 4 + 1) + _u16(0)
+	var igen := gens + _gen(53, 0) + _gen(0, 0)
 	var shdr := _record("Square", 20) + _u32(0) + _u32(SAMPLE_COUNT) + _u32(0) + _u32(LOOP_END) + _u32(48000)
 	shdr += PackedByteArray([60, 0]) + _u16(0) + _u16(1)
 	shdr += _record("EOS", 20) + _u32(0) + _u32(0) + _u32(0) + _u32(0) + _u32(0) + PackedByteArray([0, 0]) + _u16(0) + _u16(0)
@@ -71,10 +74,10 @@ static func _range(operator: int, low: int, high: int) -> PackedByteArray:
 	return _u16(operator) + PackedByteArray([low, high])
 
 
-func _font() -> SoundFont:
+func _font(start_offset := 0) -> SoundFont:
 	var path := TestFiles.fresh_dir("sound_font").path_join("test.sf2")
 	var file := FileAccess.open(path, FileAccess.WRITE)
-	file.store_buffer(_bank())
+	file.store_buffer(_bank(start_offset))
 	file.close()
 	var font := SoundFont.new()
 	assert_eq(font.load_file(path), "")
@@ -102,6 +105,14 @@ func test_notes_are_pitched_from_the_root_key() -> void:
 	font.rate = 48000
 	assert_almost_eq(_period(font.note(0, 0, 60, 127, 0.05)[0]), PERIOD, 0.2, "the root key plays the sample as recorded")
 	assert_almost_eq(_period(font.note(0, 0, 72, 127, 0.05)[0]), PERIOD / 2.0, 0.2, "an octave up halves the period")
+
+
+func test_start_offsets_skip_the_start_of_the_sample() -> void:
+	var plain: PackedFloat32Array = _font().note(0, 0, 60, 127, 0.05)[0]
+	var skipped: PackedFloat32Array = _font(PERIOD / 2).note(0, 0, 60, 127, 0.05)[0]
+	# Sample 60 is past the default 1 ms envelope delay, and a whole number of periods in.
+	assert_true(plain[60] > 0.0, "the square is high at the start of each period")
+	assert_true(skipped[60] < 0.0, "skipping half a period makes it low there")
 
 
 func test_looping_samples_sustain_past_their_length() -> void:

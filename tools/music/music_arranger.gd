@@ -41,6 +41,8 @@ const OPEN_HAT := 46
 const CRASH := 49
 const RIDE := 51
 const TOMS: Array[int] = [50, 48, 47, 45, 43, 41]
+## Band types a score's optional "eq" may use (MusicRenderer applies them).
+const EQ_TYPES: Array[String] = ["low_shelf", "high_shelf", "peak", "high_pass"]
 const NOTE_NAMES := {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
 var _notes: Array[Dictionary] = []
@@ -112,6 +114,9 @@ static func problem(score: Variant) -> String:
 					return "section %d has a bad note in \"%s\": %s" % [i + 1, key, line]
 				if length > STEPS_PER_BAR:
 					return "section %d has a bar of \"%s\" %d steps long" % [i + 1, key, length]
+	for band: Variant in score.get("eq", []):
+		if not (band is Dictionary and band.get("type") in EQ_TYPES and band.get("hz") is float):
+			return "every \"eq\" band needs a \"type\" (%s) and \"hz\"" % ", ".join(EQ_TYPES)
 	var intro: Dictionary = score.intro
 	for key in ["hit", "vamp"]:
 		if not chords.has(intro.get(key, "")):
@@ -175,7 +180,9 @@ static func opens_long(line: String) -> bool:
 	return first.size() == 2 and first[0] != "r" and int(first[1]) >= 6
 
 
-## Arranges a valid score. Returns {"notes": [...], "loop_start": step, "loop_end": step}, where
+## Arranges a valid score: the intro, then the sections twice. The renderer keeps the second
+## pass as the loop, since it starts with the end of the first ringing on, as every repeat does.
+## Returns {"notes": [...], "intro_end": step, "loop_start": step, "loop_end": step}, where
 ## each note is {"layer", "step", "length" (16ths), "bank", "program", "key", "velocity",
 ## "gain", "pan", "reverb", "echo"}. The same score always gives the same notes.
 func arrange(score: Dictionary) -> Dictionary:
@@ -185,17 +192,20 @@ func arrange(score: Dictionary) -> Dictionary:
 	_intro(score)
 	var bar := INTRO_BARS
 	var sections: Array = score.sections
-	for s in sections.size():
-		var section: Dictionary = sections[s]
-		for index in SECTION_BARS:
-			var next_chord: String
-			if index + 1 < SECTION_BARS:
-				next_chord = section.chords[index + 1][0][0]
-			else:
-				next_chord = sections[(s + 1) % sections.size()].chords[0][0][0]
-			_section_bar(score, section, index, bar * STEPS_PER_BAR, score.chords[next_chord])
-			bar += 1
-	return {"notes": _notes, "loop_start": INTRO_BARS * STEPS_PER_BAR, "loop_end": bar * STEPS_PER_BAR}
+	var loop_start := 0
+	for pass_index in 2:
+		loop_start = bar * STEPS_PER_BAR
+		for s in sections.size():
+			var section: Dictionary = sections[s]
+			for index in SECTION_BARS:
+				var next_chord: String
+				if index + 1 < SECTION_BARS:
+					next_chord = section.chords[index + 1][0][0]
+				else:
+					next_chord = sections[(s + 1) % sections.size()].chords[0][0][0]
+				_section_bar(score, section, index, bar * STEPS_PER_BAR, score.chords[next_chord])
+				bar += 1
+	return {"notes": _notes, "intro_end": INTRO_BARS * STEPS_PER_BAR, "loop_start": loop_start, "loop_end": bar * STEPS_PER_BAR}
 
 
 ## Returns what is wrong with a one-shot piece's score (the victory sting), or "".
