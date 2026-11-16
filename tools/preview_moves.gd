@@ -10,9 +10,9 @@ extends SceneTree
 ## --compare (prototype) renders real moves twice, our style above and Cobblemon's own effect
 ## (CobblemonMoveFX) below, with a fifth shot later in the hit, to
 ## cache/previews/move_compare_<move>.png. Area moves blast, and self-buffs wind up and boost.
-## --pieces=<effect,...> plays single particle effects (pieces for move sequences) on the
-## right-hand fighter, aimed at the left one, captured over about a second, to
-## cache/previews/piece_<effect>.png.
+## --pieces=<effect,...> [--tint=<Type>] plays single particle effects (pieces for move
+## sequences) on the right-hand fighter, aimed at the left one, palette-swapped to the type's
+## colour with --tint, captured over about a second, to cache/previews/piece_<effect>.png.
 
 const SHOT_SIZE := Vector2i(480, 360)
 const GAP := 6.0
@@ -70,10 +70,12 @@ func _run() -> void:
 		return quit(0)
 	var pieces := styles.filter(func(a: String) -> bool: return a.begins_with("--pieces="))
 	if not pieces.is_empty():
+		var tints := styles.filter(func(a: String) -> bool: return a.begins_with("--tint="))
+		var tint: String = str(tints[0]).get_slice("=", 1) if not tints.is_empty() else ""
 		for id: String in str(pieces[0]).get_slice("=", 1).split(",", false):
 			var piece_sheet := Image.create(SHOT_SIZE.x * PIECE_SHOTS.size(), SHOT_SIZE.y, false, Image.FORMAT_RGBA8)
-			var found: Dictionary = await _render_piece(loaded.data, id, piece_sheet)
-			var piece_path := out_dir.path_join("piece_%s.png" % id)
+			var found: Dictionary = await _render_piece(loaded.data, id, piece_sheet, tint)
+			var piece_path := out_dir.path_join("piece_%s%s.png" % [id, "_" + tint.to_lower() if not tint.is_empty() else ""])
 			piece_sheet.save_png(piece_path)
 			print("%s: wrote %s" % [id, piece_path])
 			for problem: String in found:
@@ -132,7 +134,7 @@ func _render(data: BattleData, move: BattleMove, style: String, cobblemon: bool,
 	fx.styles = {move.id: style}
 	stage.add_child(fx)
 	if cobblemon:
-		var problem := fx.use_cobblemon(views, [move.id])
+		var problem := fx.use_cobblemon(views, [move])
 		if not problem.is_empty():
 			printerr("warning: " + problem)
 
@@ -191,12 +193,13 @@ func _render(data: BattleData, move: BattleMove, style: String, cobblemon: bool,
 
 
 ## Plays one piece on the right-hand fighter and captures PIECE_SHOTS; returns its problems.
-func _render_piece(data: BattleData, effect: String, sheet: Image) -> Dictionary:
+func _render_piece(data: BattleData, effect: String, sheet: Image, tint := "") -> Dictionary:
 	var stage := _stage()
 	_viewport.add_child(stage)
 	var camera: Camera3D = stage.get_node("Camera")
 	camera.make_current()
-	camera.look_at_from_position(Vector3(0, 2.2, 8.5), Vector3(0, 1.0, 0))
+	# Closer than the move previews, on the piece's fighter, with the other one at the edge.
+	camera.look_at_from_position(Vector3(1.2, 1.8, 5.2), Vector3(2.2, 0.9, 0))
 	var views: Array[FighterView] = []
 	for side in 2:
 		var entry: Dictionary = data.roster[SPECIES[side]]
@@ -212,7 +215,8 @@ func _render_piece(data: BattleData, effect: String, sheet: Image) -> Dictionary
 		stage.queue_free()
 		return {}
 	fx.cobblemon.prepare([])
-	fx.cobblemon.play_piece(effect, views[0], views[1], {"aim": true})
+	fx.cobblemon.play_piece(effect, views[0], views[1], {"aim": true, "tint": not tint.is_empty()},
+		TypeColors.of(tint) if not tint.is_empty() else Color.WHITE)
 	var shown := 0
 	for slot in PIECE_SHOTS.size():
 		await _frames(fx, PIECE_SHOTS[slot] - shown)

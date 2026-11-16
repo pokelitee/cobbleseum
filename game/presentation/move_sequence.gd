@@ -2,8 +2,9 @@ class_name MoveSequence
 extends RefCounted
 ## How one move looks in Cobblemon's style (concepts_brief.md §12.5): a short sequence of
 ## pieces (Cobblemon's particle effects, or our own sprites in their style) for each phase of
-## the real-time move. Each move's sequence is a script in game/presentation/move_sequences/
-## named after the move id that extends this class and overrides the phases it uses:
+## the real-time move. A move's sequence is the script in game/presentation/move_sequences/
+## named after its id, or else its style's in move_sequences/styles/ (StyleSequence); each
+## extends this class and overrides the phases it uses:
 ## - windup: on the user while it winds up (cut short by a feint, unless a piece keeps going);
 ## - fire: as the move is released, from the user;
 ## - flight: riding the projectile until it lands;
@@ -13,6 +14,7 @@ extends RefCounted
 ## reference for which pieces a move uses, since their 2–3 s turn-based timing doesn't fit.
 
 const DIR := "res://game/presentation/move_sequences"
+const STYLES_DIR := "res://game/presentation/move_sequences/styles"
 const PHASES: Array[String] = ["windup", "fire", "flight", "hit", "blast"]
 
 
@@ -41,17 +43,23 @@ func blast(_steps: SequenceSteps) -> void:
 	pass
 
 
-## The pieces a phase adds.
-func steps_for(phase: String) -> Array[Dictionary]:
+## The pieces a phase adds for a move of `type` (a Showdown type name).
+func steps_for(phase: String, type := "") -> Array[Dictionary]:
 	var steps := SequenceSteps.new()
+	steps.type = type.to_lower()
 	if PHASES.has(phase):
 		call(phase, steps)
 	return steps.pieces
 
 
-## The sequence for a move id, or null when it has none.
+## The move's own sequence, or null when it has none.
 static func for_move(id: String) -> MoveSequence:
-	var path := DIR.path_join(id + ".gd")
+	return load_from(DIR, id)
+
+
+## The sequence script `name` in `dir`, or null when there's none.
+static func load_from(dir: String, name: String) -> MoveSequence:
+	var path := dir.path_join(name + ".gd")
 	if not ResourceLoader.exists(path):
 		return null
 	var script: Variant = load(path)

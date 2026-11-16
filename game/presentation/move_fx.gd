@@ -39,6 +39,11 @@ const AURA_FRAMES := 20
 const MIN_MELEE_SIZE := 1.4
 ## How far flat effects sit in front of the target, toward the camera, as a share of their size.
 const CAMERA_NUDGE := 0.35
+## Cobblemon's pieces for the effects that aren't moves (comma-separated, played together).
+const AURA_PIECES := {
+	"rise": "statup_actor", "drop": "statdown_actor", "heal": "heal_circles,heal_sparkles",
+	"dodge": "doubleteam_dashlines,quickattack_dust",
+}
 const CHARGING: Array[String] = ["beam", "bolt", "stream", "pulse", "sound", "mind", "explosion", "orb", "bullet"]
 
 ## Move id -> style, from MoveStyle; moves not listed use their kind's default.
@@ -54,8 +59,9 @@ var cobblemon: CobblemonMoveFX = null
 var views: Array[FighterView] = []
 
 
-## Turns on Cobblemon-style sequences for the moves that have one, loading what `moves` (ids)
-## can spawn up front. Returns "" or why they're unavailable (the battle keeps our styles).
+## Turns on Cobblemon-style sequences: each move's own, or its style's. Loads what `moves`
+## (BattleMoves) can spawn up front. Returns "" or why they're unavailable (the battle then
+## keeps our mesh styles).
 func use_cobblemon(fighters: Array[FighterView], moves: Array = []) -> String:
 	views = fighters
 	var library := CobblemonMoveFX.new()
@@ -65,12 +71,28 @@ func use_cobblemon(fighters: Array[FighterView], moves: Array = []) -> String:
 		return error
 	cobblemon = library
 	add_child(cobblemon)
-	cobblemon.prepare(moves)
+	var pairs: Array = []
+	for move: BattleMove in moves:
+		pairs.append([move, _sequence_style(move)])
+	var pieces: Array[String] = []
+	for names: String in AURA_PIECES.values():
+		pieces.append_array(names.split(","))
+	cobblemon.prepare(pairs, pieces)
 	return ""
 
 
 func _converted(move: BattleMove) -> bool:
-	return cobblemon != null and cobblemon.has_move(move.id)
+	return cobblemon != null and cobblemon.sequence_for(move, _sequence_style(move)) != null
+
+
+## The style whose sequence a move plays when it has none of its own: its visual style, or
+## "status" for moves that don't deal damage.
+func _sequence_style(move: BattleMove) -> String:
+	return style_of(move) if move.is_damaging() else "status"
+
+
+func _play(move: BattleMove, phase: String, user: FighterView, foe: FighterView, cut_frames := -1) -> Array[SnowstormEmitter]:
+	return cobblemon.play(move, _sequence_style(move), phase, user, foe, cut_frames)
 
 
 func _foe(view: FighterView) -> FighterView:
@@ -87,7 +109,7 @@ func style_of(move: BattleMove) -> String:
 ## The wind-up's ring (and glow), for `frames` when given (a feint breaking off early).
 func windup(attacker: FighterView, move: BattleMove, frames := -1) -> void:
 	if _converted(move):
-		cobblemon.play(move.id, "windup", attacker, _foe(attacker), TypeColors.of(move.type), frames if frames >= 0 else maxi(WINDUP_FRAMES, move.windup_ticks))
+		_play(move, "windup", attacker, _foe(attacker), frames if frames >= 0 else maxi(WINDUP_FRAMES, move.windup_ticks))
 		return
 	var colour := TypeColors.of(move.type)
 	var ring := _mesh(_torus(0.6, 0.75), colour, 0.8)
@@ -134,7 +156,7 @@ func melee(attacker: FighterView, target: FighterView, move: BattleMove) -> void
 
 func hit(defender: FighterView, move: BattleMove, big: bool) -> void:
 	if _converted(move):
-		cobblemon.play(move.id, "hit", _foe(defender), defender, TypeColors.of(move.type))
+		_play(move, "hit", _foe(defender), defender)
 		return
 	var colour := TypeColors.of(move.type)
 	var centre := defender.position + Vector3.UP * defender.height * 0.5
@@ -186,7 +208,7 @@ func miss(position: Vector3) -> void:
 ## short version of its style between the fighters.
 func point_blank(attacker: FighterView, target: FighterView, move: BattleMove) -> void:
 	if _converted(move):
-		cobblemon.play(move.id, "fire", attacker, target, TypeColors.of(move.type))
+		_play(move, "fire", attacker, target)
 		return
 	var colour := TypeColors.of(move.type)
 	var from := _front(attacker, 0.6)
@@ -220,7 +242,7 @@ func point_blank(attacker: FighterView, target: FighterView, move: BattleMove) -
 ## move's reach, plus an accent for some styles.
 func blast(view: FighterView, move: BattleMove) -> void:
 	if _converted(move):
-		cobblemon.play(move.id, "blast", view, _foe(view), TypeColors.of(move.type))
+		_play(move, "blast", view, _foe(view))
 		return
 	var colour := TypeColors.of(move.type)
 	var reach := Rules.AREA_RADIUS + view.height * 0.4
@@ -258,8 +280,14 @@ func blast(view: FighterView, move: BattleMove) -> void:
 			_dust(view.position, colour, reach * 0.5)
 
 
-## Rings drifting up a fighter (stat rise, heal) or down it (stat drop).
-func aura(view: FighterView, colour: Color, rising: bool) -> void:
+## Rings drifting up a fighter (stat rise, heal) or down it (stat drop). With Cobblemon's
+## style on, its own stat-change and healing pieces instead.
+func aura(view: FighterView, colour: Color, rising: bool, healing := false) -> void:
+	if cobblemon != null:
+		var kind := "heal" if healing else ("rise" if rising else "drop")
+		for piece: String in AURA_PIECES[kind].split(","):
+			cobblemon.play_piece(piece, view, _foe(view), {"on": "user", "at": "middle" if kind != "heal" else "root"})
+		return
 	for i in 3:
 		var ring := _mesh(_torus(0.85, 1.0), Color.WHITE.lerp(colour, 0.6), 0.8)
 		ring.scale = Vector3.ONE * maxf(view.height, 1.0) * 0.45
@@ -272,6 +300,10 @@ func aura(view: FighterView, colour: Color, rising: bool) -> void:
 
 ## A dodge: speed lines streaming behind the fighter and a puff of dust.
 func dodge(view: FighterView, direction: Vector2) -> void:
+	if cobblemon != null:
+		for piece: String in AURA_PIECES.dodge.split(","):
+			cobblemon.play_piece(piece, view, _foe(view), {"on": "user", "at": "middle"})
+		return
 	_rush(view, Vector3(direction.x, 0, direction.y), Color(0.85, 0.95, 1.0))
 
 
@@ -460,7 +492,7 @@ func _new_projectile(projectile: Dictionary, move: BattleMove, target: Vector2) 
 	if _converted(move) and views.size() == 2:
 		var user := views[int(projectile.owner)]
 		visual.style = "cobblemon"
-		visual.cobblemon = cobblemon.play(move.id, "fire", user, _foe(user), colour) + cobblemon.play_riding(move.id, "flight", root, user, _foe(user), colour)
+		visual.cobblemon = _play(move, "fire", user, _foe(user)) + cobblemon.play_riding(move, _sequence_style(move), "flight", root, user, _foe(user))
 		return visual
 	var size := clampf(0.8 + move.power / 120.0, 0.8, 1.8)
 	var r := Rules.PROJECTILE_RADIUS
@@ -624,9 +656,10 @@ func _update_projectile(visual: Dictionary, position: Vector3) -> void:
 ## A finished projectile: beams and bolts fade where they are, the rest vanish.
 func _end_projectile(visual: Dictionary) -> void:
 	var node: Node3D = visual.node
-	for emitter: SnowstormEmitter in visual.get("cobblemon", []):
+	# Untyped: an emitter that already finished has been freed, and a typed variable can't hold it.
+	for emitter: Variant in visual.get("cobblemon", []):
 		if is_instance_valid(emitter):
-			emitter.stopped = true
+			(emitter as SnowstormEmitter).stopped = true
 	if visual.style in ["beam", "bolt"]:
 		_effects.append({"node": node, "age": 0, "frames": FADE_FRAMES, "kind": "fade"})
 	else:

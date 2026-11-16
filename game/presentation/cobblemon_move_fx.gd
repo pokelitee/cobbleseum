@@ -51,20 +51,32 @@ func setup() -> String:
 	return ""
 
 
-func has_move(id: String) -> bool:
-	return _sequence(id) != null
+## The sequence a move plays: its own (move_sequences/<move>.gd), or else its style's
+## (move_sequences/styles/<style>.gd); null when neither exists.
+func sequence_for(move: BattleMove, style: String) -> MoveSequence:
+	var own := _sequence(move.id, MoveSequence.DIR)
+	return own if own != null else _sequence(style, MoveSequence.STYLES_DIR)
+
+
+func _sequence(id: String, dir: String) -> MoveSequence:
+	var key := dir.path_join(id)
+	if not _sequences.has(key):
+		_sequences[key] = MoveSequence.load_from(dir, id)
+	return _sequences[key]
 
 
 ## Loads every effect and texture the moves' sequences can spawn, sub-effects included, so the
-## first use of a piece in battle doesn't stall a frame on parsing and loading.
-func prepare(ids: Array) -> void:
-	var queue: Array[String] = []
-	for id: String in ids:
-		var sequence := _sequence(id)
+## first use of a piece in battle doesn't stall a frame on parsing and loading. `moves` holds
+## [BattleMove, style] pairs; `pieces` names other effects to load (auras, dodges).
+func prepare(moves: Array, pieces: Array[String] = []) -> void:
+	var queue: Array[String] = pieces.duplicate()
+	for entry: Array in moves:
+		var move: BattleMove = entry[0]
+		var sequence := sequence_for(move, entry[1])
 		if sequence == null:
 			continue
 		for phase in MoveSequence.PHASES:
-			for piece: Dictionary in sequence.steps_for(phase):
+			for piece: Dictionary in sequence.steps_for(phase, move.type):
 				queue.append(str(piece.effect))
 	var seen := {}
 	while not queue.is_empty():
@@ -79,22 +91,17 @@ func prepare(ids: Array) -> void:
 		queue.append_array(Array(effect.get_spawned_effects()))
 
 
-func _sequence(id: String) -> MoveSequence:
-	if not _sequences.has(id):
-		_sequences[id] = MoveSequence.for_move(id)
-	return _sequences[id]
-
-
-## Plays a phase of a move's sequence; `colour` is the move's type colour, for tinted pieces.
-## Returns the pieces started now (delayed ones start later). `cut_frames` >= 0 ends windup
-## pieces after that many frames (a feint).
-func play(id: String, phase: String, user: FighterView, foe: FighterView, colour: Color, cut_frames := -1) -> Array[SnowstormEmitter]:
+## Plays a phase of a move's sequence (its own, or its style's). Tinted pieces take the move's
+## type colour. Returns the pieces started now (delayed ones start later). `cut_frames` >= 0
+## ends windup pieces after that many frames (a feint).
+func play(move: BattleMove, style: String, phase: String, user: FighterView, foe: FighterView, cut_frames := -1) -> Array[SnowstormEmitter]:
 	var started: Array[SnowstormEmitter] = []
-	var sequence := _sequence(id)
+	var sequence := sequence_for(move, style)
 	if sequence == null:
 		return started
 	var speed := maxf(0.05, sequence.speed())
-	for spawn: Dictionary in sequence.steps_for(phase):
+	var colour := TypeColors.of(move.type)
+	for spawn: Dictionary in sequence.steps_for(phase, move.type):
 		var delay := roundi(float(spawn.get("delay", 0.0)) / speed / FRAME_SECONDS)
 		var entry := {"frames": delay, "spawn": spawn, "speed": speed, "user": user, "foe": foe, "cut": cut_frames,
 			"phase": phase, "colour": colour}
@@ -108,16 +115,17 @@ func play(id: String, phase: String, user: FighterView, foe: FighterView, colour
 
 
 ## Plays one piece outside any sequence, with SequenceSteps' options (on, at, aim, tint, ...),
-## for previews and authoring.
+## for auras, dodges, previews and authoring.
 func play_piece(effect: String, user: FighterView, foe: FighterView, options := {}, colour := Color.WHITE) -> SnowstormEmitter:
 	var spawn := {"effect": effect, "on": "foe", "at": "target"}
 	spawn.merge(options, true)
-	return _start({"frames": 0, "spawn": spawn, "speed": 1.0, "user": user, "foe": foe, "cut": -1, "phase": "hit", "colour": colour})
+	return _start({"frames": 0, "spawn": spawn, "speed": float(options.get("speed", 1.0)), "user": user, "foe": foe,
+		"cut": -1, "phase": "hit", "colour": colour})
 
 
 ## Spawns an effect that rides `node` (a projectile's visual, whose -Z is its heading).
-func play_riding(id: String, phase: String, node: Node3D, user: FighterView, foe: FighterView, colour: Color) -> Array[SnowstormEmitter]:
-	var started := play(id, phase, user, foe, colour)
+func play_riding(move: BattleMove, style: String, phase: String, node: Node3D, user: FighterView, foe: FighterView) -> Array[SnowstormEmitter]:
+	var started := play(move, style, phase, user, foe)
 	var ref: WeakRef = weakref(node)
 	var follow := func() -> Variant:
 		var riding: Node3D = ref.get_ref()
@@ -193,6 +201,10 @@ func _start(entry: Dictionary) -> SnowstormEmitter:
 		var toward := (camera.global_position - at.origin) * Vector3(1, 0, 1)
 		if toward.length_squared() > 0.0001:
 			at.basis = Basis.looking_at(toward.normalized(), Vector3.UP)
+	if spawn.has("nudge") and camera != null:
+		var to_camera := camera.global_position - at.origin
+		if to_camera.length_squared() > 0.0001:
+			at.origin += to_camera.normalized() * float(spawn.nudge) * subject.height
 	var vars := entity_vars(subject)
 	if spawn.get("aim", false):
 		vars.merge(target_vars(at, locator(other, subject, str(spawn.get("aim_at", "target")))), true)
