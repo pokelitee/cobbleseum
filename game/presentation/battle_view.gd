@@ -52,6 +52,8 @@ const KNOCKOUT_CHEER_FRAMES := 90
 const CAMERA_WOBBLE_STREAM := 100
 ## Seeds the choice of watchers in the stands, after the simulation's streams.
 const WATCHER_STREAM := 101
+## Picks the music track and its variants, after the simulation's streams.
+const MUSIC_STREAM := 102
 
 var battle: Battle
 var plan: Dictionary
@@ -63,6 +65,9 @@ var _hud: Hud
 var _overlay: AIOverlay
 var _move_fx: MoveFX
 var _sound: BattleSound
+var _music: BattleMusic
+## The crowd's sound in a coliseum, the field's ambience in the open.
+var _arena_sound: ArenaSound
 var _credits_frames := 0
 var _camera: Camera3D
 var _rig: CameraRig
@@ -157,6 +162,14 @@ func _ready() -> void:
 	add_child(_sound)
 	_sound.setup([spec.fighters[0].species, spec.fighters[1].species])
 	_sound.intro()
+	_music = BattleMusic.new()
+	add_child(_music)
+	_music.setup(SimRandom.stream(int(spec.seed), MUSIC_STREAM))
+	_music.start()
+	_arena_sound = ArenaSound.new()
+	add_child(_arena_sound)
+	_arena_sound.setup(Arenas.enclosed(battle.arena), str(Arenas.preset(battle.arena).get("field", "")), _crowd.fill)
+	_arena_sound.start()
 	_views[0].play_role_after("cry", 0)
 	_views[1].play_role_after("cry", BattleSound.INTRO_CRY_GAP)
 	_fx = ImpactFX.new()
@@ -243,11 +256,13 @@ func _next_frame() -> void:
 	if _tick >= _end_tick:
 		if _credits_frames == 0:
 			_hud.show_credits()
+			_music.fade_out(Hud.CREDITS_FRAMES)
 			_fx.visible = false  # callouts stop animating here and draw above the HUD
 		if _credits_frames < Hud.CREDITS_FRAMES:
 			_credits_frames += 1
 			_hud.next_frame()
 			_sound.next_frame()
+			_next_audio_frame()
 		elif _clip_mode:
 			_finish()
 		return
@@ -269,10 +284,17 @@ func _next_frame() -> void:
 	_move_fx.next_frame()
 	_hud.next_frame()
 	_sound.next_frame()
+	_next_audio_frame()
 	if _overlay.visible:
 		_overlay.refresh()
 	_fx.set_speed_lines(_segment.get("shot", -1) == Director.Shot.CLOSE_UP)
 	_sync_views()
+
+
+## Music and the arena's sound run in real time, through hit-stop and slow motion alike.
+func _next_audio_frame() -> void:
+	_music.next_frame()
+	_arena_sound.next_frame(_crowd.excitement)
 
 
 ## Steps the battle one tick and tells the views how each fighter moved: walking, its speed
@@ -316,6 +338,7 @@ func _next_live_frame() -> void:
 	_move_fx.next_frame()
 	_hud.next_frame()
 	_sound.next_frame()
+	_next_audio_frame()
 	if _overlay.visible:
 		_overlay.refresh()
 	for side in 2:
@@ -423,6 +446,7 @@ func _play_events() -> void:
 					_hud.shake(defender)
 				if big or share >= CHEER_SHARE:
 					_crowd.cheer(0.4 + share * 1.5 + (0.25 if big else 0.0))
+					_arena_sound.cheer()
 			"miss":
 				var move := _move(event.side, event.move)
 				if move.kind == BattleMove.Kind.MELEE:
@@ -480,23 +504,32 @@ func _play_events() -> void:
 				_views[1 - int(event.side)].celebrate()
 				_sound.knockout(event.side)
 				_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
+				_arena_sound.cheer()
+				_arena_sound.roar()
+				_music.knockout()
 				if _live:
 					_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
+					_music.victory(BattleMusic.CUT_FRAMES)
 			"overtime":
 				_hud.flash_title("Overtime!", Color(1.0, 0.55, 0.3))
+				_music.overtime()
 			"time_up":
 				_hud.show_winner("Time up: draw")
+				_music.draw()
 				for view in _views:
 					view.play_role("sad")
 
 
 ## The planned ending's victory: the HUD's card with the winner's name, HP left and the
-## battle's length, and the crowd cheering again.
+## battle's length, the victory sting, and the crowd cheering again.
 func _show_victory(side: int) -> void:
 	_victory_shown = true
 	var winner := battle.fighters[side]
 	_hud.show_victory(side, winner.name, float(winner.hp) / winner.max_hp, battle.tick / float(Rules.TICK_RATE))
 	_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
+	_arena_sound.cheer()
+	_arena_sound.roar()
+	_music.victory()
 
 
 ## "Attack rose!", "Defense fell sharply!", or "Stats rose!" for several at once.

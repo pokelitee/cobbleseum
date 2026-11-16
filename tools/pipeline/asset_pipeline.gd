@@ -9,7 +9,8 @@ const TOOL_VERSION := "1"
 const STAMP_FILE := ".stamp"
 const INDEX_FILE := ".files"
 const REQUIRED_FIELDS: Array[String] = ["version", "url", "size", "sha256", "archive", "license", "extract", "layout"]
-const ARCHIVE_TYPES: Array[String] = ["zip", "tgz"]
+## "file" is a single downloaded file, not an archive: its one "extract" entry names it in the cache.
+const ARCHIVE_TYPES: Array[String] = ["zip", "tgz", "file"]
 const RENAME_ATTEMPTS := 20
 const RENAME_RETRY_MS := 500
 
@@ -48,6 +49,9 @@ static func validate_source(id: String, source: Variant) -> String:
 		return "source '%s' needs a 64-character hex \"sha256\"" % id
 	if not source.extract is Array or source.extract.is_empty():
 		return "source '%s' needs a non-empty \"extract\" list" % id
+	if source.archive == "file" and (source.extract.size() != 1 or not ArchiveFiles.is_safe_path(str(source.extract[0]))
+			or str(source.extract[0]).ends_with("/")):
+		return "source '%s' is a single file, so \"extract\" must be one safe file name" % id
 	if not source.layout is Array or source.layout.is_empty():
 		return "source '%s' needs a non-empty \"layout\" list" % id
 	for rule: Variant in source.layout:
@@ -140,6 +144,10 @@ func extract(id: String, source: Dictionary) -> String:
 	var err := ""
 	if source.archive == "zip":
 		err = ZipReader.extract(archive_path(source), source.extract, staging, written)
+	elif source.archive == "file":
+		err = ArchiveFiles.write(staging, source.extract[0], FileAccess.get_file_as_bytes(archive_path(source)))
+		if err.is_empty():
+			written.append(source.extract[0])
 	else:
 		err = TarReader.extract_tgz(archive_path(source), source.extract, staging, written)
 	if err.is_empty():

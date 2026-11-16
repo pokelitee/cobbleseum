@@ -786,7 +786,12 @@ The camera director picks from a set of shot types based on battle events:
   - Rings and waves for area moves and glows for buffs come with those kinds.
 - **Sound:**
   - Cobblemon cries, impact sounds and whooshes, synced to events.
-  - No music unless it is original or properly licensed.
+  - **Music** (`BattleMusic`): original tracks only, never official, ripped or remixed Pokémon music. Each track is a score in `tools/music/scores/` (tempo, scale, chords, melodies and intro), in the style of fast handheld-era battle themes: driving 16th-note ostinatos, 3-3-2 brass stabs, call and response, timpani into the loop's return. The asset pipeline renders the scores with the GeneralUser GS SoundFont's General MIDI instruments (`tools/music/`, about 2 minutes a track, only when a score or the music scripts change) into layers: drums and lead in two variants each, bass, harmony, and a climax layer.
+    - Three tracks: Clash (D minor, 184 BPM), Overdrive (E minor, 192 BPM, rock-leaning) and Summit (C minor, 176 BPM, brass-forward). The battle's seed picks the track and its drum and lead variants on a random stream of its own.
+    - A track's intro plays once and the rest loops seamlessly (its tail is folded onto the loop's start). Clips start it from the top, fading in.
+    - Cues: overtime fades in the climax layer; a knockout cuts the music within 0.3 s, leaving the cry and the crowd for the slow-motion shot; the victory gets a short original sting (in play, as "wins!" shows), which fades over the credits; a time-up draw fades out.
+    - Later battle formats (several fighters a side) can pick a track by occasion; only the final knockout would end the music.
+  - **Buses** (`default_bus_layout.tres`): Music, Crowd and Effects (cries and move sounds). The music ducks under the Effects bus through a side-chained compressor, and a limiter guards the master.
 - **HUD:**
   - A name plate per fighter: dark and rounded, with a stripe in the side's colour (red for side A, blue for side B), the name, a pill per type in its type colour, and status badges as pills after them.
   - A rounded HP bar under the name with a light band along its top, its percentage (rounded up, so a fighter with HP left never shows 0%), and a lagging "damage taken" segment. Bars drain and shake on big hits; side B's mirrors in landscape so both drain toward the middle.
@@ -835,6 +840,8 @@ An arena is a preset (`Arenas`): one JSON file in `game/data/arenas/`, named aft
 - its **look**: sky, sun, ambient light, fog and particles (colours as `"#rrggbb"`), with an optional exposure (1 by default; the cave is 0.75) and, for a coliseum, optional floodlights (`{"colour", "energy"}`);
 - how a battle without a requested arena may get it: `"always"`, or `"suits"` with a list of types;
 - for a coliseum, an optional `"crowd"`: `"fill"`, the share of seats taken (0 for empty stands, 1 for a sell-out; 0.75 by default), and `"watchers"`, how many watchers sit in the front row (0–8; 4 by default). The night stadium is half full, with two.
+
+**Ambience** (`ArenaSound`, on the Crowd bus, from CC0 recordings in `sources.json`): a coliseum's crowd murmurs as loud as its stands are full, cheers that swell and fade with the crowd's excitement, and roars at a knockout and the victory. An open arena plays its field's own sound: wind and birds (grassland), surf (beach), rumble (volcano), wind (snowfield) and drips (cave); paved fields are quiet. It runs in real time, so hit-stop doesn't freeze it.
 
 The presets are grassland, beach, volcano, snowfield, cave and stadium (the open fields and the paved coliseum), plus a night stadium, a garden coliseum (grassland in sandstone stands) and a frost coliseum (snowfield in pale blue stands). Presets evoke kinds of places (a league stadium at night, a gym's battle hall) and never reproduce specific locations from the games or the anime.
 
@@ -925,6 +932,8 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
   - Until confirmed otherwise, textures and animations are treated the same way.
   - Cobblemon's code is MPL-2.0, but we don't use it.
 - **Showdown data:** MIT.
+- **Music:** the scores are original and MIT like the rest of the repository. The instruments they are rendered with come from GeneralUser GS (S. Christian Collins), whose licence allows its use in music and software; the rendered audio stays in the local cache.
+- **Crowd and ambience recordings:** CC0, from Freesound and OpenGameArt; credited anyway, by title and author, in each clip's credits.txt and the README.
 - **Pokémon IP:** names and designs belong to Nintendo, Creatures Inc. and GAME FREAK. Cobbleseum is an unaffiliated fan project.
 - **Consequences:**
   - The repository never redistributes assets.
@@ -944,6 +953,7 @@ game/
 tools/
   assets.gd             pipeline entry point
   sources/              one script per source
+  music/                SoundFont reader, arranger, renderer and the scores
   convert/              Bedrock geometry, animation and Molang
   batch.gd              headless batch simulation
   record.gd             clip recording driver
@@ -1031,7 +1041,8 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - Rendering: environment lighting, soft shadows, ambient occlusion, bloom, and shading that matches Cobblemon's look. Done (§12.7): Filmic grading, HDR bloom on glowing things only, soft sun shadows, SSAO, MSAA, matte rim-lit fighters, and a floodlit night stadium. Recording takes about 1.1× as long as before.
 - A designed HUD (styled HP bars, type icons, portraits, status badges), intro title cards, and a victory screen with the winner's pose. Done: name plates with type and status pills, rounded HP bars with percentages, the intro card (§12.5), and the victory shot and card (§12.3). Types are text pills rather than icons; portraits are still to do.
 - Openly licensed display and body fonts, never the official Pokémon fonts or logo styling. Done: Lilita One and Nunito.
-- Music and crowd sound; for clips, title cards, captions and an instant replay of the knockout.
+- Music and crowd sound. Done (§12.5, §12.7): three original tracks rendered from scores with General MIDI instruments, picked by the seed with variants, a victory sting and overtime's climax layer; the crowd's murmur, cheers and roar in coliseums and each field's ambience in the open.
+- For clips, title cards, captions and an instant replay of the knockout.
 
 **Later:**
 

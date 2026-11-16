@@ -14,13 +14,13 @@ Prerequisites:
 - Node.js 20 or later, for the asset pipeline's Showdown data export.
 - ffmpeg, for encoding recorded clips to MP4 (coming in milestone 1).
 
-Fetch and prepare the assets (about 157 MB to download the first time):
+Fetch and prepare the assets (about 205 MB to download the first time):
 
 ```bash
 godot --headless --path . --script res://tools/assets.gd
 ```
 
-This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout, exports Showdown's data to JSON, and converts every Pokémon with a Cobblemon model (1,005 species and forms) to a Godot scene. It also writes the roster (`cache/build/cobblemon/<version>/roster.json`: model, scale, height, hitbox, animations, QA flags and licence per species) and a QA report (`report.json`). Extracting Cobblemon's roughly 12,000 files and the first conversion take a few minutes each (about 7 minutes to convert on a desktop PC). Re-running skips finished steps; models are cached per species, so a rebuild converts only species whose inputs changed, and an interrupted build picks up where it stopped. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
+This downloads the pinned sources listed in [sources.json](sources.json), verifies their size and SHA-256, extracts the parts the game uses into `cache/`, checks their layout, exports Showdown's data to JSON, and converts every Pokémon with a Cobblemon model (1,005 species and forms) to a Godot scene. It also writes the roster (`cache/build/cobblemon/<version>/roster.json`: model, scale, height, hitbox, animations, QA flags and licence per species) and a QA report (`report.json`). It renders the battle music from the scores in `tools/music/scores/` with the GeneralUser GS SoundFont (about 6 minutes) and fetches the crowd and ambience recordings. Extracting Cobblemon's roughly 12,000 files and the first conversion take a few minutes each (about 7 minutes to convert on a desktop PC). Re-running skips finished steps; models are cached per species, so a rebuild converts only species whose inputs changed, and an interrupted build picks up where it stopped. Pass `-- --offline` to fail instead of downloading when something isn't cached, or name sources to process only those (`-- showdown`).
 
 Print species' standard movesets, or generate them all into `cache/build/movesets.json` with a summary (failures, common moves, agreement with Showdown's random-battle sets):
 
@@ -112,6 +112,7 @@ tools/check_no_assets.sh
 The design is described in the [concept brief](concepts_brief.md). In short:
 
 - An asset pipeline (`tools/assets.gd`, `tools/pipeline/`, one build script per source in `tools/sources/`) fetches pinned releases of Showdown's data and Cobblemon's jar, verifies them by SHA-256, extracts and checks them, and builds what the game needs in `cache/`. Cobblemon's Bedrock models and animations become Godot scenes (`tools/convert/`): a skeleton with one rigidly skinned mesh and clips baked at 60 Hz.
+- Battle music is original: scores (`tools/music/scores/`) arranged by shared rules and rendered by the pipeline with General MIDI instruments into layers the game mixes (`tools/music/`, `BattleMusic`). Crowd and field ambience comes from CC0 recordings (`ArenaSound`).
 - A deterministic, fixed-tick battle simulation written in plain GDScript (`game/sim/`) runs headless for batch simulation and drives the 3D presentation. Rules constants live in `game/sim/rules.gd`; randomness comes from seeded mulberry32 streams, so a battle replays exactly from its spec.
 - A utility AI controls fighters through the same intents a player uses.
 - The battle view (`game/presentation/`) replays the simulation with the converted models, a portrait camera and HP bars. `tools/record.gd` runs a battle headless, picks the clip window from its events, renders it with Godot's Movie Maker mode in a second Godot process, checks that the rendered battle's checksum matches, and encodes an MP4 with ffmpeg.
@@ -136,4 +137,18 @@ The design is described in the [concept brief](concepts_brief.md). In short:
 
 The code and original data in this repository are licensed under the [MIT License](LICENSE).
 
-The fonts in `game/presentation/fonts/` (Lilita One and Nunito) are under the SIL Open Font License 1.1; their licence files sit beside them. Assets fetched by the pipeline keep their own licences: Pokémon Showdown is MIT, and Cobblemon's models and animations are Creative Commons Attribution-NonCommercial. Pokémon names and designs belong to Nintendo, Creatures Inc. and GAME FREAK. Cobbleseum is an unaffiliated fan project.
+The fonts in `game/presentation/fonts/` (Lilita One and Nunito) are under the SIL Open Font License 1.1; their licence files sit beside them. Assets fetched by the pipeline keep their own licences: Pokémon Showdown is MIT, Cobblemon's models and animations are Creative Commons Attribution-NonCommercial, and the GeneralUser GS SoundFont (S. Christian Collins), which renders the original music, is free to use in music and software.
+
+The crowd and ambience recordings are CC0:
+
+- "crowd int large dense arena stadium hall with cool shouting scalper left.flac" by kyles (Freesound)
+- "Crowd Cheer" and "Crowd Cheer II" by FoolBoyMedia (Freesound)
+- "R08-54-Large Crowd Cheering at Event.wav" by craigsmith (Freesound)
+- "RoaringCrowd.wav" by benfree (Freesound)
+- "Calm ocean waves" by SamsterBirdies (Freesound)
+- "Lava Loop 4" by Fission9 (Freesound)
+- "Birds and Wind - Ambient, Birds, Wind and Synth" by Spring Spring (OpenGameArt)
+- "wind whoosh loop" by SketchMan3 (OpenGameArt)
+- "Loopable Dungeon Ambience" by JaggedStone (OpenGameArt)
+
+ Pokémon names and designs belong to Nintendo, Creatures Inc. and GAME FREAK. Cobbleseum is an unaffiliated fan project.

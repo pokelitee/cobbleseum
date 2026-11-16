@@ -192,6 +192,22 @@ _Avoid_: camera AI
 How a damaging move looks, such as punch, slash, beam or orb. It never changes play.
 _Avoid_: move effect, move animation
 
+**Ambience**:
+The steady background sound of an arena: the crowd in a coliseum, or the field's own sound (wind, surf, rumble, drips) in the open.
+_Avoid_: atmosphere, background noise
+
+**Track**:
+One piece of battle music: an intro that plays once, then a loop that repeats until the music ends.
+_Avoid_: theme (a coliseum's colours), song
+
+**Climax layer**:
+The extra part of a track that overtime brings in.
+_Avoid_: intensity track
+
+**Sting**:
+A short piece of music marking one moment, such as the victory.
+_Avoid_: jingle
+
 **Clip**:
 A video of one battle.
 _Avoid_: video, recording

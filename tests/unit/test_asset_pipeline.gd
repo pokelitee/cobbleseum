@@ -115,6 +115,26 @@ func test_extract_keeps_wanted_entries_and_skips_when_stamp_matches() -> void:
 	assert_true(FileAccess.file_exists(out.path_join("other/c.txt")))
 
 
+func test_a_single_file_source_is_stored_under_its_name() -> void:
+	var bytes := "RIFF sound".to_utf8_buffer()
+	var source := _source(bytes, "file")
+	source.extract = ["sound.sf2"]
+	source.layout = [{"pattern": "*.sf2", "min_count": 1}]
+	assert_eq(AssetPipeline.validate_source("s", source), "")
+	var pipeline := _cached_pipeline("single_file", bytes, source)
+	assert_eq(pipeline.extract("test", source), "")
+	var out := pipeline.source_dir("test", source)
+	assert_eq(AssetPipeline.indexed_files(out), PackedStringArray(["sound.sf2"]))
+	assert_eq(FileAccess.get_file_as_bytes(out.path_join("sound.sf2")), bytes)
+
+
+func test_a_single_file_source_needs_one_safe_name() -> void:
+	var source := _source("x".to_utf8_buffer(), "file")
+	for extract: Array in [["a.ogg", "b.ogg"], ["../a.ogg"], ["sounds/"]]:
+		source.extract = extract
+		assert_true(AssetPipeline.validate_source("s", source).contains("one safe file name"), str(extract))
+
+
 func test_layout_failure_explains_and_leaves_nothing_cached() -> void:
 	var bytes := _zip({"data/a.json": GOOD_JSON, "data/b.json": GOOD_JSON})
 	var source := _source(bytes)

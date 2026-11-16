@@ -16,6 +16,8 @@ const CRY_DB := -7.0
 const MOVE_DB := -6.0
 const BIG_HIT_DB := 2.0
 const MISS_DB := -8.0
+## The battle's sounds play on this bus; the music ducks under it.
+const BUS := &"Effects"
 
 var _root := SOUNDS_DIR
 var _species: Array[String] = ["", ""]
@@ -94,6 +96,7 @@ func _play(sound: Dictionary) -> void:
 	player.stream = stream
 	player.volume_db = sound.db
 	player.pitch_scale = sound.pitch
+	player.bus = BUS
 	player.finished.connect(player.queue_free)
 	add_child(player)
 	player.play()
