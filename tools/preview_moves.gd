@@ -10,6 +10,9 @@ extends SceneTree
 ## --compare (prototype) renders real moves twice, our style above and Cobblemon's own effect
 ## (CobblemonMoveFX) below, with a fifth shot later in the hit, to
 ## cache/previews/move_compare_<move>.png. Area moves blast, and self-buffs wind up and boost.
+## --pieces=<effect,...> plays single particle effects (pieces for move sequences) on the
+## right-hand fighter, aimed at the left one, captured over about a second, to
+## cache/previews/piece_<effect>.png.
 
 const SHOT_SIZE := Vector2i(480, 360)
 const GAP := 6.0
@@ -24,6 +27,8 @@ const TYPES := {
 }
 const FLIGHT_FRAMES := 18
 const LATE_HIT_FRAMES := 12
+## Frames after a piece starts at which --pieces captures it.
+const PIECE_SHOTS: Array[int] = [2, 6, 12, 20, 32]
 
 ## The project's stretch settings fix the root viewport's size, so shots render here.
 var _viewport: SubViewport
@@ -61,6 +66,17 @@ func _run() -> void:
 			sheet.save_png(path)
 			print("%s (%s): wrote %s" % [id, style, path])
 			for problem: String in problems:
+				print("  " + problem)
+		return quit(0)
+	var pieces := styles.filter(func(a: String) -> bool: return a.begins_with("--pieces="))
+	if not pieces.is_empty():
+		for id: String in str(pieces[0]).get_slice("=", 1).split(",", false):
+			var piece_sheet := Image.create(SHOT_SIZE.x * PIECE_SHOTS.size(), SHOT_SIZE.y, false, Image.FORMAT_RGBA8)
+			var found: Dictionary = await _render_piece(loaded.data, id, piece_sheet)
+			var piece_path := out_dir.path_join("piece_%s.png" % id)
+			piece_sheet.save_png(piece_path)
+			print("%s: wrote %s" % [id, piece_path])
+			for problem: String in found:
 				print("  " + problem)
 		return quit(0)
 	if styles.is_empty():
@@ -169,6 +185,41 @@ func _render(data: BattleData, move: BattleMove, style: String, cobblemon: bool,
 	var problems: Dictionary = fx.cobblemon.problems.duplicate() if fx.cobblemon != null else {}
 	if fx.cobblemon != null:
 		problems.merge(fx.cobblemon.molang_problems())
+	stage.queue_free()
+	await process_frame
+	return problems
+
+
+## Plays one piece on the right-hand fighter and captures PIECE_SHOTS; returns its problems.
+func _render_piece(data: BattleData, effect: String, sheet: Image) -> Dictionary:
+	var stage := _stage()
+	_viewport.add_child(stage)
+	var camera: Camera3D = stage.get_node("Camera")
+	camera.make_current()
+	camera.look_at_from_position(Vector3(0, 2.2, 8.5), Vector3(0, 1.0, 0))
+	var views: Array[FighterView] = []
+	for side in 2:
+		var entry: Dictionary = data.roster[SPECIES[side]]
+		var view := FighterView.from_model(BattleView.MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
+		stage.add_child(view)
+		view.place(Vector2((-0.5 if side == 0 else 0.5) * GAP, 0), Vector2(1 if side == 0 else -1, 0))
+		views.append(view)
+	var fx := MoveFX.new()
+	stage.add_child(fx)
+	var problem := fx.use_cobblemon(views)
+	if not problem.is_empty():
+		printerr("warning: " + problem)
+		stage.queue_free()
+		return {}
+	fx.cobblemon.prepare([])
+	fx.cobblemon.play_piece(effect, views[0], views[1], {"aim": true})
+	var shown := 0
+	for slot in PIECE_SHOTS.size():
+		await _frames(fx, PIECE_SHOTS[slot] - shown)
+		shown = PIECE_SHOTS[slot]
+		await _capture(sheet, slot)
+	var problems: Dictionary = fx.cobblemon.problems.duplicate()
+	problems.merge(fx.cobblemon.molang_problems())
 	stage.queue_free()
 	await process_frame
 	return problems

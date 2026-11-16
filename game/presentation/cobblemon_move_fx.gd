@@ -107,6 +107,14 @@ func play(id: String, phase: String, user: FighterView, foe: FighterView, colour
 	return started
 
 
+## Plays one piece outside any sequence, with SequenceSteps' options (on, at, aim, tint, ...),
+## for previews and authoring.
+func play_piece(effect: String, user: FighterView, foe: FighterView, options := {}, colour := Color.WHITE) -> SnowstormEmitter:
+	var spawn := {"effect": effect, "on": "foe", "at": "target"}
+	spawn.merge(options, true)
+	return _start({"frames": 0, "spawn": spawn, "speed": 1.0, "user": user, "foe": foe, "cut": -1, "phase": "hit", "colour": colour})
+
+
 ## Spawns an effect that rides `node` (a projectile's visual, whose -Z is its heading).
 func play_riding(id: String, phase: String, node: Node3D, user: FighterView, foe: FighterView, colour: Color) -> Array[SnowstormEmitter]:
 	var started := play(id, phase, user, foe, colour)
