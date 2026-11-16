@@ -83,3 +83,53 @@ func test_banners_stay_on_screen() -> void:
 			var rect := Rect2(label.global_position, label.size)
 			assert_true(Rect2(Vector2.ZERO, size).encloses(rect), "banner %d off screen at %s: %s" % [side, size, rect])
 		hud.free()
+
+
+func test_captions_slide_in_on_screen_then_go() -> void:
+	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
+		var hud := _hud(size)
+		hud.caption("COMEBACK!", 1)
+		for i in Hud.CAPTION_IN_FRAMES:
+			hud.next_frame()
+		var band: Control = hud._caption.band
+		assert_eq(band.position.x, 0.0, "in place")
+		assert_true(Rect2(Vector2.ZERO, size).encloses(Rect2(band.position, band.size)), "on screen at %s" % size)
+		hud.caption("FINAL BLOW", 0)
+		assert_eq(hud.get_children().filter(func(n: Node) -> bool: return n == band and not n.is_queued_for_deletion()), [], "a new caption replaces the old")
+		for i in Hud.CAPTION_FRAMES:
+			hud.next_frame()
+		assert_eq(hud._caption, {}, "gone after CAPTION_FRAMES")
+		hud.free()
+
+
+func test_the_replay_tag_shows_while_the_plates_fade_and_stay_out() -> void:
+	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
+		var hud := _hud(size)
+		hud.show_replay()
+		assert_true(hud.replay_showing())
+		var tag: Control = hud._replay_tag
+		assert_true(tag.find_children("*", "Label", true, false).any(func(l: Label) -> bool: return l.text == "REPLAY"))
+		assert_true(Rect2(Vector2.ZERO, size).encloses(Rect2(tag.position, tag.size)), "on screen at %s" % size)
+		var dot_alphas := {}
+		for i in Hud.REPLAY_BLINK_FRAMES * 2:
+			hud.next_frame()
+			dot_alphas[hud._replay_dot.modulate.a] = true
+		assert_eq(dot_alphas.size(), 2, "the dot blinks")
+		hud.hide_replay()
+		assert_false(hud.replay_showing())
+		hud.show_victory(0, "Left", 0.5, 60.0)
+		hud.next_frame()
+		for panel in hud._panels:
+			assert_eq(panel.modulate.a, 0.0, "plates stay out into the victory")
+		hud.free()
+
+
+func test_the_intro_subtitle_sits_under_the_names() -> void:
+	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
+		var hud := _hud(size)
+		hud.set_intro_subtitle("Frost Coliseum · Overtime")
+		var label: Label = hud._intro.get_child(-1)
+		assert_eq(label.text, "Frost Coliseum · Overtime")
+		assert_true(label.position.y >= hud._intro_box.position.y + hud._intro_box.size.y, "below the names")
+		assert_true(label.position.y + label.size.y <= size.y, "on screen at %s" % size)
+		hud.free()

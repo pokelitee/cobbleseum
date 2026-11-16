@@ -2,8 +2,8 @@ class_name Hud
 extends CanvasLayer
 ## The battle HUD (concepts_brief.md §12.1, §12.5): a name plate per fighter (its name, type
 ## pills, status badges, and a rounded HP bar with a lagging damage segment and its percentage),
-## move-name banners, and the intro, victory, winner and credits cards, in the game's fonts
-## (UiFonts).
+## move-name banners, captions, the instant replay's tag, and the intro, victory, winner and
+## credits cards, in the game's fonts (UiFonts).
 ## Layout follows the orientation: portrait has side B at the top and side A at the bottom;
 ## landscape has side A top-left and side B top-right. Everything animates per video frame.
 
@@ -72,7 +72,23 @@ var _titles: Array[Dictionary] = []
 const TITLE_FRAMES := 45
 ## The victory card slides in over this many frames while the name plates fade out.
 const VICTORY_IN_FRAMES := 12
+## A caption's frames on screen, and the frames it takes to slide in.
+const CAPTION_FRAMES := 45
+const CAPTION_IN_FRAMES := 6
+## Frames the name plates take to fade out for the instant replay, and the replay tag's
+## dot blinks on and off every this many frames.
+const REPLAY_FADE_FRAMES := 8
+const REPLAY_BLINK_FRAMES := 12
+const REPLAY_DOT := Color(0.95, 0.15, 0.15)
 var _frame := 0
+## The intro card's names and VS, which the subtitle sits under.
+var _intro_box: BoxContainer
+## The caption showing, if any: {"band": Control, "age": frames}.
+var _caption: Dictionary = {}
+## The instant replay's tag and its blinking dot, and frames since the replay began (-1: none).
+var _replay_tag: Control
+var _replay_dot: Control
+var _replay_age := -1
 
 
 ## Builds the HUD for fighters `names` (side A first), with each one's `types` for its pills.
@@ -228,6 +244,88 @@ func show_winner(text: String) -> void:
 	_winner_band.visible = true
 
 
+## A caption across the lower third, e.g. "COMEBACK!", outlined in `side`'s colour on a dark
+## band edged in it. It slides in, holds and fades; a new caption replaces the one showing.
+func caption(text: String, side: int) -> void:
+	if not _caption.is_empty():
+		_caption.band.queue_free()
+	var height := 130.0 * _scale
+	var band := Control.new()
+	band.size = Vector2(_size.x, height)
+	band.position = Vector2(0, _size.y * (0.64 if _portrait else 0.7) - height * 0.5)
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(band)
+	band.add_child(_rect(Color(0.04, 0.05, 0.1, 0.72), Vector2.ZERO, band.size / _scale))
+	band.add_child(_rect(SIDE_COLOURS[side], Vector2.ZERO, Vector2(_size.x / _scale, 6)))
+	band.add_child(_rect(SIDE_COLOURS[side], Vector2(0, height / _scale - 6), Vector2(_size.x / _scale, 6)))
+	var label := _label(text, 92, Color.WHITE, true)
+	label.add_theme_color_override("font_outline_color", SIDE_COLOURS[side].darkened(0.35))
+	label.add_theme_constant_override("outline_size", roundi(18 * _scale))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.size = band.size
+	band.add_child(label)
+	_caption = {"band": band, "age": 0}
+	_place_caption()
+
+
+## The instant replay begins: a "REPLAY" tag with a blinking red dot in the top-left corner,
+## where the name plates were, and the plates fade out. They stay out afterwards, since the
+## victory card follows.
+func show_replay() -> void:
+	_replay_tag = PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = PLATE
+	style.set_corner_radius_all(roundi(16 * _scale))
+	style.set_content_margin_all(12 * _scale)
+	style.content_margin_left = 18 * _scale
+	style.content_margin_right = 22 * _scale
+	_replay_tag.add_theme_stylebox_override("panel", style)
+	_replay_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", roundi(14 * _scale))
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_replay_tag.add_child(row)
+	var dot := Panel.new()
+	var dot_style := StyleBoxFlat.new()
+	dot_style.bg_color = REPLAY_DOT
+	dot_style.set_corner_radius_all(roundi(14 * _scale))
+	dot.add_theme_stylebox_override("panel", dot_style)
+	dot.custom_minimum_size = Vector2(28, 28) * _scale
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(dot)
+	row.add_child(_label("REPLAY", 52, Color.WHITE, true))
+	add_child(_replay_tag)
+	_replay_tag.size = _replay_tag.get_minimum_size()
+	_replay_tag.position = Vector2(60, 90 if _portrait else 40) * _scale
+	_replay_dot = dot
+	_replay_age = 0
+	if not _caption.is_empty():
+		_caption.band.queue_free()
+		_caption = {}
+
+
+## The instant replay ends: its tag goes; the plates stay faded.
+func hide_replay() -> void:
+	if _replay_tag != null:
+		_replay_tag.queue_free()
+		_replay_tag = null
+		_replay_dot = null
+
+
+func replay_showing() -> bool:
+	return _replay_tag != null
+
+
+## A line under the intro card's names, e.g. the arena's name.
+func set_intro_subtitle(text: String) -> void:
+	var label := _label(text, 46, Color(0.88, 0.9, 0.95))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.size = Vector2(_size.x, label.get_minimum_size().y)
+	label.position = Vector2(0, _intro_box.position.y + _intro_box.size.y + 28 * _scale)
+	_intro.add_child(label)
+
+
 ## The victory card across the lower part of the screen: "WINNER", the winner's name outlined
 ## in its side's colour, and its HP left and the battle's length. The name plates fade out.
 func show_victory(side: int, name: String, hp_share: float, seconds: float) -> void:
@@ -346,7 +444,19 @@ func next_frame() -> void:
 		var t := ease(clampf(_victory_age / float(VICTORY_IN_FRAMES), 0.0, 1.0), 0.3)
 		_victory.position.x = lerpf(-_size.x, 0.0, t)
 		for panel in _panels:
-			panel.modulate.a = 1.0 - t
+			panel.modulate.a = minf(panel.modulate.a, 1.0 - t)
+	if not _caption.is_empty():
+		_caption.age += 1
+		_place_caption()
+		if _caption.age >= CAPTION_FRAMES:
+			_caption.band.queue_free()
+			_caption = {}
+	if _replay_age >= 0:
+		_replay_age += 1
+		for panel in _panels:
+			panel.modulate.a = minf(panel.modulate.a, 1.0 - clampf(_replay_age / float(REPLAY_FADE_FRAMES), 0.0, 1.0))
+		if _replay_dot != null:
+			_replay_dot.modulate.a = 1.0 if (_replay_age / REPLAY_BLINK_FRAMES) % 2 == 0 else 0.0
 	if _credits.visible:
 		_credits.modulate.a = minf(1.0, _credits.modulate.a + 0.1)
 	for title in _titles.duplicate():
@@ -397,6 +507,7 @@ func _matchup(names: Array) -> Control:
 		box.add_child(label)
 	box.size = box.get_minimum_size()
 	box.position = (_size - box.size) * 0.5
+	_intro_box = box
 	return card
 
 
@@ -429,6 +540,15 @@ func _plate_style(side: int, mirrored: bool) -> StyleBoxFlat:
 	style.shadow_color = Color(0, 0, 0, 0.35)
 	style.shadow_size = roundi(10 * _scale)
 	return style
+
+
+## Slides the caption in from the left over CAPTION_IN_FRAMES and fades it over its last frames.
+func _place_caption() -> void:
+	var band: Control = _caption.band
+	var age: int = _caption.age
+	var t := ease(clampf(age / float(CAPTION_IN_FRAMES), 0.0, 1.0), 0.3)
+	band.position.x = lerpf(-_size.x * 0.25, 0.0, t)
+	band.modulate.a = clampf(minf(t * 1.5, (CAPTION_FRAMES - age) / 8.0), 0.0, 1.0)
 
 
 ## A label in the body font, or the display font with `display`.

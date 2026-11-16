@@ -19,8 +19,10 @@ extends Node3D
 ## The battle is run headless first so the Director can plan the whole presentation: hit-stop,
 ## slow motion and camera shots. Each video frame then either holds the current tick or
 ## advances the simulation by one. Under Movie Maker every frame is 1/30 s; otherwise frames
-## follow real time. With --clip-seconds the view plays only the window Highlights picks,
-## then the credits card, and quits. Before quitting it finishes the battle off screen and
+## follow real time. After a knockout, the instant replay re-shows it from a second copy of
+## the battle (a replay of the spec, skipped ahead), so the battle itself is never stepped
+## back or again. With --clip-seconds the view plays only the window Highlights picks, then
+## the credits card, and quits. Before quitting it finishes the battle off screen and
 ## exits with code 2 if the battle's checksum doesn't match --expect-checksum.
 
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
@@ -48,6 +50,8 @@ const WALK_THRESHOLD := 0.01
 ## a knockout holds its loudest cheer this many frames.
 const CHEER_SHARE := 0.15
 const KNOCKOUT_CHEER_FRAMES := 90
+## The crowd's cheer when the instant replay shows the knockout again.
+const REPLAY_CHEER := 0.6
 ## Random stream id for the handheld wobble, after the simulation's own streams.
 const CAMERA_WOBBLE_STREAM := 100
 ## Seeds the choice of watchers in the stands, after the simulation's streams.
@@ -99,6 +103,17 @@ var _player_camera: PlayerCamera
 var _live_frames := 0
 var _victory_shown := false
 var _end_frames := 0
+## The instant replay: a copy of the battle stepped to the replay's first tick, the battle
+## and event index it stands in for (set once it starts), the tick it is showing and the
+## frames left on that tick.
+var _replay_battle: Battle
+var _main_battle: Battle
+var _main_event_index := 0
+var _replay_tick := 0
+var _replay_hold := 0
+var _replaying := false
+## The next of the plan's captions to show.
+var _caption_index := 0
 
 
 func _ready() -> void:
@@ -153,6 +168,7 @@ func _ready() -> void:
 	_hud = Hud.new()
 	add_child(_hud)
 	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types])
+	var arena_name: String = Arenas.preset(battle.arena).get("name", battle.arena)
 	_move_fx = MoveFX.new()
 	add_child(_move_fx)
 	for fighter in battle.fighters:
@@ -194,6 +210,7 @@ func _ready() -> void:
 		_event_index = 0
 		for side in 2:
 			_hud.set_hp(side, 1.0, true)
+		_hud.set_intro_subtitle(arena_name)
 		return
 	var start := 0
 	_end_tick = plan.slow.size()
@@ -208,10 +225,14 @@ func _ready() -> void:
 	_tick = battle.tick
 	_event_index = battle.events.size()
 	# A clip that skips past the start of overtime never sees its event.
-	if battle.tick >= roundi(Rules.OVERTIME_SECONDS * Rules.TICK_RATE):
+	var overtime := battle.tick >= roundi(Rules.OVERTIME_SECONDS * Rules.TICK_RATE)
+	if overtime:
 		_music.overtime()
+	_hud.set_intro_subtitle(arena_name + (" · Overtime" if overtime else ""))
+	while _caption_index < plan.captions.size() and int(plan.captions[_caption_index].tick) < _tick:
+		_caption_index += 1
 	_begin_tick()
-	_sync_views()
+	_sync_views(_shown_tick())
 	for side in 2:
 		var fighter := battle.fighters[side]
 		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp, true)
@@ -221,7 +242,8 @@ func _ready() -> void:
 		_views[side].set_asleep(fighter.status == "slp")
 
 
-## Runs a copy of the battle headless and plans its presentation.
+## Runs a copy of the battle headless and plans its presentation. A knockout's instant replay
+## gets another copy, stepped to the replay's first tick.
 func _plan(spec: Dictionary, data: BattleData) -> Dictionary:
 	var preview: Battle = Battle.create(spec, data, Controllers.for_spec(spec).controllers).battle
 	preview.run()
@@ -231,8 +253,13 @@ func _plan(spec: Dictionary, data: BattleData) -> Dictionary:
 		for move in preview.fighters[side].moves:
 			move_power[side][move.id] = move.power
 	var max_hp := [preview.fighters[0].max_hp, preview.fighters[1].max_hp]
-	return Director.plan(preview.events, preview.tick, max_hp, move_power,
+	var planned := Director.plan(preview.events, preview.tick, max_hp, move_power,
 		battle.random_stream(Battle.Stream.COSMETIC))
+	if not planned.replay.is_empty():
+		_replay_battle = Battle.create(spec, data, Controllers.for_spec(spec).controllers).battle
+		while _replay_battle.tick < int(planned.replay.start):
+			_replay_battle.step()
+	return planned
 
 
 func _process(delta: float) -> void:
@@ -270,6 +297,10 @@ func _next_frame() -> void:
 		elif _clip_mode:
 			_finish()
 		return
+	if _replay_due():
+		_begin_replay()
+	if _replaying and _next_replay_frame():
+		return
 	_segment_frames += 1
 	_frames_shown += 1
 	if _hold_frames > 0:
@@ -281,6 +312,13 @@ func _next_frame() -> void:
 		if _tick >= _end_tick:
 			return
 		_begin_tick()
+	_advance_effects()
+	_fx.set_speed_lines(_segment.get("shot", -1) == Director.Shot.CLOSE_UP)
+	_sync_views(_shown_tick())
+
+
+## Advances every animation, effect and sound by one video frame.
+func _advance_effects() -> void:
 	for view in _views:
 		view.next_frame()
 	_crowd.next_frame()
@@ -291,8 +329,70 @@ func _next_frame() -> void:
 	_next_audio_frame()
 	if _overlay.visible:
 		_overlay.refresh()
-	_fx.set_speed_lines(_segment.get("shot", -1) == Director.Shot.CLOSE_UP)
-	_sync_views()
+
+
+## The instant replay starts as the presentation is about to show its planned tick ("at",
+## the victory's start), once.
+func _replay_due() -> bool:
+	return _replay_battle != null and _main_battle == null and _hold_frames == 0 and _tick == int(plan.replay.at)
+
+
+## Cuts to the instant replay: the replay's copy of the battle stands in for the battle, the
+## fighters get back up, the HUD shows the replay tag, and a white flash hides the cut.
+func _begin_replay() -> void:
+	_main_battle = battle
+	_main_event_index = _event_index
+	battle = _replay_battle
+	_event_index = battle.events.size()
+	_replaying = true
+	_replay_tick = int(plan.replay.start) - 1
+	_replay_hold = 0
+	_hold_is_hitstop = false
+	_fired_tick = [-1, -1]
+	_hit_counts = [0, 0]
+	var scale := 1.0 / int(plan.replay.frames_per_tick)
+	for side in 2:
+		_views[side].rewind()
+		_views[side].set_asleep(battle.fighters[side].status == "slp")
+		_views[side].set_time_scale(scale)
+	_crowd.set_time_scale(scale)
+	_hud.show_replay()
+	_fx.cut_flash()
+
+
+## One video frame of the instant replay: hold the replayed tick, or step the copy to the
+## next one. Returns false once the replay is over, after cutting back to the battle, so this
+## frame goes on to the victory.
+func _next_replay_frame() -> bool:
+	var replay: Dictionary = plan.replay
+	_segment_frames += 1
+	_frames_shown += 1
+	if _replay_hold > 0:
+		_replay_hold -= 1
+	else:
+		_replay_tick += 1
+		if _replay_tick >= int(replay.end):
+			_end_replay()
+			return false
+		if not battle.is_over():
+			_step_battle()
+		_replay_hold = int(replay.frames_per_tick) - 1
+		var segment := Director.shot_for(replay.shots, _replay_tick)
+		if segment != _segment:
+			_segment = segment
+			_segment_frames = 0
+	_advance_effects()
+	_fx.set_speed_lines(false)
+	_sync_views(_replay_tick)
+	return true
+
+
+func _end_replay() -> void:
+	battle = _main_battle
+	_event_index = _main_event_index
+	_replaying = false
+	_hud.hide_replay()
+	_fx.cut_flash()
 
 
 ## Music and the arena's sound run in real time, through hit-stop and slow motion alike.
@@ -335,16 +435,7 @@ func _next_live_frame() -> void:
 		_step_battle()
 	if _live_frames == HINT_FRAMES and not battle.is_over():
 		_hud.show_hint("")
-	for view in _views:
-		view.next_frame()
-	_crowd.next_frame()
-	_fx.next_frame()
-	_move_fx.next_frame()
-	_hud.next_frame()
-	_sound.next_frame()
-	_next_audio_frame()
-	if _overlay.visible:
-		_overlay.refresh()
+	_advance_effects()
 	for side in 2:
 		var fighter := battle.fighters[side]
 		_views[side].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
@@ -387,6 +478,10 @@ func _begin_tick() -> void:
 	_crowd.set_time_scale(0.0 if hitstop > 0 else 1.0 / slow)
 	if not plan.victory.is_empty() and shown >= int(plan.victory.start) and not _victory_shown:
 		_show_victory(int(plan.victory.side))
+	while _caption_index < plan.captions.size() and int(plan.captions[_caption_index].tick) <= shown:
+		var caption: Dictionary = plan.captions[_caption_index]
+		_hud.caption(caption.text, int(caption.side))
+		_caption_index += 1
 	var segment := Director.shot_for(plan.shots, shown)
 	if segment != _segment:
 		_segment = segment
@@ -507,8 +602,12 @@ func _play_events() -> void:
 				_views[event.side].play_role("faint")
 				_views[1 - int(event.side)].celebrate()
 				_sound.knockout(event.side)
-				_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
 				_arena_sound.cheer()
+				if _replaying:
+					# The music is already cut, and the crowd has seen this once.
+					_crowd.cheer(REPLAY_CHEER)
+					continue
+				_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
 				_arena_sound.roar()
 				_music.knockout()
 				if _live:
@@ -516,6 +615,8 @@ func _play_events() -> void:
 					_music.victory(BattleMusic.CUT_FRAMES)
 					_arena_sound.set_level(ArenaSound.STING_DUCK_DB, ArenaSound.DUCK_FRAMES)
 			"overtime":
+				if _replaying:
+					continue
 				_hud.flash_title("Overtime!", Color(1.0, 0.55, 0.3))
 				_music.overtime()
 			"time_up":
@@ -577,12 +678,13 @@ func _update_sight() -> void:
 	_arena.set_sight(chests, grounds)
 
 
-func _sync_views() -> void:
-	if _hold_is_hitstop and _hold_frames < plan.slow[_shown_tick()]:
+## Places the fighters, HUD and camera for the tick `shown`.
+func _sync_views(shown: int) -> void:
+	if _hold_is_hitstop and _hold_frames < plan.slow[shown]:
 		_hold_is_hitstop = false
 		for view in _views:
-			view.set_time_scale(1.0 / plan.slow[_shown_tick()])
-		_crowd.set_time_scale(1.0 / plan.slow[_shown_tick()])
+			view.set_time_scale(1.0 / plan.slow[shown])
+		_crowd.set_time_scale(1.0 / plan.slow[shown])
 	for side in 2:
 		var fighter := battle.fighters[side]
 		_views[side].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
@@ -590,7 +692,7 @@ func _sync_views() -> void:
 	_update_sight()
 	_move_fx.sync_projectiles(battle)
 	var span := maxi(1, int(_segment.end) - int(_segment.start))
-	var progress := float(_shown_tick() - int(_segment.start)) / span
+	var progress := float(shown - int(_segment.start)) / span
 	_rig.apply(_camera, _segment, battle, _segment_frames / float(Rules.TICK_RATE), progress,
 		_frames_shown / float(Rules.TICK_RATE), _segment_frames == 0)
 

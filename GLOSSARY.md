@@ -220,7 +220,11 @@ _Avoid_: orientation, aspect ratio, format (for battle rules)
 The stretch of a battle that a clip shows, at most 60 seconds and usually ending just after the knockout.
 
 **Instant replay**:
-A slow-motion repeat of the knockout inside a clip.
+A slow-motion repeat of the knockout from new angles, shown after the knockout and before the victory. Its pictures come from a replay of the battle, so the battle itself is never stepped again.
+
+**Caption**:
+A short line across the lower third of a clip marking a big beat, such as "COMEBACK!" or "FINAL BLOW".
+_Avoid_: subtitle, callout (text over a fighter)
 
 **Credits card**:
 The card that ends every clip, crediting Cobblemon and the other sources.

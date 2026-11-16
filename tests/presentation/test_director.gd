@@ -94,3 +94,51 @@ func test_frames_from_counts_holds() -> void:
 	assert_eq(total, Array(plan.slow).reduce(func(a, b): return a + b, 0) + Array(plan.hitstop).reduce(func(a, b): return a + b, 0))
 	var victory: int = plan.victory.start
 	assert_true(Director.frames_from(plan, 280) - Director.frames_from(plan, victory) > (victory - 280) * 2, "slow motion stretches the knockout")
+
+
+func test_the_instant_replay_reshows_the_knockout_before_the_victory() -> void:
+	var replay: Dictionary = _plan().replay
+	assert_eq(replay.at, _plan().victory.start, "just before the victory")
+	assert_eq(replay.knockout, 300)
+	assert_eq(replay.start, 280, "from the finishing wind-up, which is under 24 ticks before")
+	assert_eq(replay.end, 300 + Director.REPLAY_AFTER_TICKS + 1)
+	assert_eq(replay.frames_per_tick, Director.REPLAY_FRAMES_PER_TICK)
+	assert_true((replay.end - replay.start) * replay.frames_per_tick <= Director.REPLAY_MAX_FRAMES)
+	var lead := Director.shot_for(replay.shots, 290)
+	assert_eq([lead.shot, lead.side, lead.get("low", false)], [Director.Shot.OVER_SHOULDER, 0, true], "low behind the attacker")
+	var hit := Director.shot_for(replay.shots, 300)
+	assert_eq([hit.shot, hit.side], [Director.Shot.IMPACT, 1], "punch-in on the loser from the hit on")
+	assert_eq(replay.shots[0].start, replay.start)
+	assert_eq(replay.shots[-1].end, replay.end)
+
+
+func test_a_long_windup_replays_only_the_last_ticks_before_the_knockout() -> void:
+	var events := _events()
+	events[4] = {"tick": 250, "type": "windup", "side": 0, "move": "cannon"}
+	var replay: Dictionary = Director.plan(events, 301, MAX_HP, MOVE_POWER, SimRandom.new(1)).replay
+	assert_eq(replay.start, 300 - Director.REPLAY_BEFORE_TICKS)
+
+
+func test_no_replay_or_final_blow_without_a_knockout() -> void:
+	var events := _events().filter(func(e: Dictionary) -> bool: return e.type != "knockout")
+	var plan := Director.plan(events, 301, MAX_HP, MOVE_POWER, SimRandom.new(1))
+	assert_eq(plan.replay, {})
+	assert_eq(plan.captions, [])
+
+
+func test_captions_mark_the_final_blow_and_each_fighters_first_comeback() -> void:
+	var events := [
+		{"tick": 10, "type": "hit", "side": 0, "move": "jet", "damage": 300, "crit": false, "effectiveness": 1.0, "hp": 100},
+		{"tick": 50, "type": "hit", "side": 1, "move": "kick", "damage": 300, "crit": false, "effectiveness": 1.0, "hp": 100},
+		{"tick": 60, "type": "hit", "side": 1, "move": "kick", "damage": 20, "crit": false, "effectiveness": 1.0, "hp": 80},
+		{"tick": 70, "type": "hit", "side": 0, "move": "jet", "damage": 20, "crit": false, "effectiveness": 1.0, "hp": 80},
+		{"tick": 280, "type": "windup", "side": 0, "move": "cannon"},
+		{"tick": 300, "type": "hit", "side": 0, "move": "cannon", "damage": 80, "crit": false, "effectiveness": 1.0, "hp": 0},
+		{"tick": 300, "type": "knockout", "side": 1},
+	]
+	var captions: Array = Director.plan(events, 301, MAX_HP, MOVE_POWER, SimRandom.new(1)).captions
+	assert_eq(captions, [
+		{"tick": 50, "text": Director.COMEBACK_CAPTION, "side": 1},
+		{"tick": 70, "text": Director.COMEBACK_CAPTION, "side": 0},
+		{"tick": 280, "text": Director.FINAL_BLOW_CAPTION, "side": 0},
+	], "one comeback each, none on the finishing hit, then the final blow")

@@ -26,6 +26,17 @@ const KNOCKOUT_FRAMES_PER_TICK := 3
 const KNOCKOUT_LINGER_TICKS := 30
 ## After a knockout, the winner's victory shot (and the HUD's victory card) at normal speed.
 const VICTORY_TICKS := 75
+## The instant replay, shown between the knockout's linger and the victory: from this many
+## ticks before the knockout (or the finishing move's wind-up, if later) to this many after
+## it, at this many frames per tick.
+const REPLAY_BEFORE_TICKS := 24
+const REPLAY_AFTER_TICKS := 12
+const REPLAY_FRAMES_PER_TICK := 2
+## The longest replay, in video frames.
+const REPLAY_MAX_FRAMES := (REPLAY_BEFORE_TICKS + REPLAY_AFTER_TICKS + 1) * REPLAY_FRAMES_PER_TICK
+## Caption texts (concepts_brief.md §12.5).
+const COMEBACK_CAPTION := "COMEBACK!"
+const FINAL_BLOW_CAPTION := "FINAL BLOW"
 
 
 ## events: the battle's event log. end_tick: the tick the battle ended. max_hp: per side.
@@ -36,6 +47,13 @@ const VICTORY_TICKS := 75
 ##   "slow": PackedInt32Array, frames each tick lasts after any hit-stop (1, or more in slow motion)
 ##   "shots": Array of {"start", "end", "shot", "side"}
 ##   "victory": {"start": tick, "side": the winner} after a knockout, else {}
+##   "replay": after a knockout, the instant replay that plays just before the victory:
+##     {"at": the victory's start tick, "start", "end": the replayed ticks [start, end),
+##     "knockout": tick, "frames_per_tick", "shots": like "shots", over the replayed ticks};
+##     else {}
+##   "captions": Array of {"tick", "text", "side"} in tick order: "COMEBACK!" on each
+##     fighter's first hit while low on HP (as Highlights counts comebacks), "FINAL BLOW" on
+##     the finishing move's wind-up
 static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array, random: SimRandom) -> Dictionary:
 	var knockout := _knockout_window(events, end_tick)
 	var victory_start := end_tick + KNOCKOUT_LINGER_TICKS
@@ -76,7 +94,8 @@ static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array,
 			slow[tick] = KNOCKOUT_FRAMES_PER_TICK
 		victory = {"start": victory_start, "side": 1 - int(knockout.loser)}
 		_overlay(shot_at, side_at, victory_start, length, Shot.VICTORY, victory.side)
-	return {"hitstop": hitstop, "slow": slow, "shots": _segments(shot_at, side_at), "victory": victory}
+	return {"hitstop": hitstop, "slow": slow, "shots": _segments(shot_at, side_at), "victory": victory,
+		"replay": _replay(knockout, victory_start), "captions": _captions(events, max_hp, knockout)}
 
 
 ## Video frames from `tick` to the end of the plan.
@@ -116,7 +135,8 @@ static func _overlay(shot_at: PackedInt32Array, side_at: PackedInt32Array, start
 			side_at[t] = side
 
 
-## Slow motion starts at the wind-up of the move that caused the knockout.
+## Slow motion starts at the wind-up of the move that caused the knockout ("windup" is -1
+## when there was none).
 static func _knockout_window(events: Array, end_tick: int) -> Dictionary:
 	for i in range(events.size() - 1, -1, -1):
 		var event: Dictionary = events[i]
@@ -125,9 +145,41 @@ static func _knockout_window(events: Array, end_tick: int) -> Dictionary:
 		var loser: int = event.side
 		for j in range(i - 1, -1, -1):
 			if events[j].type == "windup" and events[j].side == 1 - loser:
-				return {"start": events[j].tick, "loser": loser}
-		return {"start": maxi(0, end_tick - 15), "loser": loser}
+				return {"start": events[j].tick, "loser": loser, "tick": event.tick, "windup": events[j].tick}
+		return {"start": maxi(0, end_tick - 15), "loser": loser, "tick": event.tick, "windup": -1}
 	return {}
+
+
+## The instant replay: the attacker's side from a low over-the-shoulder angle into the hit,
+## then a punch-in on the loser through the faint.
+static func _replay(knockout: Dictionary, at: int) -> Dictionary:
+	if knockout.is_empty():
+		return {}
+	var hit: int = knockout.tick
+	var start := maxi(maxi(0, hit - REPLAY_BEFORE_TICKS), int(knockout.windup))
+	var end := hit + REPLAY_AFTER_TICKS + 1
+	var loser: int = knockout.loser
+	var shots: Array = []
+	if start < hit:
+		shots.append({"start": start, "end": hit, "shot": Shot.OVER_SHOULDER, "side": 1 - loser, "low": true})
+	shots.append({"start": hit, "end": end, "shot": Shot.IMPACT, "side": loser})
+	return {"at": at, "start": start, "end": end, "knockout": hit, "frames_per_tick": REPLAY_FRAMES_PER_TICK, "shots": shots}
+
+
+## Captions, kept off the knockout's slow motion except for "FINAL BLOW", so one never
+## replaces it.
+static func _captions(events: Array, max_hp: Array, knockout: Dictionary) -> Array:
+	var captions: Array = []
+	var finish: int = knockout.start if not knockout.is_empty() else 1 << 30
+	var shown := [false, false]
+	for i in Highlights.comeback_hits(events, max_hp):
+		var event: Dictionary = events[i]
+		if not shown[event.side] and int(event.tick) < finish:
+			shown[event.side] = true
+			captions.append({"tick": event.tick, "text": COMEBACK_CAPTION, "side": event.side})
+	if not knockout.is_empty() and int(knockout.windup) >= 0:
+		captions.append({"tick": knockout.windup, "text": FINAL_BLOW_CAPTION, "side": 1 - int(knockout.loser)})
+	return captions
 
 
 ## Tick of the next event by `side` with one of `types` after index `from`, or `fallback`.

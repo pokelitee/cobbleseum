@@ -760,6 +760,7 @@ The camera director picks from a set of shot types based on battle events:
 | Impact punch-in | On a heavy hit, critical hit or super-effective hit |
 | Low angle | On big hits from large fighters |
 | Knockout orbit | Around the knockout, in slow motion |
+| Instant replay | After the knockout's linger and before the victory: the knockout again, from 24 ticks before it (or the finishing move's wind-up, if later) to 12 ticks after, at 2 frames per tick (at most about 2.5 s). A low over-the-shoulder shot from behind the attacker into the hit, then a punch-in on the loser through the faint. A white flash covers the cut in and out, a "REPLAY" tag with a blinking red dot sits top-left, and the name plates fade out (the victory card follows). Move sounds and the faint cry play again under a smaller cheer, and the music stays cut until the sting. The pictures come from a second copy of the battle, replayed from its spec and skipped ahead, so the battle itself, its checksum and the rules are untouched. |
 | Victory | After the knockout (2.5 s at normal speed): in front of the winner, a little to one side, slowly pushing in. The winner celebrates, the crowd cheers again, and the HUD's victory card slides in below: "WINNER", the name outlined in its side's colour, its HP left and the battle's length, while the name plates fade. Play mode keeps the plain "wins!" line, since a live battle has no planned ending. |
 
 - **Cuts:** timed to events, with a minimum shot length so the edit never jitters.
@@ -789,7 +790,7 @@ The camera director picks from a set of shot types based on battle events:
   - **Music** (`BattleMusic`): original tracks only, never official, ripped or remixed Pokémon music. Each track is a score in `tools/music/scores/` (tempo, scale, chords, melodies and intro), in the style of fast handheld-era battle themes: driving 16th-note ostinatos, 3-3-2 brass stabs, call and response, timpani into the loop's return. The asset pipeline renders the scores with the GeneralUser GS SoundFont's General MIDI instruments (`tools/music/`, about 2 minutes a track, only when a score or the music scripts change) into layers: drums and lead in two variants each, bass, harmony, and a climax layer.
     - Three tracks: Clash (D minor, 184 BPM), Overdrive (E minor, 192 BPM, rock-leaning) and Summit (C minor, 176 BPM, brass-forward). The battle's seed picks the track and its drum and lead variants on a random stream of its own.
     - A track's intro plays once and the rest loops seamlessly: the loop is rendered twice and the second pass kept, so it starts with the end of the first still ringing, as every repeat does. Every track gets the same tone shaping and is matched to the same weighted loudness. Clips start it from the top, fading in.
-    - Cues: overtime fades in the climax layer; a knockout cuts the music within 0.3 s, leaving the cry and the crowd for the slow-motion shot; the victory gets a short original sting (in play, as "wins!" shows), which fades over the credits; a time-up draw fades out.
+    - Cues: overtime fades in the climax layer; a knockout cuts the music within 0.3 s, leaving the cry and the crowd for the slow-motion shot and the instant replay; the victory gets a short original sting (in play, as "wins!" shows), which fades over the credits; a time-up draw fades out.
     - Later battle formats (several fighters a side) can pick a track by occasion; only the final knockout would end the music.
   - **Buses** (`default_bus_layout.tres`): Music, Crowd and Effects (cries and move sounds). The music ducks gently under the Effects bus through a side-chained compressor (a few dB, not out of the way), and the master adds 4 dB of make-up gain before its limiter. Fades move evenly in amplitude.
 - **HUD:**
@@ -797,7 +798,8 @@ The camera director picks from a set of shot types based on battle events:
   - A rounded HP bar under the name with a light band along its top, its percentage (rounded up, so a fighter with HP left never shows 0%), and a lagging "damage taken" segment. Bars drain and shake on big hits; side B's mirrors in landscape so both drain toward the middle.
   - Move-name banners in the move's type colour, and callouts over the fighters.
   - **Fonts** (`UiFonts`, `game/presentation/fonts/`, SIL Open Font License with the licences beside them): Lilita One, a chunky display face, for names, titles, banners, callouts and the coliseum's screens; Nunito ExtraBold for everything else. The body font is set at startup, not as the project's custom font, because Godot loads that before a fresh checkout has imported the font files.
-  - The intro card puts the two names, outlined in their sides' colours, either side of a gold "VS" (stacked in portrait). The winner's line sits on a dark band.
+  - The intro card puts the two names, outlined in their sides' colours, either side of a gold "VS" (stacked in portrait), with the arena's name under them, plus "· Overtime" when a clip starts after overtime began. The winner's line sits on a dark band.
+  - **Captions** (planned battles only): a lower-third band edged in a side's colour, sliding in for 1.5 s, on a few big beats. "COMEBACK!" on each fighter's first hit while at 30% HP or less (the rule Highlights scores comebacks by), never once the knockout's slow motion has begun, and "FINAL BLOW" on the finishing move's wind-up. None during the instant replay.
   - Intro and outro cards. Every clip ends with the credits card (§14).
 
 ### 12.6 Recording flow
@@ -817,7 +819,7 @@ The camera director picks from a set of shot types based on battle events:
 
 1. Choose a matchup and seed, which gives a battle spec.
 2. Run it headless to get the battle record.
-3. Choose the clip window from the event log: at most 60 seconds, usually ending shortly after the knockout. `Highlights` scores events (hits by damage share, plus crits, super-effective hits and comebacks; misses a little; the knockout or time-up a lot) and keeps the best-scoring window of the requested length. A window ends either a short linger after a hit or at the end of the plan, and one that reaches the knockout always plays the whole knockout and the victory after it. The victory comes on top of the requested length, so it never pushes the knockout out of the window.
+3. Choose the clip window from the event log: at most 60 seconds, usually ending shortly after the knockout. `Highlights` scores events (hits by damage share, plus crits, super-effective hits and comebacks; misses a little; the knockout or time-up a lot) and keeps the best-scoring window of the requested length. A window ends either a short linger after a hit or at the end of the plan, and one that reaches the knockout always plays the whole knockout and the victory after it. The instant replay and the victory come on top of the requested length, so they never push the knockout out of the window; a default 10-second clip that ends on a knockout runs about 17 seconds with them and the credits.
 4. For each requested format, start a second Godot process under Movie Maker with that format's `override.cfg`. The process:
    - skips ahead to the window's start without drawing;
    - renders the window;
@@ -1042,7 +1044,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - A designed HUD (styled HP bars, type icons, portraits, status badges), intro title cards, and a victory screen with the winner's pose. Done: name plates with type and status pills, rounded HP bars with percentages, the intro card (§12.5), and the victory shot and card (§12.3). Types are text pills rather than icons; portraits are still to do.
 - Openly licensed display and body fonts, never the official Pokémon fonts or logo styling. Done: Lilita One and Nunito.
 - Music and crowd sound. Done (§12.5, §12.7): three original tracks rendered from scores with General MIDI instruments, picked by the seed with variants, a victory sting and overtime's climax layer; the crowd's murmur, cheers and roar in coliseums and each field's ambience in the open.
-- For clips, title cards, captions and an instant replay of the knockout.
+- For clips, title cards, captions and an instant replay of the knockout. Done (§12.3, §12.5): the intro card names the arena (and overtime), "COMEBACK!" and "FINAL BLOW" captions, and an instant replay of the knockout from new angles before the victory.
 
 **Later:**
 
