@@ -38,6 +38,9 @@ Fonts: Lilita One and Nunito (SIL Open Font License 1.1).
 Pokémon and Pokémon character names are trademarks of Nintendo, Creatures Inc. and GAME FREAK.
 Made with Cobbleseum, an unaffiliated fan project.
 """
+## For clips that draw Cobblemon's move effects. They have no licence file of their own; the
+## jar's root licence is MPL-2.0 (concepts_brief.md §19, still to confirm with the Cobblemon team).
+const MOVE_EFFECTS_CREDIT := "Move particle effects and their textures: Cobblemon (https://cobblemon.com). They have no licence file of their own; the mod's root licence is MPL-2.0. Used non-commercially, like the models."
 
 
 func _initialize() -> void:
@@ -108,14 +111,17 @@ func _initialize() -> void:
 		"events": battle.events,
 	}
 	_write(out_dir.path_join("battle.json"), JSON.stringify(record, "  "))
-	_write(out_dir.path_join("credits.txt"), credits())
+	_write(out_dir.path_join("credits.txt"), credits(_view_args.has("--cobblemon-fx")))
 	print("wrote %s" % out_dir)
 	quit(0)
 
 
 ## The clip's credits: CREDITS, then each CC0 crowd and ambience recording by title and author.
-static func credits() -> String:
-	var lines: PackedStringArray = [CREDITS.strip_edges(), "Crowd and ambience sounds (CC0):"]
+static func credits(move_effects := false) -> String:
+	var lines: PackedStringArray = [CREDITS.strip_edges()]
+	if move_effects:
+		lines.append(MOVE_EFFECTS_CREDIT)
+	lines.append("Crowd and ambience sounds (CC0):")
 	var manifest := AssetPipeline.load_manifest("res://sources.json")
 	for source: Dictionary in manifest.get("sources", {}).values():
 		if source.license.begins_with("CC0"):

@@ -1,25 +1,13 @@
 class_name CobblemonMoveFX
 extends Node3D
-## Prototype: Cobblemon's own move particle effects in place of our styles for the moves in
-## game/data/cobblemon_move_fx.json (concepts_brief.md §12.5). Presentation only.
-## The effects themselves stay in the git-ignored cache (tools/extract_move_fx.gd copies them
-## out of the jar); the committed fit table only names them and says when each plays:
-## - windup: on the user while it winds up (cut short by a feint, unless "keep");
-## - fire: when the move is released, from the user, aimed at the foe when "aim" is set;
-## - flight: riding the projectile until it lands;
-## - hit: on the foe when the move connects (melee moves included);
-## - blast: an area move going off around the user.
-## Each spawn names an effect, whose fighter it plays on ("on": "user" or "foe"), where
-## ("at": a Cobblemon locator name), an optional "delay" and "max" in seconds, "face":
-## "camera" to turn the effect's front toward the camera instead of the other fighter (for
-## effects that start metres in front of their fighter, which our closer melee spacing would
-## bury inside the attacker), and the move's
-## "speed" (effect seconds per real second) squeezes Cobblemon's slower timings into ours.
+## Move visuals in Cobblemon's style (concepts_brief.md §12.5): plays each move's MoveSequence,
+## whose pieces are Cobblemon's own particle effects, run by SnowstormEmitter. Presentation
+## only. The effects stay in the git-ignored cache (the Cobblemon source's build copies them to
+## move_fx/); only the sequences, which name pieces and time them, are committed.
 
 const ROOT := "res://cache/build/cobblemon/1.8.4/move_fx"
 const PARTICLES := ROOT + "/assets/cobblemon/bedrock/particles"
 const TEXTURES := ROOT + "/assets/cobblemon/textures/particle"
-const FIT_FILE := "res://game/data/cobblemon_move_fx.json"
 const FRAME_SECONDS := 1.0 / Rules.TICK_RATE
 const MAX_EMITTERS := 160
 ## Locators on Cobblemon models we have no bone for, placed by share of the fighter's height;
@@ -32,10 +20,11 @@ const LOCATORS := {
 }
 const BLEND_MODES := {"alpha": "blend_mix, depth_prepass_alpha", "blend": "blend_mix", "add": "blend_add"}
 
-## Move id -> fit (see the table file).
-var fits: Dictionary = {}
-## Effects or textures that were missing, and Molang that failed, for the prototype's report.
+## Effects or textures that were missing, for previews and reports.
 var problems: Dictionary = {}
+
+## Move id -> MoveSequence, or null when the move has none.
+var _sequences: Dictionary = {}
 
 var _paths: Dictionary = {}
 var _effects: Dictionary = {}
@@ -49,35 +38,66 @@ var _spawned := 0
 
 ## Whether the extracted effects are in the cache.
 static func available() -> bool:
-	return DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(PARTICLES))
+	return ClassDB.class_exists("SnowstormCore") and DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(PARTICLES))
 
 
-## Loads the fit table and indexes the cached effects. Returns "" or why it can't run.
+## Indexes the cached effects. Returns "" or why they can't run.
 func setup() -> String:
+	if not ClassDB.class_exists("SnowstormCore"):
+		return "the native move-effect runtime isn't built; run tools/native/build.sh"
 	if not available():
-		return "Cobblemon move effects are not extracted; run tools/extract_move_fx.gd"
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(FIT_FILE))
-	if not parsed is Dictionary:
-		return "%s is not a JSON object" % FIT_FILE
-	for key: String in parsed:
-		if not key.begins_with("_"):
-			fits[key] = parsed[key]
+		return "Cobblemon move effects are not in the cache; run tools/assets.gd"
 	_index(ProjectSettings.globalize_path(PARTICLES))
 	return ""
 
 
 func has_move(id: String) -> bool:
-	return fits.has(id)
+	return _sequence(id) != null
 
 
-## Plays a phase of a move's fit. Returns the emitters started now (delayed spawns start
-## later). `cut_frames` >= 0 ends windup effects after that many frames (a feint).
-func play(id: String, phase: String, user: FighterView, foe: FighterView, cut_frames := -1) -> Array[SnowstormEmitter]:
+## Loads every effect and texture the moves' sequences can spawn, sub-effects included, so the
+## first use of a piece in battle doesn't stall a frame on parsing and loading.
+func prepare(ids: Array) -> void:
+	var queue: Array[String] = []
+	for id: String in ids:
+		var sequence := _sequence(id)
+		if sequence == null:
+			continue
+		for phase in MoveSequence.PHASES:
+			for piece: Dictionary in sequence.steps_for(phase):
+				queue.append(str(piece.effect))
+	var seen := {}
+	while not queue.is_empty():
+		var effect_id: String = queue.pop_back()
+		if seen.has(effect_id):
+			continue
+		seen[effect_id] = true
+		var effect := _effect(effect_id)
+		if effect == null:
+			continue
+		_texture(effect.get_texture())
+		queue.append_array(Array(effect.get_spawned_effects()))
+
+
+func _sequence(id: String) -> MoveSequence:
+	if not _sequences.has(id):
+		_sequences[id] = MoveSequence.for_move(id)
+	return _sequences[id]
+
+
+## Plays a phase of a move's sequence; `colour` is the move's type colour, for tinted pieces.
+## Returns the pieces started now (delayed ones start later). `cut_frames` >= 0 ends windup
+## pieces after that many frames (a feint).
+func play(id: String, phase: String, user: FighterView, foe: FighterView, colour: Color, cut_frames := -1) -> Array[SnowstormEmitter]:
 	var started: Array[SnowstormEmitter] = []
-	var fit: Dictionary = fits.get(id, {})
-	for spawn: Dictionary in fit.get(phase, []):
-		var delay := roundi(float(spawn.get("delay", 0.0)) / _speed(fit) / FRAME_SECONDS)
-		var entry := {"frames": delay, "spawn": spawn, "id": id, "user": user, "foe": foe, "cut": cut_frames, "phase": phase}
+	var sequence := _sequence(id)
+	if sequence == null:
+		return started
+	var speed := maxf(0.05, sequence.speed())
+	for spawn: Dictionary in sequence.steps_for(phase):
+		var delay := roundi(float(spawn.get("delay", 0.0)) / speed / FRAME_SECONDS)
+		var entry := {"frames": delay, "spawn": spawn, "speed": speed, "user": user, "foe": foe, "cut": cut_frames,
+			"phase": phase, "colour": colour}
 		if delay <= 0:
 			var emitter := _start(entry)
 			if emitter != null:
@@ -88,8 +108,8 @@ func play(id: String, phase: String, user: FighterView, foe: FighterView, cut_fr
 
 
 ## Spawns an effect that rides `node` (a projectile's visual, whose -Z is its heading).
-func play_riding(id: String, phase: String, node: Node3D, user: FighterView, foe: FighterView) -> Array[SnowstormEmitter]:
-	var started := play(id, phase, user, foe)
+func play_riding(id: String, phase: String, node: Node3D, user: FighterView, foe: FighterView, colour: Color) -> Array[SnowstormEmitter]:
+	var started := play(id, phase, user, foe, colour)
 	var ref: WeakRef = weakref(node)
 	var follow := func() -> Variant:
 		var riding: Node3D = ref.get_ref()
@@ -131,27 +151,23 @@ func emitter_count() -> int:
 func molang_problems() -> Dictionary:
 	var found := {}
 	for id: String in _effects:
-		var effect: SnowstormEffect = _effects[id]
+		var effect: RefCounted = _effects[id]
 		if effect != null:
-			for error in effect.errors:
+			for error: String in effect.get_errors():
 				found["%s: %s" % [id, error]] = true
 	return found
 
 
 ## Called by emitters for their events.
 func spawn_child(effect_id: String, at: Transform3D, vars: Dictionary, queries: Dictionary, bound: SnowstormEmitter,
-		speed: float, entity_scale: float) -> SnowstormEmitter:
-	var emitter := _spawn(effect_id, at, vars, queries, speed, entity_scale)
+		parent: SnowstormEmitter) -> SnowstormEmitter:
+	var emitter := _spawn(effect_id, at, vars, queries, parent.speed, parent.swap, parent.size_scale)
 	if emitter != null and bound != null:
 		var ref: WeakRef = weakref(bound)
 		emitter.follow = func() -> Variant:
-			var parent: SnowstormEmitter = ref.get_ref()
-			return parent.frame if parent != null else null
+			var holder: SnowstormEmitter = ref.get_ref()
+			return holder.frame if holder != null else null
 	return emitter
-
-
-func _speed(fit: Dictionary) -> float:
-	return maxf(0.05, float(fit.get("speed", 1.0)))
 
 
 func _start(entry: Dictionary) -> SnowstormEmitter:
@@ -160,20 +176,21 @@ func _start(entry: Dictionary) -> SnowstormEmitter:
 	var foe: FighterView = entry.foe
 	if not is_instance_valid(user) or not is_instance_valid(foe):
 		return null
-	var on_foe: bool = spawn.get("on", "foe" if entry.phase == "hit" else "user") == "foe"
+	var on_foe: bool = spawn.get("on", "user") == "foe"
 	var subject := foe if on_foe else user
 	var other := user if on_foe else foe
 	var at := locator(subject, other, str(spawn.get("at", "middle")))
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
-	if spawn.get("face", "") == "camera" and camera != null:
+	if spawn.get("face_camera", false) and camera != null:
 		var toward := (camera.global_position - at.origin) * Vector3(1, 0, 1)
 		if toward.length_squared() > 0.0001:
 			at.basis = Basis.looking_at(toward.normalized(), Vector3.UP)
 	var vars := entity_vars(subject)
 	if spawn.get("aim", false):
 		vars.merge(target_vars(at, locator(other, subject, str(spawn.get("aim_at", "target")))), true)
-	var fit: Dictionary = fits.get(entry.id, {})
-	var emitter := _spawn(str(spawn.effect), at, vars, entity_vars(subject), _speed(fit) * float(spawn.get("speed", 1.0)), 1.0)
+	var swap: Color = entry.colour if spawn.get("tint", false) else Color(0, 0, 0, 0)
+	var emitter := _spawn(str(spawn.effect), at, vars, entity_vars(subject), float(entry.speed) * float(spawn.get("speed", 1.0)),
+		swap, float(spawn.get("scale", 1.0)))
 	if emitter == null:
 		return null
 	if spawn.has("max"):
@@ -183,8 +200,8 @@ func _start(entry: Dictionary) -> SnowstormEmitter:
 	return emitter
 
 
-func _spawn(effect_id: String, at: Transform3D, vars: Dictionary, queries: Dictionary, speed: float,
-		entity_scale: float) -> SnowstormEmitter:
+func _spawn(effect_id: String, at: Transform3D, vars: Dictionary, queries: Dictionary, speed: float, swap: Color,
+		size_scale: float) -> SnowstormEmitter:
 	if _emitters.size() >= MAX_EMITTERS:
 		return null
 	var effect := _effect(effect_id)
@@ -193,10 +210,11 @@ func _spawn(effect_id: String, at: Transform3D, vars: Dictionary, queries: Dicti
 	var emitter := SnowstormEmitter.new()
 	emitter.library = self
 	emitter.speed = speed
-	emitter.entity_scale = entity_scale
+	emitter.swap = swap
+	emitter.size_scale = size_scale
 	add_child(emitter)
 	_spawned += 1
-	emitter.start(effect, at, hash([_spawned, effect.id]), vars, queries, _material(effect))
+	emitter.start(effect, at, hash([_spawned, effect.get_id()]), vars, queries, _material(effect, swap))
 	_emitters.append(emitter)
 	return emitter
 
@@ -225,21 +243,24 @@ static func entity_vars(view: FighterView) -> Dictionary:
 		"entity_scale": 1.0, "entity_size": width}
 
 
-func _effect(effect_id: String) -> SnowstormEffect:
+## The parsed effect (a native SnowstormProgram), or null when it's missing.
+func _effect(effect_id: String) -> RefCounted:
 	var id := effect_id if effect_id.contains(":") else "cobblemon:" + effect_id
 	if _effects.has(id):
 		return _effects[id]
 	var path: String = _paths.get(id, "")
-	var effect: SnowstormEffect = null
+	var effect: RefCounted = null
 	if path.is_empty():
 		problems["missing effect " + id] = true
 	else:
 		var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-		if data is Dictionary:
-			effect = SnowstormEffect.parse(data)
-			for error in effect.errors:
-				problems["%s: %s" % [id, error]] = true
-			for key in effect.unsupported:
+		var program: RefCounted = ClassDB.instantiate("SnowstormProgram") if data is Dictionary else null
+		var error: String = program.parse(data) if program != null else "unreadable"
+		if error.is_empty():
+			effect = program
+			for problem: String in effect.get_errors():
+				problems["%s: %s" % [id, problem]] = true
+			for key: String in effect.get_unsupported():
 				problems["%s: unsupported %s" % [id, key]] = true
 		else:
 			problems["unreadable effect " + path] = true
@@ -247,15 +268,19 @@ func _effect(effect_id: String) -> SnowstormEffect:
 	return effect
 
 
-func _material(effect: SnowstormEffect) -> ShaderMaterial:
+func _material(effect: RefCounted, swap: Color) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
-	if not _shaders.has(effect.material):
+	if not _shaders.has(effect.get_material()):
 		var shader := Shader.new()
-		shader.code = SnowstormEmitter.SHADER_CODE % BLEND_MODES[effect.material]
-		_shaders[effect.material] = shader
-	material.shader = _shaders[effect.material]
-	material.set_shader_parameter("tex", _texture(effect.texture))
+		shader.code = SnowstormEmitter.SHADER_CODE % BLEND_MODES[effect.get_material()]
+		_shaders[effect.get_material()] = shader
+	material.shader = _shaders[effect.get_material()]
+	material.set_shader_parameter("tex", _texture(effect.get_texture()))
 	material.set_shader_parameter("cutout", 0.02)
+	# Pieces that glow (blend and add) bloom like our other effects; cut-out pieces such as
+	# rocks and debris stay flat.
+	material.set_shader_parameter("brightness", 1.0 if effect.get_material() == "alpha" else MoveFX.GLOW)
+	material.set_shader_parameter("swap", swap)
 	return material
 
 

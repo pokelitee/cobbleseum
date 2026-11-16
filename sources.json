@@ -30,12 +30,15 @@
       "size": 139966403,
       "sha256": "77c4866b2e4c38afb488ed09b62ffd2729ce291dc793fca9c055c087f0b03978",
       "archive": "zip",
-      "license": "Models, animations and textures: CC BY-NC 3.0 (per-model license files). Code: MPL-2.0 (not used).",
+      "license": "Models, animations and textures: CC BY-NC 3.0 (per-model license files). Move particle effects, their textures and action effects: no licence file of their own; possibly MPL-2.0 under the root LICENSE (unconfirmed). Code: MPL-2.0 (not used).",
       "extract": [
         "assets/cobblemon/bedrock/pokemon/",
         "assets/cobblemon/textures/pokemon/",
         "assets/cobblemon/sounds/pokemon/",
         "assets/cobblemon/sounds/move/",
+        "assets/cobblemon/bedrock/particles/",
+        "assets/cobblemon/textures/particle/",
+        "data/cobblemon/action_effects/",
         "data/cobblemon/species/"
       ],
       "layout": [
@@ -48,6 +51,9 @@
         {"pattern": "assets/cobblemon/sounds/pokemon/*.ogg", "min_count": 1500},
         {"pattern": "assets/cobblemon/sounds/move/impact_generic/*.ogg", "min_count": 100},
         {"pattern": "assets/cobblemon/sounds/move/*/*.ogg", "min_count": 250},
+        {"pattern": "assets/cobblemon/bedrock/particles/moves/*/*.json", "min_count": 600, "format_key": "format_version", "format_value": "1.10.0"},
+        {"pattern": "assets/cobblemon/textures/particle/*/*.png", "min_count": 100},
+        {"pattern": "data/cobblemon/action_effects/moves/*.json", "min_count": 130},
         {"pattern": "data/cobblemon/species/*.json", "min_count": 1000}
       ],
       "build": "res://tools/sources/cobblemon.gd"

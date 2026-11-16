@@ -54,9 +54,9 @@ var cobblemon: CobblemonMoveFX = null
 var views: Array[FighterView] = []
 
 
-## Turns on Cobblemon's own effects for the moves CobblemonMoveFX fits. Returns "" or why
-## they're unavailable (the battle then keeps our styles).
-func use_cobblemon(fighters: Array[FighterView]) -> String:
+## Turns on Cobblemon-style sequences for the moves that have one, loading what `moves` (ids)
+## can spawn up front. Returns "" or why they're unavailable (the battle keeps our styles).
+func use_cobblemon(fighters: Array[FighterView], moves: Array = []) -> String:
 	views = fighters
 	var library := CobblemonMoveFX.new()
 	var error := library.setup()
@@ -65,6 +65,7 @@ func use_cobblemon(fighters: Array[FighterView]) -> String:
 		return error
 	cobblemon = library
 	add_child(cobblemon)
+	cobblemon.prepare(moves)
 	return ""
 
 
@@ -86,7 +87,7 @@ func style_of(move: BattleMove) -> String:
 ## The wind-up's ring (and glow), for `frames` when given (a feint breaking off early).
 func windup(attacker: FighterView, move: BattleMove, frames := -1) -> void:
 	if _converted(move):
-		cobblemon.play(move.id, "windup", attacker, _foe(attacker), frames if frames >= 0 else maxi(WINDUP_FRAMES, move.windup_ticks))
+		cobblemon.play(move.id, "windup", attacker, _foe(attacker), TypeColors.of(move.type), frames if frames >= 0 else maxi(WINDUP_FRAMES, move.windup_ticks))
 		return
 	var colour := TypeColors.of(move.type)
 	var ring := _mesh(_torus(0.6, 0.75), colour, 0.8)
@@ -133,7 +134,7 @@ func melee(attacker: FighterView, target: FighterView, move: BattleMove) -> void
 
 func hit(defender: FighterView, move: BattleMove, big: bool) -> void:
 	if _converted(move):
-		cobblemon.play(move.id, "hit", _foe(defender), defender)
+		cobblemon.play(move.id, "hit", _foe(defender), defender, TypeColors.of(move.type))
 		return
 	var colour := TypeColors.of(move.type)
 	var centre := defender.position + Vector3.UP * defender.height * 0.5
@@ -185,7 +186,7 @@ func miss(position: Vector3) -> void:
 ## short version of its style between the fighters.
 func point_blank(attacker: FighterView, target: FighterView, move: BattleMove) -> void:
 	if _converted(move):
-		cobblemon.play(move.id, "fire", attacker, target)
+		cobblemon.play(move.id, "fire", attacker, target, TypeColors.of(move.type))
 		return
 	var colour := TypeColors.of(move.type)
 	var from := _front(attacker, 0.6)
@@ -219,7 +220,7 @@ func point_blank(attacker: FighterView, target: FighterView, move: BattleMove) -
 ## move's reach, plus an accent for some styles.
 func blast(view: FighterView, move: BattleMove) -> void:
 	if _converted(move):
-		cobblemon.play(move.id, "blast", view, _foe(view))
+		cobblemon.play(move.id, "blast", view, _foe(view), TypeColors.of(move.type))
 		return
 	var colour := TypeColors.of(move.type)
 	var reach := Rules.AREA_RADIUS + view.height * 0.4
@@ -459,7 +460,7 @@ func _new_projectile(projectile: Dictionary, move: BattleMove, target: Vector2) 
 	if _converted(move) and views.size() == 2:
 		var user := views[int(projectile.owner)]
 		visual.style = "cobblemon"
-		visual.cobblemon = cobblemon.play(move.id, "fire", user, _foe(user)) + cobblemon.play_riding(move.id, "flight", root, user, _foe(user))
+		visual.cobblemon = cobblemon.play(move.id, "fire", user, _foe(user), colour) + cobblemon.play_riding(move.id, "flight", root, user, _foe(user), colour)
 		return visual
 	var size := clampf(0.8 + move.power / 120.0, 0.8, 1.8)
 	var r := Rules.PROJECTILE_RADIUS

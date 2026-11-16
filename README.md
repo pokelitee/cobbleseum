@@ -13,6 +13,15 @@ Prerequisites:
 - [Godot 4.7.2](https://godotengine.org/download/archive/4.7.2-stable/) (standard build, not .NET). Put it on your `PATH` as `godot`, or substitute its full path below.
 - Node.js 20 or later, for the asset pipeline's Showdown data export.
 - ffmpeg, for encoding recorded clips to MP4 (coming in milestone 1).
+- For the native move-effect runtime: Python 3 with SCons (`pip install scons==4.9.1`) and a C++ compiler (Visual Studio 2022 Build Tools on Windows, GCC or Clang elsewhere).
+
+Build the native move-effect runtime (a GDExtension in `game/native/`; the first build fetches the pinned godot-cpp into `cache/` and compiles it, a few minutes):
+
+```bash
+tools/native/build.sh
+```
+
+Without it the game still runs, drawing every move in our own styles.
 
 Fetch and prepare the assets (about 205 MB to download the first time):
 
@@ -101,6 +110,14 @@ Preview every move style (opens a window; images go to `cache/previews/move_<sty
 godot --path . --script res://tools/preview_moves.gd
 ```
 
+Moves with a Cobblemon-style sequence (`game/presentation/move_sequences/`) can be compared with our styles, and their cost per frame measured; `--cobblemon-fx` draws them in recordings and battles:
+
+```bash
+godot --path . --script res://tools/preview_moves.gd -- --compare=icebeam,shadowball
+godot --headless --path . --script res://tools/bench_move_fx.gd
+godot --headless --path . --script res://tools/record.gd -- --watch=vulpixalola --vs=scizor --seed=7101 --cobblemon-fx
+```
+
 Check that no third-party assets are tracked:
 
 ```bash
@@ -115,6 +132,7 @@ The design is described in the [concept brief](concepts_brief.md). In short:
 - Battle music is original: scores (`tools/music/scores/`) arranged by shared rules and rendered by the pipeline with General MIDI instruments into layers the game mixes (`tools/music/`, `BattleMusic`). Crowd and field ambience comes from CC0 recordings (`ArenaSound`).
 - A deterministic, fixed-tick battle simulation written in plain GDScript (`game/sim/`) runs headless for batch simulation and drives the 3D presentation. Rules constants live in `game/sim/rules.gd`; randomness comes from seeded mulberry32 streams, so a battle replays exactly from its spec.
 - A utility AI controls fighters through the same intents a player uses.
+- Move visuals in Cobblemon's style: each move's sequence (`MoveSequence`) plays pieces, Cobblemon's own Bedrock particle effects kept in `cache/`, at our real-time phases. A native GDExtension (`native/`, C++) compiles their Molang and runs the particles; `SnowstormEmitter` draws them.
 - The battle view (`game/presentation/`) replays the simulation with the converted models, a portrait camera and HP bars. `tools/record.gd` runs a battle headless, picks the clip window from its events, renders it with Godot's Movie Maker mode in a second Godot process, checks that the rendered battle's checksum matches, and encodes an MP4 with ffmpeg.
 
 ## Documentation

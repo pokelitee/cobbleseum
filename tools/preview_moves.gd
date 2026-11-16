@@ -116,7 +116,7 @@ func _render(data: BattleData, move: BattleMove, style: String, cobblemon: bool,
 	fx.styles = {move.id: style}
 	stage.add_child(fx)
 	if cobblemon:
-		var problem := fx.use_cobblemon(views)
+		var problem := fx.use_cobblemon(views, [move.id])
 		if not problem.is_empty():
 			printerr("warning: " + problem)
 

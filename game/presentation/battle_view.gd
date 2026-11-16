@@ -166,6 +166,7 @@ func _ready() -> void:
 		_views[side].watch(_views[1 - side])
 	_add_crowd(loaded.data)
 	_hud = Hud.new()
+	_hud.move_effects_credit = options.cobblemon_fx
 	add_child(_hud)
 	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types])
 	var arena_name: String = Arenas.preset(battle.arena).get("name", battle.arena)
@@ -175,7 +176,7 @@ func _ready() -> void:
 		for move in fighter.moves:
 			_move_fx.styles[move.id] = MoveStyle.of(move.id, loaded.data.moves[move.id])
 	if options.cobblemon_fx:
-		var problem := _move_fx.use_cobblemon(_views)
+		var problem := _move_fx.use_cobblemon(_views, _move_fx.styles.keys())
 		if not problem.is_empty():
 			printerr("warning: " + problem)
 	_sound = BattleSound.new()
