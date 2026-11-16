@@ -9,7 +9,8 @@ extends SceneTree
 ## cache/previews/move_<style>.png; previews show Cobblemon art, so they stay in the cache.
 ## --compare (prototype) renders real moves twice, our style above and Cobblemon's own effect
 ## (CobblemonMoveFX) below, with a fifth shot later in the hit, to
-## cache/previews/move_compare_<move>.png. Area moves blast, and self-buffs wind up and boost.
+## cache/previews/move_compare_<move>.png. Area moves blast, moves aimed at the foe (status
+## moves too) fly at it, and self-buffs wind up and boost.
 ## --pieces=<effect,...> [--tint=<Type>] plays single particle effects (pieces for move
 ## sequences) on the right-hand fighter, aimed at the left one, palette-swapped to the type's
 ## colour with --tint, captured over about a second, to cache/previews/piece_<effect>.png.
@@ -113,7 +114,7 @@ func _render(data: BattleData, move: BattleMove, style: String, cobblemon: bool,
 	var battle := Battle.new()
 	var melee := move.kind == BattleMove.Kind.MELEE
 	var area := move.kind == BattleMove.Kind.AREA
-	var ranged := move.kind == BattleMove.Kind.PROJECTILE
+	var ranged := move.is_projectile()
 	for side in 2:
 		var entry: Dictionary = data.roster[SPECIES[side]]
 		var view := FighterView.from_model(BattleView.MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
