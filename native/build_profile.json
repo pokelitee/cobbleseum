@@ -1,0 +1,4 @@
+{
+	"_comment": "Engine classes the native move-effect runtime and godot-cpp's own core use, so godot-cpp binds only these (faster builds, and the Linux static library stays under the argument-length limit).",
+	"enabled_classes": ["RefCounted", "ClassDBSingleton", "FileAccess", "Image", "Mutex", "OS", "WorkerThreadPool", "XMLParser"]
+}

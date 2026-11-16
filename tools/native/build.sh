@@ -23,4 +23,4 @@ fi
 python=python3
 command -v "$python" >/dev/null 2>&1 && "$python" -c "import SCons" 2>/dev/null || python=python
 cd "$root/native"
-GODOT_CPP="$cpp" "$python" -m SCons -j"$(nproc 2>/dev/null || echo 4)" target=template_debug "$@"
+GODOT_CPP="$cpp" "$python" -m SCons -j"$(nproc 2>/dev/null || echo 4)" target=template_debug build_profile="$root/native/build_profile.json" "$@"
