@@ -805,7 +805,12 @@ The camera director picks from a set of shot types based on battle events:
     - **Palette swap:** it lifts dark pixels to a shade of the type colour, so dark pieces read as their type rather than black.
     - **Non-move cues:** stat rises and drops, heals and dodges use Cobblemon's `statup`, `statdown`, `heal_*` and dash-line pieces.
     - The mesh styles below stay as the fallback when the native runtime or the cached effects are missing.
-  - **Later stages:** moves in batches by type, with sequences of their own where Cobblemon has an effect or a well-known move deserves one, and per-type touches to the style defaults; then turning the look on by default.
+  - **Moves with Cobblemon effects** get sequences of their own, which play Cobblemon's own pieces for that move and extend the move's style sequence, so a phase Cobblemon has no pieces for (often the projectile's flight) keeps the style's.
+    - Cobblemon's timeline sets which phase each piece belongs to. User pieces before the move goes off are the windup (the whole sequence, kept running, for self-buffs). Pieces aimed at the foe are the fire, or the blast for area moves. Pieces on the foe are the hit, with Cobblemon's gaps between them squeezed by the sequence's speed and capped at 0.6 s.
+    - Damaging hits without a Cobblemon impact piece add the type's impact, since many of Cobblemon's own hit sparks are a few centimetres across and vanish at our camera distance. Melee pieces on the foe are nudged toward the camera like the style accents.
+    - Where Cobblemon's timing doesn't fit, a sequence is hand-tuned (Thunder's storm cloud gathers over the foe on release rather than a second before the bolt).
+    - Done by type batch: Fire, Water, Electric and Ice.
+  - **Later stages:** the remaining type batches, then turning the look on by default.
   - Effects still in flight end with the battle, and nothing here touches the simulation.
 - **Move visuals (our styles):** every damaging move has one of 20 visual styles, drawn in its type colour from simple meshes animated per video frame.
   - Melee: strike (crescent), punch (shockwave star), kick (low arc), bite (closing fangs), slash (claw marks), rush (speed lines and dust).
