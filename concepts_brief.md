@@ -809,9 +809,10 @@ The camera director picks from a set of shot types based on battle events:
     - Cobblemon's timeline sets which phase each piece belongs to. User pieces before the move goes off are the windup (the whole sequence, kept running, for self-buffs). Pieces aimed at the foe are the fire, or the blast for area moves. Pieces on the foe are the hit, with Cobblemon's gaps between them squeezed by the sequence's speed and capped at 0.6 s.
     - Damaging hits without a Cobblemon impact piece add the type's impact, since many of Cobblemon's own hit sparks are a few centimetres across and vanish at our camera distance. Melee pieces on the foe are nudged toward the camera like the style accents.
     - Drains (Absorb, Mega Drain, Giga Drain) aim their pieces from the foe back to the user on the hit, so they skip the style's shot at the foe.
-    - Where Cobblemon's timing or framing doesn't fit, a sequence is hand-tuned (Thunder's storm cloud gathers over the foe on release rather than a second before the bolt; Psychic's burst follows its grip quickly; String Shot drops a thread centred on the mouth that would trail behind the user).
-    - Done by type batch: Fire, Water, Electric and Ice; Grass, Poison, Bug, Psychic and Fairy.
-  - **Later stages:** the remaining type batches, then turning the look on by default.
+    - Where Cobblemon's timing or framing doesn't fit, a sequence is hand-tuned (Thunder's storm cloud gathers over the foe on release rather than a second before the bolt; Psychic's burst follows its grip quickly; String Shot drops a thread centred on the mouth that would trail behind the user; Draco Meteor's meteors fall straight onto the foe, the first two from the release, and three rather than four to stay within the frame budget).
+    - Hidden Power keeps its style's sequence, since Cobblemon's effect for it is only the generic Normal impact.
+    - Every move Cobblemon has an action effect for and our sim supports now has one, done by type batch: Fire, Water, Electric and Ice; Grass, Poison, Bug, Psychic and Fairy; Normal, Fighting, Flying, Dark, Ghost, Dragon, Ground, Rock and Steel.
+  - **Later stages:** turning the look on by default.
   - Effects still in flight end with the battle, and nothing here touches the simulation.
 - **Move visuals (our styles):** every damaging move has one of 20 visual styles, drawn in its type colour from simple meshes animated per video frame.
   - Melee: strike (crescent), punch (shockwave star), kick (low arc), bite (closing fangs), slash (claw marks), rush (speed lines and dust).
