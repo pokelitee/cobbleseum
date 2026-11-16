@@ -22,7 +22,7 @@ var arena := ""
 ## The arena's ground (§9.8), from its field and the seed.
 var terrain: Terrain
 ## With record_intents set (battles with a player), every tick's intents per side, as
-## [move x, move y, use, dodge x, dodge y]; a ReplayController plays them back.
+## [move x, move y, use, dodge x, dodge y, feint]; a ReplayController plays them back.
 var record_intents := false
 var intent_log: Array = [[], []]
 
@@ -33,7 +33,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 22
+const FIGHTER_STATE_SIZE := 24
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
@@ -46,7 +46,7 @@ var _projectile_count := 0
 ## roster loaded, species outside it are rejected. A spec that names a rules or data version
 ## other than these is rejected, since it would play as a different battle.
 ## Controllers are objects with decide(battle, side) -> {"move": Vector2, "use": int,
-## "dodge": Vector2 (zero for none)}; each
+## "dodge": Vector2 (zero for none), "feint": int (a move to feint)}; each
 ## owns its random stream (see random_stream()).
 ## Returns {"battle": Battle} or {"error": String}.
 static func create(battle_spec: Dictionary, data: BattleData, controllers: Array) -> Dictionary:
@@ -132,7 +132,7 @@ func saved_spec() -> Dictionary:
 static func intent_to_log(intent: Dictionary) -> Array:
 	var move: Vector2 = intent.get("move", Vector2.ZERO)
 	var dodge: Vector2 = intent.get("dodge", Vector2.ZERO)
-	return [move.x, move.y, int(intent.get("use", -1)), dodge.x, dodge.y]
+	return [move.x, move.y, int(intent.get("use", -1)), dodge.x, dodge.y, int(intent.get("feint", -1))]
 
 
 static func intent_from_log(entry: Array) -> Dictionary:
@@ -141,6 +141,8 @@ static func intent_from_log(entry: Array) -> Dictionary:
 		intent.use = int(entry[2])
 	if float(entry[3]) != 0.0 or float(entry[4]) != 0.0:
 		intent.dodge = Vector2(entry[3], entry[4])
+	if entry.size() > 5 and int(entry[5]) >= 0:
+		intent.feint = int(entry[5])
 	return intent
 
 
@@ -197,6 +199,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 		return
 	for i in fighter.cooldowns.size():
 		fighter.cooldowns[i] = maxi(0, fighter.cooldowns[i] - 1)
+	fighter.feint_cooldown = maxi(0, fighter.feint_cooldown - 1)
 	if fighter.dodge_charges < Rules.DODGE_CHARGES:
 		fighter.dodge_recharge_ticks += 1
 		if fighter.dodge_recharge_ticks >= fighter.dodge_recharge_total:
@@ -234,7 +237,11 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			else:
 				_drift(fighter, foe, Vector2.ZERO)
 			fighter.action_ticks -= 1
-			if fighter.action_ticks <= 0:
+			if fighter.feinting and fighter.action_ticks <= Rules.FEINT_BREAK_TICKS:
+				fighter.feinting = false
+				fighter.action = Fighter.Action.READY
+				_event("feint_end", fighter.side, {"move": move.id})
+			elif fighter.action_ticks <= 0:
 				_release(fighter, foe)
 		Fighter.Action.RECOVERY:
 			_turn(fighter, to_foe, Rules.TURN_RATE)
@@ -245,6 +252,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 		_:
 			var dodge: Vector2 = intent.get("dodge", Vector2.ZERO)
 			var use: int = intent.get("use", -1)
+			var feint: int = intent.get("feint", -1)
 			if dodge.length_squared() > 0.0 and fighter.can_dodge():
 				fighter.dodge_charges -= 1
 				fighter.action = Fighter.Action.DODGE
@@ -261,6 +269,14 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 				fighter.action_move = use
 				fighter.cooldowns[use] = move.cooldown_ticks
 				_event("windup", fighter.side, {"move": move.id})
+			elif fighter.can_feint(feint) and _gap(fighter, foe) <= fighter.moves[feint].reach():
+				var move := fighter.moves[feint]
+				fighter.action = Fighter.Action.WINDUP
+				fighter.action_ticks = move.windup_ticks
+				fighter.action_move = feint
+				fighter.feinting = true
+				fighter.feint_cooldown = Rules.seconds_to_ticks(Rules.FEINT_COOLDOWN)
+				_event("feint", fighter.side, {"move": move.id, "ticks": move.windup_ticks - Rules.FEINT_BREAK_TICKS})
 			else:
 				_walk(fighter, foe, intent.get("move", Vector2.ZERO))
 			var walking := fighter.velocity / maxf(fighter.move_speed, 0.1)
@@ -659,6 +675,8 @@ func _record_state() -> void:
 		_state[i + 19] = fighter.facing.x
 		_state[i + 20] = fighter.facing.y
 		_state[i + 21] = fighter.ground
+		_state[i + 22] = fighter.feint_cooldown
+		_state[i + 23] = 1.0 if fighter.feinting else 0.0
 		i += FIGHTER_STATE_SIZE
 	for projectile in projectiles:
 		_state[i] = projectile.position.x

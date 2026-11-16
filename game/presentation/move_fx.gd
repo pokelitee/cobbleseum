@@ -52,13 +52,15 @@ func style_of(move: BattleMove) -> String:
 	return styles.get(move.id, "strike" if move.kind == BattleMove.Kind.MELEE else "orb")
 
 
-func windup(attacker: FighterView, move: BattleMove) -> void:
+## The wind-up's ring (and glow), for `frames` when given (a feint breaking off early).
+func windup(attacker: FighterView, move: BattleMove, frames := -1) -> void:
 	var colour := TypeColors.of(move.type)
 	var ring := _mesh(_torus(0.6, 0.75), colour, 0.8)
 	ring.position = attacker.position + Vector3.UP * 0.05
 	ring.scale = Vector3.ONE * attacker.height * 0.5
 	add_child(ring)
-	var frames := maxi(WINDUP_FRAMES, move.windup_ticks)
+	if frames < 0:
+		frames = maxi(WINDUP_FRAMES, move.windup_ticks)
 	_effects.append({"node": ring, "age": 0, "frames": frames, "kind": "grow", "base": ring.scale, "growth": 0.6})
 	var style := style_of(move)
 	if style in CHARGING or move.charges:

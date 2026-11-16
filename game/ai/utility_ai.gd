@@ -12,10 +12,12 @@ extends RefCounted
 ##   minimum time; between decisions (every `decision_interval_ticks`) it keeps moving.
 ## - How well it plays comes from the AIProfile: reaction delay, decision interval, the chance of
 ##   taking the second-best action, and the chance of dodging a given threat at all.
+## - Feints (hard and ranked profiles): with the foe down to its last dodge charge, it may fake
+##   a melee or area wind-up to draw that dodge, then strike while the foe has none left.
 ## - Exact ties go to the side's random stream, never list order.
 ## With `keep_scores` set (the debug overlay), the last evaluation is kept in `last_scores`.
 
-enum Action { USE_MOVE, DODGE, APPROACH, RETREAT, CIRCLE, HOLD, TAKE_COVER, FLANK }
+enum Action { USE_MOVE, DODGE, FEINT, APPROACH, RETREAT, CIRCLE, HOLD, TAKE_COVER, FLANK }
 
 ## Movement scores stay below a usable attack's, so ready moves in range get used; the
 ## commitment bonus only steadies the choice between ways of moving.
@@ -52,6 +54,8 @@ const FLANK_SCORE := 0.5
 const SPOT_DIRECTIONS := 16
 const SPOT_DISTANCES: Array[float] = [1.5, 3.0]
 const SHOT_SOON := 15
+## A feint, once rolled for, outscores any attack: drawing the last dodge first is the point.
+const FEINT_SCORE := 0.95
 
 var profile: AIProfile
 var random: SimRandom
@@ -75,6 +79,9 @@ var _band_shift := 0.0
 ## Where the chosen terrain tactic is heading (Vector2.INF for nowhere).
 var _cover_spot := Vector2.INF
 var _flank_spot := Vector2.INF
+## This chance to feint's roll: -1 until rolled, then 0 (don't) or 1 (do). The chance lasts
+## while the foe stays on its last dodge charge.
+var _feint_roll := -1
 
 static var _curves := {}
 
@@ -93,7 +100,7 @@ func decide(battle: Battle, side: int) -> Dictionary:
 	if not me.can_act():
 		_intent = {}
 		return {}
-	var keep_moving: bool = _intent.get("use", -1) < 0 and _intent.get("dodge", Vector2.ZERO) == Vector2.ZERO
+	var keep_moving: bool = _intent.get("use", -1) < 0 and _intent.get("feint", -1) < 0 and _intent.get("dodge", Vector2.ZERO) == Vector2.ZERO
 	if _since_decision < profile.decision_interval_ticks and keep_moving and not _intent.is_empty():
 		return _around_terrain(battle, me, _movement_intent(me, _perceived(foe), _current))
 	_since_decision = 0
@@ -109,6 +116,8 @@ func decide(battle: Battle, side: int) -> Dictionary:
 			_intent = {"use": choice.move}
 		Action.DODGE:
 			_intent = {"dodge": _dodge_direction(me, threat.direction)}
+		Action.FEINT:
+			_intent = {"feint": choice.move}
 		_:
 			_intent = _around_terrain(battle, me, _movement_intent(me, seen, _current))
 	return _intent
@@ -159,6 +168,7 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			if move.kind == BattleMove.Kind.HEAL:
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		candidates.append(_scored("move:" + move.id, Action.USE_MOVE, considerations, i))
+	_add_feint(battle, me, foe, gap, urgency, candidates)
 	if can_avoid:
 		candidates.append(_scored("dodge", Action.DODGE, {
 			"urgency": urgency,
@@ -175,6 +185,26 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 		if candidate.action == _current and candidate.score > 0.0 and candidate.kind >= Action.APPROACH:
 			candidate.score += COMMITMENT_BONUS
 	return candidates
+
+
+## A feint, when the foe is down to its last dodge charge: the first melee or area move that
+## could be used for real (ready, in reach, able to connect). The chance is rolled once, when
+## it comes up, with the profile's feint_chance.
+func _add_feint(battle: Battle, me: Fighter, foe: Fighter, gap: float, urgency: float,
+		candidates: Array[Dictionary]) -> void:
+	if foe.dodge_charges != 1 or profile.feint_chance <= 0.0:
+		_feint_roll = -1
+		return
+	for i in me.moves.size():
+		var move := me.moves[i]
+		if not me.can_feint(i) or gap > move.reach() or not battle.can_reach(me, foe, move):
+			continue
+		if _feint_roll < 0:
+			_feint_roll = 1 if random.chance(profile.feint_chance) else 0
+		if _feint_roll == 1:
+			candidates.append(_scored("feint:" + move.id, Action.FEINT,
+				{"base": FEINT_SCORE, "safe_to_commit": 1.0 - 0.6 * urgency}, i))
+		return
 
 
 ## Terrain tactics, where the ground has relief: with no attack ready while the foe can see it

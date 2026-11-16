@@ -42,6 +42,17 @@ func test_presses_are_latched_until_the_next_tick() -> void:
 	assert_false(player.decide(battle, 0).has("use"), "used once, then cleared")
 
 
+func test_a_held_feint_modifier_feints_the_move_instead() -> void:
+	var created := Battle.create(_spec(), _data(), Controllers.for_spec(_spec()).controllers)
+	var battle: Battle = created.battle
+	var player: PlayerController = Controllers.for_spec(_spec()).controllers[0]
+	player.pending_feint = 0
+	var intent := player.decide(battle, 0)
+	assert_eq(intent.feint, 0)
+	assert_false(intent.has("use"))
+	assert_false(player.decide(battle, 0).has("feint"), "feinted once, then cleared")
+
+
 func test_intents_survive_the_log_format() -> void:
 	var intent := {"move": Vector2(0.5, -0.25), "use": 2, "dodge": Vector2(1, 0)}
 	assert_eq(Battle.intent_from_log(Battle.intent_to_log(intent)), intent)

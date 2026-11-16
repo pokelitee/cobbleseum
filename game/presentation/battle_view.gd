@@ -205,8 +205,9 @@ func _ready() -> void:
 	if _live:
 		var player := battle.fighters[_player_side]
 		_hud.show_move_bar(player.moves.map(func(m: BattleMove) -> String: return m.name),
-			player.moves.map(func(m: BattleMove) -> String: return m.type), PlayerController.MOVE_KEYS)
-		_hud.show_hint("Move: WASD / stick   Dodge: Space / A   F3: AI scores")
+			player.moves.map(func(m: BattleMove) -> String: return m.type), PlayerController.MOVE_KEYS,
+			PlayerController.FEINT_KEY)
+		_hud.show_hint("Move: WASD / stick   Dodge: Space / A   Feint: hold Shift / LB   F3: AI scores")
 		_event_index = 0
 		for side in 2:
 			_hud.set_hp(side, 1.0, true)
@@ -519,6 +520,14 @@ func _play_events() -> void:
 				_hit_counts[event.side] = 0
 				_hud.banner(event.side, move.name, move.type)
 				_sound.windup(move)
+			"feint":
+				# Looks like the real wind-up, without the move's banner: the move never comes.
+				var move := _move(event.side, event.move)
+				_views[event.side].play_role(wind_up_role(move))
+				_move_fx.windup(_views[event.side], move, int(event.ticks))
+				_sound.windup(move)
+			"feint_end":
+				_views[event.side].break_off()
 			"hit":
 				var defender := 1 - int(event.side)
 				var move := _move(event.side, event.move)

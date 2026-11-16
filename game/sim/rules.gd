@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 15
+const RULES_VERSION := 16
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -72,6 +72,11 @@ const DODGE_DISTANCE := 2.5
 const DODGE_SECONDS := 0.2
 const DODGE_RECHARGE_SLOW := 3.0
 const DODGE_RECHARGE_FAST := 1.5
+## Feints (§9.2): a melee or area move's wind-up that breaks off, unreleased, with
+## FEINT_BREAK_TICKS left. It spends no move cooldown, only the fighter's feint cooldown.
+## Breaking off late enough draws a dodge from an AI that waits for a strike's last moments.
+const FEINT_BREAK_TICKS := 3
+const FEINT_COOLDOWN := 3.0
 
 ## Move timings in seconds, per move kind.
 const MELEE_REACH := 1.2

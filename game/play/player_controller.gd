@@ -1,23 +1,27 @@
 class_name PlayerController
 extends RefCounted
 ## Turns keyboard and gamepad input into the same intents the AI produces
-## (concepts_brief.md §9.1): a movement direction, a dodge, or a move 1-4.
-## Keyboard: WASD or arrows to move, Space to dodge, J K L I (or 1-4) for moves.
-## Gamepad: left stick to move, A to dodge, X Y B RB for moves.
+## (concepts_brief.md §9.1): a movement direction, a dodge, a move 1-4, or a feint of one.
+## Keyboard: WASD or arrows to move, Space to dodge, J K L I (or 1-4) for moves, held Shift
+## to feint the move instead.
+## Gamepad: left stick to move, A to dodge, X Y B RB for moves, held LB to feint.
 ## Movement is relative to the camera. Button presses are latched between frames and ticks
 ## (poll() runs every frame, decide() every tick), so no tap is lost.
 
 const MOVE_ACTIONS: Array[String] = ["cobbleseum_move_1", "cobbleseum_move_2", "cobbleseum_move_3", "cobbleseum_move_4"]
 const DODGE_ACTION := "cobbleseum_dodge"
+const FEINT_ACTION := "cobbleseum_feint"
 const DIRECTION_ACTIONS: Array[String] = ["cobbleseum_left", "cobbleseum_right", "cobbleseum_forward", "cobbleseum_back"]
-## Labels shown in the move bar, in move order.
+## Labels shown in the move bar, in move order, and for the feint modifier.
 const MOVE_KEYS: Array[String] = ["J / X", "K / Y", "L / B", "I / RB"]
+const FEINT_KEY := "Shift / LB"
 ## Stick input is rounded to this step so saved battle specs store short, exact numbers.
 const INPUT_STEP := 0.01
 
 ## Camera-relative input, latched until the next decide().
 var stick := Vector2.ZERO
 var pending_use := -1
+var pending_feint := -1
 var pending_dodge := false
 ## The camera's forward direction on the floor (sim x, z), for camera-relative movement.
 var camera_forward := Vector2(0, 1)
@@ -30,11 +34,11 @@ static func ensure_input_actions() -> void:
 	var keys := {
 		"cobbleseum_left": [KEY_A, KEY_LEFT], "cobbleseum_right": [KEY_D, KEY_RIGHT],
 		"cobbleseum_forward": [KEY_W, KEY_UP], "cobbleseum_back": [KEY_S, KEY_DOWN],
-		DODGE_ACTION: [KEY_SPACE],
+		DODGE_ACTION: [KEY_SPACE], FEINT_ACTION: [KEY_SHIFT],
 		"cobbleseum_move_1": [KEY_J, KEY_1], "cobbleseum_move_2": [KEY_K, KEY_2],
 		"cobbleseum_move_3": [KEY_L, KEY_3], "cobbleseum_move_4": [KEY_I, KEY_4],
 	}
-	var buttons := {DODGE_ACTION: JOY_BUTTON_A, "cobbleseum_move_1": JOY_BUTTON_X, "cobbleseum_move_2": JOY_BUTTON_Y,
+	var buttons := {DODGE_ACTION: JOY_BUTTON_A, FEINT_ACTION: JOY_BUTTON_LEFT_SHOULDER, "cobbleseum_move_1": JOY_BUTTON_X, "cobbleseum_move_2": JOY_BUTTON_Y,
 		"cobbleseum_move_3": JOY_BUTTON_B, "cobbleseum_move_4": JOY_BUTTON_RIGHT_SHOULDER}
 	var axes := {"cobbleseum_left": [JOY_AXIS_LEFT_X, -1.0], "cobbleseum_right": [JOY_AXIS_LEFT_X, 1.0],
 		"cobbleseum_forward": [JOY_AXIS_LEFT_Y, -1.0], "cobbleseum_back": [JOY_AXIS_LEFT_Y, 1.0]}
@@ -62,7 +66,10 @@ func poll() -> void:
 		pending_dodge = true
 	for i in MOVE_ACTIONS.size():
 		if Input.is_action_just_pressed(MOVE_ACTIONS[i]):
-			pending_use = i
+			if Input.is_action_pressed(FEINT_ACTION):
+				pending_feint = i
+			else:
+				pending_use = i
 
 
 func decide(battle: Battle, side: int) -> Dictionary:
@@ -75,8 +82,11 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		intent.dodge = direction if direction.length_squared() > 0.01 else Vector2(-away.y, away.x).normalized()
 	if pending_use >= 0:
 		intent.use = pending_use
+	if pending_feint >= 0:
+		intent.feint = pending_feint
 	pending_dodge = false
 	pending_use = -1
+	pending_feint = -1
 	return intent
 
 

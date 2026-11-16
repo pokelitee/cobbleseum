@@ -8,3 +8,4 @@ reaction_delay_ticks = 4
 decision_interval_ticks = 2
 mistake_chance = 0.02
 dodge_chance = 0.8
+feint_chance = 0.4
