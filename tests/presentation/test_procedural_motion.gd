@@ -98,3 +98,13 @@ func test_landing_squashes_then_recovers() -> void:
 	_advance(motion, ProceduralMotion.ACTION_FRAMES.land)
 	assert_true(motion.transform().is_equal_approx(Transform3D.IDENTITY))
 
+
+func test_revive_stands_a_fainted_fighter_up() -> void:
+	var motion := ProceduralMotion.new(1.5, false)
+	var rest := motion.transform()
+	motion.faint()
+	_advance(motion, 120)
+	assert_false(motion.transform().is_equal_approx(rest))
+	motion.revive()
+	_advance(motion, 1)
+	assert_true(motion.transform().is_equal_approx(rest), "back at rest")

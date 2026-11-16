@@ -24,6 +24,9 @@ const WIDE_ARC_SPEED := 0.06
 ## Knockout sweep: half-width of the arc in radians, and its speed in radians per second.
 const KNOCKOUT_ARC := 0.6
 const KNOCKOUT_SPEED := 0.25
+## Eye height of a low over-the-shoulder shot (a segment with "low"), for a reference-height
+## fighter.
+const LOW_SHOULDER_HEIGHT := 0.7
 ## Handheld wobble amplitude per shot, in metres for a reference-height fighter.
 const WOBBLE := {
 	Director.Shot.WIDE: 0.04, Director.Shot.OVER_SHOULDER: 0.07, Director.Shot.CLOSE_UP: 0.05,
@@ -109,9 +112,10 @@ func pose_for(segment: Dictionary, battle: Battle, shot_seconds: float, progress
 	var pose: Dictionary
 	match segment.shot:
 		Director.Shot.OVER_SHOULDER:
-			# Slow push-in toward the opponent.
+			# Slow push-in toward the opponent; the instant replay's version sits low.
 			var push := lerpf(1.15, 0.85, eased)
-			pose = _make(me - toward * 2.4 * back * push + across * 2.0 * back, 1.6 * k + lift, other, _heights[1 - side] * 0.5, 50 + widen)
+			var eye_height := (LOW_SHOULDER_HEIGHT if segment.get("low", false) else 1.6) * k + lift
+			pose = _make(me - toward * 2.4 * back * push + across * 2.0 * back, eye_height, other, _heights[1 - side] * 0.5, 50 + widen)
 		Director.Shot.CLOSE_UP:
 			# Push in during the wind-up, arriving as the move releases.
 			var push := lerpf(1.35, 0.8, eased)

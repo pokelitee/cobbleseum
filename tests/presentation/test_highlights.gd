@@ -84,3 +84,8 @@ func test_the_victory_comes_on_top_of_the_clip() -> void:
 	var window := Highlights.choose(plan, events, MAX_HP, 330)
 	assert_eq(window.end, 905, "the knockout and then the whole victory")
 	assert_true(_frames(plan, window) >= 330 + 75, "the victory doesn't eat into the action")
+
+
+func test_comeback_hits_are_hits_by_a_fighter_low_on_hp() -> void:
+	var events := [_hit(10, 0, 300, 100), _hit(20, 1, 40, 360), {"tick": 25, "type": "miss", "side": 1}, _hit(30, 0, 40, 60), _hit(40, 1, 40, 320)]
+	assert_eq(Highlights.comeback_hits(events, MAX_HP), [1, 4])

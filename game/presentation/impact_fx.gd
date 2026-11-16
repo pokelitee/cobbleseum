@@ -17,6 +17,8 @@ const SHAKE_FRAMES := 14
 const SHAKE_PER_SHARE := 2.5
 ## Callouts rise this far (in reference pixels) over their lifetime.
 const CALLOUT_FRAMES := 40
+## A white flash that covers a cut (into and out of the instant replay), fading over this many frames.
+const CUT_FLASH_FRAMES := 8
 const CALLOUT_RISE := 90.0
 const REFERENCE_SIZE := 1080.0
 const IMPACT_SHADER := preload("res://game/presentation/shaders/impact_frame.gdshader")
@@ -37,6 +39,7 @@ var _shake_frames := 0
 var _shake_strength := 0.0
 var _frame := 0
 var _callouts: Array[Dictionary] = []
+var _cut_flash := 0
 
 
 func setup(camera: Camera3D, viewport_size: Vector2, hud_bands: Vector2) -> void:
@@ -81,6 +84,15 @@ func on_dodge(dodger: FighterView) -> void:
 	_callout("Dodged!", dodger.global_position + Vector3.UP * dodger.height * 0.9, Color(0.6, 0.9, 1.0), 60, 0.0)
 
 
+## Whites out the screen and fades back over CUT_FLASH_FRAMES, hiding a cut. Callouts from
+## before the cut go, since they belong to the other side of it.
+func cut_flash() -> void:
+	_cut_flash = CUT_FLASH_FRAMES
+	for callout in _callouts:
+		callout.label.queue_free()
+	_callouts.clear()
+
+
 ## Speed lines fade in while `active` (strong wind-ups in close-up) and out otherwise.
 func set_speed_lines(active: bool) -> void:
 	_speed_line_intensity = move_toward(_speed_line_intensity, 1.0 if active else 0.0, 0.2)
@@ -93,6 +105,9 @@ func next_frame() -> void:
 	_speed_lines.material.set_shader_parameter("seed", float(_frame / 3))
 	var step: String = _impact_queue.pop_front() if not _impact_queue.is_empty() else ""
 	_flash.color.a = FLASH_ALPHA if step == "flash" else 0.0
+	if _cut_flash > 0:
+		_flash.color.a = maxf(_flash.color.a, float(_cut_flash) / CUT_FLASH_FRAMES)
+		_cut_flash -= 1
 	_impact.visible = step == "ink"
 	if _shake_frames > 0:
 		_shake_frames -= 1

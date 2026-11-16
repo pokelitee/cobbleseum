@@ -181,6 +181,18 @@ func celebrate() -> void:
 	_update_base()
 
 
+## Back on its feet and idling, with no celebration, faint or pending animation: how the
+## instant replay picks the fighter up again before replaying the knockout.
+func rewind() -> void:
+	_fainted = false
+	_celebrating = false
+	_one_off = false
+	_pending_role = ""
+	_motion.revive()
+	_base_role = ""
+	_update_base()
+
+
 ## Moves the view to a simulation position (x, z on the floor) facing a direction. The
 ## simulation does knockback itself.
 func place(position_2d: Vector2, facing: Vector2, ground := 0.0) -> void:

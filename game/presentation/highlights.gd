@@ -67,24 +67,22 @@ static func choose(plan_data: Dictionary, events: Array, max_hp: Array, frames: 
 
 ## One score per event, in the log's order.
 static func event_scores(events: Array, max_hp: Array) -> PackedFloat32Array:
-	var hp := [float(max_hp[0]), float(max_hp[1])]
+	var comebacks := comeback_hits(events, max_hp)
 	var scores := PackedFloat32Array()
 	scores.resize(events.size())
 	for i in events.size():
 		var event: Dictionary = events[i]
 		match event.type:
 			"hit":
-				var attacker: int = event.side
-				var defender := 1 - attacker
+				var defender := 1 - int(event.side)
 				var score := HIT_SCORE + DAMAGE_SCORE * float(event.damage) / float(max_hp[defender])
 				if event.crit:
 					score += CRIT_SCORE
 				if float(event.effectiveness) > 1.0:
 					score += SUPER_EFFECTIVE_SCORE
-				if hp[attacker] <= COMEBACK_HP * float(max_hp[attacker]):
+				if comebacks.has(i):
 					score += COMEBACK_SCORE
 				scores[i] = score
-				hp[defender] = float(event.hp)
 			"miss":
 				scores[i] = MISS_SCORE
 			"dodged":
@@ -100,6 +98,22 @@ static func event_scores(events: Array, max_hp: Array) -> PackedFloat32Array:
 			"time_up":
 				scores[i] = TIME_UP_SCORE
 	return scores
+
+
+## Indices of the hits landed by a fighter at or below COMEBACK_HP of its max HP, in the
+## log's order. HP is tracked from the hits alone.
+static func comeback_hits(events: Array, max_hp: Array) -> Array[int]:
+	var hp := [float(max_hp[0]), float(max_hp[1])]
+	var found: Array[int] = []
+	for i in events.size():
+		var event: Dictionary = events[i]
+		if event.type != "hit":
+			continue
+		var attacker: int = event.side
+		if hp[attacker] <= COMEBACK_HP * float(max_hp[attacker]):
+			found.append(i)
+		hp[1 - attacker] = float(event.hp)
+	return found
 
 
 ## The latest start tick from which [start, end) fills at least `frames` video frames.

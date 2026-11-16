@@ -17,6 +17,9 @@ extends SceneTree
 const VIEW_SCENE := "res://game/presentation/battle_view.tscn"
 const DEFAULT_SECONDS := 10.0
 const SAFETY_FRAMES := 300
+## The longest ending after a clip window that reaches the knockout: the instant replay, the
+## victory and the credits card, which all come on top of --seconds.
+const ENDING_FRAMES := Director.REPLAY_MAX_FRAMES + Director.VICTORY_TICKS + Hud.CREDITS_FRAMES
 const DEFAULT_FORMAT := "vertical"
 ## Godot reads this file from the project folder at startup (see VideoFormat.override_config).
 const OVERRIDE_FILE := "res://override.cfg"
@@ -130,7 +133,7 @@ func _render(source: PackedStringArray, format: String, out_dir: String, seconds
 	var status := OS.execute(OS.get_executable_path(), [
 		"--path", ProjectSettings.globalize_path("res://"),
 		"--write-movie", movie, "--fixed-fps", str(Rules.TICK_RATE),
-		"--quit-after", str(roundi(seconds * Rules.TICK_RATE) + SAFETY_FRAMES),
+		"--quit-after", str(roundi(seconds * Rules.TICK_RATE) + ENDING_FRAMES + SAFETY_FRAMES),
 		VIEW_SCENE, "--",
 	] + Array(source) + [
 		"--clip-seconds=%s" % seconds,

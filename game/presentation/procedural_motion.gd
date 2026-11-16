@@ -80,6 +80,12 @@ func faint() -> void:
 	_action = ""
 
 
+## Stands up again after a faint, for the instant replay.
+func revive() -> void:
+	_fainting = false
+	_faint_age = 0.0
+
+
 ## Advances by one video frame at `time_scale` (0 freezes, below 1 is slow motion).
 func next_frame(time_scale := 1.0) -> void:
 	_phase += time_scale
