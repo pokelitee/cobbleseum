@@ -6,7 +6,8 @@ extends RefCounted
 ##   QA flags and licence. Headless simulation reads only this file.
 ## - report.json: the QA report, a summary plus each species' flags and conversion problems.
 ## - move_fx/: the move particle effects, their textures and the action effects, copied as they
-##   are; CobblemonMoveFX runs them at presentation time (concepts_brief.md §12.5).
+##   are; CobblemonMoveFX runs them at presentation time (concepts_brief.md §12.5). The
+##   Minecraft textures among them are replaced by our own (MoveFxSprites).
 ##
 ## Conversion is cached per species. Each model has a sidecar models/<id>.json with a key
 ## over its input files and the converter scripts, plus its measurements and report. A model
@@ -23,6 +24,8 @@ const DEPENDENCIES: Array[String] = [
 	"res://tools/convert/cobblemon_species.gd",
 	"res://tools/convert/cobblemon_roster.gd",
 	"res://tools/convert/molang.gd",
+	"res://tools/sprites/pixel_canvas.gd",
+	"res://tools/sprites/move_fx_sprites.gd",
 	SHOWDOWN_POKEDEX,
 ]
 ## The scripts that shape a converted model; changing one invalidates every cached model.
@@ -92,6 +95,10 @@ func build(source_dir: String, out_dir: String, previous_dir := "") -> String:
 			return "cannot copy %s into the build" % dir
 		copied += count
 	print("  move effects: %d files" % copied)
+	var sprites := MoveFxSprites.new().render_all(out_dir.path_join("move_fx").path_join(MOVE_FX_DIRS[1]))
+	if not sprites.is_empty():
+		return sprites
+	print("  our own particle textures: %d drawn, %d misspelled paths copied" % [MoveFxSprites.RECIPES.size(), MoveFxSprites.COPIES.size()])
 	_write_json(out_dir.path_join("roster.json"), {"species": roster})
 	_write_json(out_dir.path_join("report.json"), {"summary": summary(roster, qa), "species": qa})
 	print("  roster: %d species (%d converted, %d reused, %d failed); see report.json" % [
