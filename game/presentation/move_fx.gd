@@ -13,6 +13,8 @@ extends Node3D
 ## Flat effects (crescents, claw marks, rings) face the camera when they spawn, so no shot
 ## sees them edge-on. A ranged move that hits on the tick it fires never shows a
 ## projectile, so point_blank() draws a short version of its style instead.
+## With use_cobblemon(), moves in CobblemonMoveFX's fit table play Cobblemon's own effects
+## instead (a prototype).
 
 const SWIPE_SHADER := preload("res://game/presentation/shaders/swipe.gdshader")
 ## Effects draw this much brighter than their type colour, past ArenaLighting.HDR_THRESHOLD
@@ -46,6 +48,36 @@ var _effects: Array[Dictionary] = []
 ## Projectile visuals, matched to the simulation's projectile dictionaries by identity.
 var _projectiles: Array[Dictionary] = []
 var _frame := 0
+## Cobblemon's own effects for the moves it has a fit for, when enabled.
+var cobblemon: CobblemonMoveFX = null
+## The fighters by side, so converted effects know each move's foe.
+var views: Array[FighterView] = []
+
+
+## Turns on Cobblemon-style sequences for the moves that have one, loading what `moves` (ids)
+## can spawn up front. Returns "" or why they're unavailable (the battle keeps our styles).
+func use_cobblemon(fighters: Array[FighterView], moves: Array = []) -> String:
+	views = fighters
+	var library := CobblemonMoveFX.new()
+	var error := library.setup()
+	if not error.is_empty():
+		library.free()
+		return error
+	cobblemon = library
+	add_child(cobblemon)
+	cobblemon.prepare(moves)
+	return ""
+
+
+func _converted(move: BattleMove) -> bool:
+	return cobblemon != null and cobblemon.has_move(move.id)
+
+
+func _foe(view: FighterView) -> FighterView:
+	for other in views:
+		if other != view:
+			return other
+	return view
 
 
 func style_of(move: BattleMove) -> String:
@@ -54,6 +86,9 @@ func style_of(move: BattleMove) -> String:
 
 ## The wind-up's ring (and glow), for `frames` when given (a feint breaking off early).
 func windup(attacker: FighterView, move: BattleMove, frames := -1) -> void:
+	if _converted(move):
+		cobblemon.play(move.id, "windup", attacker, _foe(attacker), TypeColors.of(move.type), frames if frames >= 0 else maxi(WINDUP_FRAMES, move.windup_ticks))
+		return
 	var colour := TypeColors.of(move.type)
 	var ring := _mesh(_torus(0.6, 0.75), colour, 0.8)
 	ring.position = attacker.position + Vector3.UP * 0.05
@@ -75,6 +110,8 @@ func windup(attacker: FighterView, move: BattleMove, frames := -1) -> void:
 
 ## A melee move landing (or whiffing) on `target`, drawn in the move's style.
 func melee(attacker: FighterView, target: FighterView, move: BattleMove) -> void:
+	if _converted(move):
+		return  # Cobblemon's melee effects play on the target, so only on a hit
 	var colour := TypeColors.of(move.type)
 	var toward := ((target.position - attacker.position) * Vector3(1, 0, 1)).normalized()
 	var chest := target.position + Vector3.UP * target.height * 0.55
@@ -96,6 +133,9 @@ func melee(attacker: FighterView, target: FighterView, move: BattleMove) -> void
 
 
 func hit(defender: FighterView, move: BattleMove, big: bool) -> void:
+	if _converted(move):
+		cobblemon.play(move.id, "hit", _foe(defender), defender, TypeColors.of(move.type))
+		return
 	var colour := TypeColors.of(move.type)
 	var centre := defender.position + Vector3.UP * defender.height * 0.5
 	var size := defender.height * (0.6 if big else 0.4)
@@ -145,6 +185,9 @@ func miss(position: Vector3) -> void:
 ## A ranged move that hit on the tick it fired, so no projectile was ever shown: draws a
 ## short version of its style between the fighters.
 func point_blank(attacker: FighterView, target: FighterView, move: BattleMove) -> void:
+	if _converted(move):
+		cobblemon.play(move.id, "fire", attacker, target, TypeColors.of(move.type))
+		return
 	var colour := TypeColors.of(move.type)
 	var from := _front(attacker, 0.6)
 	var to := target.position + Vector3.UP * target.height * 0.55
@@ -176,6 +219,9 @@ func point_blank(attacker: FighterView, target: FighterView, move: BattleMove) -
 ## An area move going off around `view`: a ground ring and a dome sweeping out to the
 ## move's reach, plus an accent for some styles.
 func blast(view: FighterView, move: BattleMove) -> void:
+	if _converted(move):
+		cobblemon.play(move.id, "blast", view, _foe(view), TypeColors.of(move.type))
+		return
 	var colour := TypeColors.of(move.type)
 	var reach := Rules.AREA_RADIUS + view.height * 0.4
 	var ground := Vector3(view.position.x, 0.05, view.position.z)
@@ -235,6 +281,8 @@ func dodge(view: FighterView, direction: Vector2) -> void:
 func sync_projectiles(battle: Battle) -> void:
 	var alive: Array[Dictionary] = []
 	var flying: Array = [] if battle.is_over() else battle.projectiles
+	if battle.is_over() and cobblemon != null:
+		cobblemon.end_all()
 	for projectile in flying:
 		var visual := _visual_for(projectile)
 		if visual.is_empty():
@@ -252,6 +300,8 @@ func sync_projectiles(battle: Battle) -> void:
 ## Advances every running effect by one video frame.
 func next_frame() -> void:
 	_frame += 1
+	if cobblemon != null:
+		cobblemon.next_frame()
 	for effect in _effects.duplicate():
 		effect.age += 1
 		var t: float = float(effect.age) / effect.frames
@@ -407,6 +457,11 @@ func _new_projectile(projectile: Dictionary, move: BattleMove, target: Vector2) 
 	add_child(root)
 	var visual := {"source": projectile, "node": root, "style": style, "colour": colour, "origin": origin,
 		"direction": direction, "reach": reach, "history": [], "parts": [], "power": move.power, "spawned": _frame}
+	if _converted(move) and views.size() == 2:
+		var user := views[int(projectile.owner)]
+		visual.style = "cobblemon"
+		visual.cobblemon = cobblemon.play(move.id, "fire", user, _foe(user), colour) + cobblemon.play_riding(move.id, "flight", root, user, _foe(user), colour)
+		return visual
 	var size := clampf(0.8 + move.power / 120.0, 0.8, 1.8)
 	var r := Rules.PROJECTILE_RADIUS
 	match style:
@@ -569,6 +624,9 @@ func _update_projectile(visual: Dictionary, position: Vector3) -> void:
 ## A finished projectile: beams and bolts fade where they are, the rest vanish.
 func _end_projectile(visual: Dictionary) -> void:
 	var node: Node3D = visual.node
+	for emitter: SnowstormEmitter in visual.get("cobblemon", []):
+		if is_instance_valid(emitter):
+			emitter.stopped = true
 	if visual.style in ["beam", "bolt"]:
 		_effects.append({"node": node, "age": 0, "frames": FADE_FRAMES, "kind": "fade"})
 	else:

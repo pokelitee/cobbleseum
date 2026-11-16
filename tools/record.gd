@@ -1,10 +1,12 @@
 extends SceneTree
 ## Records a battle as video clips (concepts_brief.md §12).
 ## Usage: godot --headless --path . --script res://tools/record.gd -- <spec.json>
-##        [--seconds=10] [--format=vertical|landscape|both] [--ai-debug]
+##        [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--cobblemon-fx]
 ## Instead of <spec.json>, --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=] (SpecFlags)
 ## describes an AI-against-AI battle.
 ## --ai-debug records the AI debug overlay on top (for reviewing AI behaviour, not posting).
+## --cobblemon-fx (prototype) draws Cobblemon's own effects for the moves CobblemonMoveFX
+## fits; its clips go to a folder ending in _cobblemon.
 ##
 ## 1. Runs the battle headless to find where it ends and its checksum.
 ## 2. For each format, launches a second Godot with Movie Maker on the battle view. The view
@@ -36,6 +38,9 @@ Fonts: Lilita One and Nunito (SIL Open Font License 1.1).
 Pokémon and Pokémon character names are trademarks of Nintendo, Creatures Inc. and GAME FREAK.
 Made with Cobbleseum, an unaffiliated fan project.
 """
+## For clips that draw Cobblemon's move effects. They have no licence file of their own; the
+## jar's root licence is MPL-2.0 (concepts_brief.md §19, still to confirm with the Cobblemon team).
+const MOVE_EFFECTS_CREDIT := "Move particle effects and their textures: Cobblemon (https://cobblemon.com). They have no licence file of their own; the mod's root licence is MPL-2.0. Used non-commercially, like the models."
 
 
 func _initialize() -> void:
@@ -53,13 +58,13 @@ func _initialize() -> void:
 			seconds = maxf(1.0, arg.get_slice("=", 1).to_float())
 		elif arg.begins_with("--format="):
 			format = arg.get_slice("=", 1)
-		elif arg == "--ai-debug":
+		elif arg == "--ai-debug" or arg == "--cobblemon-fx":
 			_view_args.append(arg)
 		else:
 			spec_path = arg
 	if spec_path.is_empty() and flag_spec.is_empty():
 		return _fail("usage: -- <spec.json> | --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=]" +
-			" [--seconds=10] [--format=vertical|landscape|both] [--ai-debug]")
+			" [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--cobblemon-fx]")
 	var formats: Array = VideoFormat.SIZES.keys() if format == "both" else [format]
 	if not VideoFormat.SIZES.has(formats[0]):
 		return _fail("unknown format '%s' (use vertical, landscape or both)" % format)
@@ -89,7 +94,8 @@ func _initialize() -> void:
 		names.append(str(entry.species))
 	var recordings := ProjectSettings.globalize_path("res://recordings")
 	_ensure_ignored(recordings)
-	var out_dir := recordings.path_join("%s_%s_%d" % [Time.get_date_string_from_system(), "-vs-".join(names), int(spec.seed)])
+	var out_dir := recordings.path_join("%s_%s_%d%s" % [Time.get_date_string_from_system(), "-vs-".join(names), int(spec.seed),
+		"_cobblemon" if _view_args.has("--cobblemon-fx") else ""])
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	print("battle: %s after %d ticks, checksum %s" % [Battle.Result.keys()[battle.result], end_tick, battle.checksum().left(12)])
 	for clip_format: String in formats:
@@ -105,14 +111,17 @@ func _initialize() -> void:
 		"events": battle.events,
 	}
 	_write(out_dir.path_join("battle.json"), JSON.stringify(record, "  "))
-	_write(out_dir.path_join("credits.txt"), credits())
+	_write(out_dir.path_join("credits.txt"), credits(_view_args.has("--cobblemon-fx")))
 	print("wrote %s" % out_dir)
 	quit(0)
 
 
 ## The clip's credits: CREDITS, then each CC0 crowd and ambience recording by title and author.
-static func credits() -> String:
-	var lines: PackedStringArray = [CREDITS.strip_edges(), "Crowd and ambience sounds (CC0):"]
+static func credits(move_effects := false) -> String:
+	var lines: PackedStringArray = [CREDITS.strip_edges()]
+	if move_effects:
+		lines.append(MOVE_EFFECTS_CREDIT)
+	lines.append("Crowd and ambience sounds (CC0):")
 	var manifest := AssetPipeline.load_manifest("res://sources.json")
 	for source: Dictionary in manifest.get("sources", {}).values():
 		if source.license.begins_with("CC0"):

@@ -22,3 +22,10 @@ func test_credits_name_every_cc0_recording() -> void:
 	assert_true(text.contains("GeneralUser GS"))
 	for author in ["kyles", "FoolBoyMedia", "craigsmith", "benfree", "SamsterBirdies", "Fission9", "Spring Spring", "SketchMan3", "JaggedStone"]:
 		assert_true(text.contains(" by %s (" % author), author)
+
+
+func test_credits_name_move_effects_only_when_drawn() -> void:
+	assert_false(RECORD.credits().contains(RECORD.MOVE_EFFECTS_CREDIT))
+	assert_true(RECORD.credits(true).contains(RECORD.MOVE_EFFECTS_CREDIT))
+	assert_true(Hud.cobblemon_credit(true).contains("move effects"))
+	assert_false(Hud.cobblemon_credit(false).contains("move effects"))

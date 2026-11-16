@@ -1,0 +1,16 @@
+#!/usr/bin/env python
+# Builds the native move-effect runtime (concepts_brief.md §12.5) as a GDExtension into
+# game/native/bin/. godot-cpp is fetched by tools/native/build.sh into cache/native/godot-cpp.
+import os
+
+GODOT_CPP = os.environ.get("GODOT_CPP", "../cache/native/godot-cpp")
+env = SConscript(os.path.join(GODOT_CPP, "SConstruct"))
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+library = env.SharedLibrary(
+    "../game/native/bin/cobbleseum_native{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+    # No "lib" prefix on Linux, so the names match cobbleseum_native.gdextension everywhere.
+    SHLIBPREFIX="",
+)
+Default(library)

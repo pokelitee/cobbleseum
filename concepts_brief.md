@@ -127,6 +127,9 @@ Modrinth publishes only SHA-1 and SHA-512 hashes, so the manifest records a SHA-
 | Textures | `assets/cobblemon/textures/pokemon/NNNN_name/*.png` | 4,089 |
 | Cries and sounds | `assets/cobblemon/sounds/pokemon/<name>/*.ogg` | 2,116 |
 | Move sounds | `assets/cobblemon/sounds/move/<move>/<move>_{actor,target}*.ogg`, plus `impact_generic/impact_generic_<type>_N.ogg` | 302 (136 generic impacts) |
+| Particle effects | `assets/cobblemon/bedrock/particles/**/*.json`, Bedrock particle format 1.10.0 | 1,114 (617 in 128 move folders) |
+| Particle textures | `assets/cobblemon/textures/particle/**/*.png` | 548 |
+| Scripted move effects | `data/cobblemon/action_effects/**/*.json` | 156 (138 for moves) |
 | Species data | `data/cobblemon/species/generationN/<name>.json` | 1,025 |
 | Model licences | `assets/cobblemon/bedrock/pokemon/models/NNNN_name/license` | one per model folder |
 
@@ -135,7 +138,7 @@ Modrinth publishes only SHA-1 and SHA-512 hashes, so the manifest records a SHA-
 - A **poser** says which animations a species plays in each pose, such as standing or flying in battle. It also lists one-off animations (physical attack, special attack, cry), head-tracking bones and idle quirks like blinking.
 - A **resolver** lists a species' visual **variations**. Each variation is selected by **aspects** (shiny, female, Alolan, …) and names a model, a texture, a poser and optional extra texture layers.
 
-**What we use:** geometry, animations, textures, posers, resolvers, cries and move sounds. From the species data we use only the `implemented` flag and `baseScale`. All battle data comes from Showdown, so stats and moves have a single source of truth.
+**What we use:** geometry, animations, textures, posers, resolvers, cries, move sounds, and the particle effects with their textures (as pieces of our own move sequences, §12.5; the scripted move effects only as a reference). From the species data we use only the `implemented` flag and `baseScale`. All battle data comes from Showdown, so stats and moves have a single source of truth.
 
 **Facts that shape the design:**
 
@@ -166,7 +169,10 @@ Modrinth publishes only SHA-1 and SHA-512 hashes, so the manifest records a SHA-
   - All 206,054 keyframes in the jar use Catmull-Rom interpolation.
 - **Geometry** uses only "box UV" texture mapping, with no per-face UVs. Inflated, rotated and mirrored cubes are common. Models have a median of 57 cubes, with a maximum of 566. Textures are between 64×64 and 256×256 pixels.
 - **Hitbox data is unreliable.** One species has a height of 0. Hitboxes therefore come from converted model bounds (§8).
-- **Move assets (unused in the first version):** the jar also ships 617 Bedrock particle effects for moves, 140 scripted move effects and 390 move sounds.
+- **Move effects:** the jar ships 617 Bedrock particle effects for 128 moves, 138 scripted move effects and 390 move sounds. Only 43 of the 246 moves in our movesets have an effect of their own (about 28% of move slots).
+  - The particles use billboards (517 with flipbooks), gradient tints, `math.random`, ground collision, sub-effect events, and Cobblemon's `v.target_deltax/y/z` and `v.target_distance` for aiming.
+  - The scripts are timelines of pauses, particles on the user or target, sounds and animations, about 2.7 s per move and turn-based; none moves the camera.
+  - Eight referenced textures are Minecraft's own or broken paths, and four referenced effects are missing from the jar.
 
 ### 5.3 Pokémon GO APK: considered and rejected
 
@@ -783,7 +789,13 @@ The camera director picks from a set of shot types based on battle events:
 
 ### 12.5 Move visuals, sound and HUD
 
-- **Move visuals:** every damaging move has one of 20 visual styles, drawn in its type colour from simple meshes animated per video frame. Converting Cobblemon's own move particle effects (129 moves in 1.8.4) comes later.
+- **Move visuals in Cobblemon's style** (in progress, opt-in with `--cobblemon-fx` until every move has one): one consistent pixel-art look for every move, built in stages.
+  - **Pieces, not scripts:** Cobblemon's particle effects (dust, sparks, shards, quake rings, beams) are reusable pieces. Each move has a `MoveSequence` script (`game/presentation/move_sequences/<move>.gd`) that plays pieces at our real-time phases: windup, fire, flight (riding the projectile), hit and blast. Cobblemon's 2–3 s turn-based scripts are only a reference for which pieces a move uses; a sequence's speed squeezes the pieces into our 0.25–0.45 s windups.
+  - **Runtime:** a native GDExtension (`native/`, C++ on godot-cpp, built by `tools/native/build.sh`) compiles the effects' Molang to bytecode and runs their emitters: shapes, rates, motion, ground collision, flipbooks, tints, curves and sub-effect events, all seeded so renders match. Two overlapping moves cost about 1.3 ms in the worst frame. The game runs without it, drawing our own styles.
+  - **Look:** nearest filtering like Cobblemon; camera-facing pieces are capped at a quarter of the view's height so close-ups don't fill with pixels; glowing (blend and additive) pieces bloom while cut-out ones (rocks, debris) stay flat; a piece borrowed from another type can be palette-swapped to the move's type colour.
+  - **Later stages:** our own pixel-art sprites in Cobblemon's style from a committed tool, rendered into `cache/` (also replacing the few Minecraft textures the particles name); the 20 styles below restyled to match; then every move, borrowing pieces from related moves, with defaults per style and type and overrides for well-known moves.
+  - Effects still in flight end with the battle, and nothing here touches the simulation.
+- **Move visuals (our styles):** every damaging move has one of 20 visual styles, drawn in its type colour from simple meshes animated per video frame.
   - Melee: strike (crescent), punch (shockwave star), kick (low arc), bite (closing fangs), slash (claw marks), rush (speed lines and dust).
   - Ranged: orb, bullet, beam, bolt (lightning), stream (breath and spray), pulse, sound, wind, powder, skyfall (drops onto the target), erupt (spikes from the ground), quake (ground wave), mind (glow on the target), explosion.
   - **Choosing a style:** the committed table `game/data/move_styles.json` (274 moves Showdown's flags don't describe, such as beams, breath and meteors), then Showdown's flags (punch, bite, slicing, bullet, pulse, sound, wind, powder), then strike for contact moves and orb for the rest.
@@ -1080,5 +1092,8 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 1. Will clips be monetised? Cobblemon's assets are non-commercial (§14).
 2. Tuning constants beyond the first pass (§9.7), which set the HP multiplier and overtime: the cooldown formula, speed band, dodge charges and status durations are still first guesses.
 3. Cobblemon's per-model licence files cover models, animations and textures. The jar states no separate licence for its sounds, so the credits assume the same CC BY-NC 3.0 terms. Confirm with the Cobblemon team before any wider release.
+   - **Move effects:** the particle effects (`assets/cobblemon/bedrock/particles/`), their textures (`assets/cobblemon/textures/particle/`) and the scripted move effects (`data/cobblemon/action_effects/`) have no licence file either. The jar's only licences are the root `LICENSE` (MPL-2.0) and the CC BY-NC 3.0 text, which appears only in `assets/cobblemon/bedrock/pokemon/models/` and its model folders.
+     - **Our current reading** (not settled): since the CC BY-NC text sits only with the models, the particles, their textures and the scripts may fall under the root MPL-2.0. The credits name the move effects with both licences, and we keep using them non-commercially like everything else from Cobblemon.
+     - Ask the Cobblemon team about sounds and move effects in the same question. Minecraft's own textures, which a few particles name, are never shipped; we draw our own instead.
 
 Resolved in milestone 1: tests use a small in-house runner (`tests/run_tests.gd`) instead of an add-on; recordings use OGV from Movie Maker, encoded to MP4. Resolved in milestone 2: stat stages wear off over time (§9.5). Reviewing all 100 forms found no wrongly shown parts; forms differ through their own models, textures and layers (§7.5), not hidden bones. Without that, a species whose attacks all use one stat stalled once moves like Overheat had dropped it to −6.

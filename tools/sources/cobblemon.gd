@@ -5,6 +5,8 @@ extends RefCounted
 ## - roster.json: one entry per species with its model, scale, height, hitbox radius, animations,
 ##   QA flags and licence. Headless simulation reads only this file.
 ## - report.json: the QA report, a summary plus each species' flags and conversion problems.
+## - move_fx/: the move particle effects, their textures and the action effects, copied as they
+##   are; CobblemonMoveFX runs them at presentation time (concepts_brief.md §12.5).
 ##
 ## Conversion is cached per species. Each model has a sidecar models/<id>.json with a key
 ## over its input files and the converter scripts, plus its measurements and report. A model
@@ -33,6 +35,12 @@ const CONVERTER: Array[String] = [
 ]
 const LICENCE := "CC BY-NC 3.0"
 const PROGRESS_EVERY := 100
+## Folders copied to move_fx/ unchanged, relative to the source.
+const MOVE_FX_DIRS: Array[String] = [
+	"assets/cobblemon/bedrock/particles",
+	"assets/cobblemon/textures/particle",
+	"data/cobblemon/action_effects",
+]
 
 
 func build(source_dir: String, out_dir: String, previous_dir := "") -> String:
@@ -77,6 +85,13 @@ func build(source_dir: String, out_dir: String, previous_dir := "") -> String:
 			print("  %d/%d species (%d converted, %d s)" % [i + 1, entries.size(), converted, (Time.get_ticks_msec() - started) / 1000])
 
 	_prune(models_dir, roster)
+	var copied := 0
+	for dir in MOVE_FX_DIRS:
+		var count := _copy_tree(source_dir.path_join(dir), out_dir.path_join("move_fx").path_join(dir))
+		if count < 0:
+			return "cannot copy %s into the build" % dir
+		copied += count
+	print("  move effects: %d files" % copied)
 	_write_json(out_dir.path_join("roster.json"), {"species": roster})
 	_write_json(out_dir.path_join("report.json"), {"summary": summary(roster, qa), "species": qa})
 	print("  roster: %d species (%d converted, %d reused, %d failed); see report.json" % [
@@ -170,6 +185,23 @@ static func _prune(models_dir: String, roster: Dictionary) -> void:
 	for file in DirAccess.get_files_at(models_dir):
 		if not roster.has(file.get_basename()):
 			DirAccess.remove_absolute(models_dir.path_join(file))
+
+
+## Copies a folder tree; returns the number of files, or -1 on failure.
+static func _copy_tree(from: String, to: String) -> int:
+	if not DirAccess.dir_exists_absolute(from) or DirAccess.make_dir_recursive_absolute(to) != OK:
+		return -1
+	var count := 0
+	for sub in DirAccess.get_directories_at(from):
+		var copied := _copy_tree(from.path_join(sub), to.path_join(sub))
+		if copied < 0:
+			return -1
+		count += copied
+	for file in DirAccess.get_files_at(from):
+		if DirAccess.copy_absolute(from.path_join(file), to.path_join(file)) != OK:
+			return -1
+		count += 1
+	return count
 
 
 ## Converter reports hold {name: true} sets; JSON keeps their sorted names.

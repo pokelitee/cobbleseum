@@ -166,6 +166,7 @@ func _ready() -> void:
 		_views[side].watch(_views[1 - side])
 	_add_crowd(loaded.data)
 	_hud = Hud.new()
+	_hud.move_effects_credit = options.cobblemon_fx
 	add_child(_hud)
 	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types])
 	var arena_name: String = Arenas.preset(battle.arena).get("name", battle.arena)
@@ -174,6 +175,10 @@ func _ready() -> void:
 	for fighter in battle.fighters:
 		for move in fighter.moves:
 			_move_fx.styles[move.id] = MoveStyle.of(move.id, loaded.data.moves[move.id])
+	if options.cobblemon_fx:
+		var problem := _move_fx.use_cobblemon(_views, _move_fx.styles.keys())
+		if not problem.is_empty():
+			printerr("warning: " + problem)
 	_sound = BattleSound.new()
 	add_child(_sound)
 	_sound.setup([spec.fighters[0].species, spec.fighters[1].species])
@@ -764,10 +769,12 @@ func _is_recording() -> bool:
 func _parse_args(args: PackedStringArray) -> Dictionary:
 	var parsed := SpecFlags.parse(args)
 	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": "", "ai_debug": false,
-		"flag_spec": SpecFlags.to_spec(parsed.flags)}
+		"cobblemon_fx": false, "flag_spec": SpecFlags.to_spec(parsed.flags)}
 	for arg: String in parsed.rest:
 		if arg == "--ai-debug":
 			options.ai_debug = true
+		elif arg == "--cobblemon-fx":
+			options.cobblemon_fx = true
 		elif arg.begins_with("--clip-seconds="):
 			options.clip_seconds = arg.get_slice("=", 1).to_float()
 		elif arg.begins_with("--expect-checksum="):

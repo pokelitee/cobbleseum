@@ -37,7 +37,8 @@ const STATUS_BADGES := {
 	"tox": ["TOX", Color("8e3fb0")], "slp": ["SLP", Color("8a8a9a")], "frz": ["FRZ", Color("5cc8e0")],
 	"confusion": ["CNF", Color("ff5f9e")],
 }
-const CREDITS_TEXT := "Models, animations and sounds: Cobblemon (CC BY‑NC 3.0)\nBattle data: Pokémon Showdown\nOriginal music · Crowd and ambience: CC0, see description\nAn unaffiliated, non-commercial fan project"
+## The credits card; %s is the Cobblemon line (cobblemon_credit()).
+const CREDITS_TEXT := "%s\nBattle data: Pokémon Showdown\nOriginal music · Crowd and ambience: CC0, see description\nAn unaffiliated, non-commercial fan project"
 
 var _size := Vector2.ZERO
 var _scale := 1.0
@@ -91,6 +92,17 @@ var _caption: Dictionary = {}
 var _replay_tag: Control
 var _replay_dot: Control
 var _replay_age := -1
+## Whether the battle draws Cobblemon's move effects, which the credits then name too. Set
+## before setup().
+var move_effects_credit := false
+
+
+## The Cobblemon line of the credits. The move effects have no licence file of their own; the
+## jar's root licence is MPL-2.0 (concepts_brief.md §19).
+static func cobblemon_credit(move_effects: bool) -> String:
+	if move_effects:
+		return "Models, animations, sounds and move effects: Cobblemon (CC BY‑NC 3.0, MPL‑2.0)"
+	return "Models, animations and sounds: Cobblemon (CC BY‑NC 3.0)"
 
 
 ## Builds the HUD for fighters `names` (side A first), with each one's `types` for its pills.
@@ -159,7 +171,7 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []]) -> voi
 		_bars.append(bar)
 		_lags.append(lag)
 		_percents.append(percent)
-	var credit := _label("Models, animations and sounds: Cobblemon (CC BY-NC 3.0)", 28, Color.WHITE)
+	var credit := _label(cobblemon_credit(move_effects_credit), 28, Color.WHITE)
 	credit.position = Vector2(margin, viewport_size.y - 60 * _scale)
 	add_child(credit)
 	_intro = _matchup(names)
@@ -173,7 +185,7 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []]) -> voi
 	_winner.add_theme_constant_override("outline_size", roundi(16 * _scale))
 	_winner.visible = false
 	add_child(_winner)
-	_credits = _card(CREDITS_TEXT, 44, 0.85)
+	_credits = _card(CREDITS_TEXT % cobblemon_credit(move_effects_credit), 44, 0.85)
 	_credits.visible = false
 
 
