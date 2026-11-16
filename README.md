@@ -134,7 +134,7 @@ The design is described in the [concept brief](concepts_brief.md). In short:
 - Battle music is original: scores (`tools/music/scores/`) arranged by shared rules and rendered by the pipeline with General MIDI instruments into layers the game mixes (`tools/music/`, `BattleMusic`). Crowd and field ambience comes from CC0 recordings (`ArenaSound`).
 - A deterministic, fixed-tick battle simulation written in plain GDScript (`game/sim/`) runs headless for batch simulation and drives the 3D presentation. Rules constants live in `game/sim/rules.gd`; randomness comes from seeded mulberry32 streams, so a battle replays exactly from its spec.
 - A utility AI controls fighters through the same intents a player uses.
-- Move visuals in Cobblemon's style: each move's sequence (`MoveSequence`) plays pieces, Cobblemon's own Bedrock particle effects kept in `cache/`, at our real-time phases. A native GDExtension (`native/`, C++) compiles their Molang and runs the particles; `SnowstormEmitter` draws them.
+- Move visuals in Cobblemon's style: each move's sequence (`MoveSequence`, its own or its style's `StyleSequence`) plays pieces, Cobblemon's own Bedrock particle effects kept in `cache/`, at our real-time phases. A native GDExtension (`native/`, C++) compiles their Molang and runs the particles; `SnowstormEmitter` draws them.
 - The battle view (`game/presentation/`) replays the simulation with the converted models, a portrait camera and HP bars. `tools/record.gd` runs a battle headless, picks the clip window from its events, renders it with Godot's Movie Maker mode in a second Godot process, checks that the rendered battle's checksum matches, and encodes an MP4 with ffmpeg.
 
 ## Documentation

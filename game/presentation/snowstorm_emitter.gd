@@ -31,9 +31,10 @@ void fragment() {
 		discard;
 	}
 	if (swap.a > 0.0) {
-		// Keep the piece's shading as a black - colour - white ramp in the new colour.
 		float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
-		vec3 ramp = l < 0.5 ? swap.rgb * (l * 2.0) : mix(swap.rgb, vec3(1.0), (l - 0.5) * 2.0);
+		// Keep the piece's shading as a ramp in the new colour: darks lift to a shade of it (so a
+		// dark piece still reads as the type), lights run on to white.
+		vec3 ramp = l < 0.5 ? mix(swap.rgb * 0.45, swap.rgb, l * 2.0) : mix(swap.rgb, vec3(1.0), (l - 0.5) * 2.0);
 		c.rgb = mix(c.rgb, ramp, swap.a);
 	}
 	ALBEDO = c.rgb * brightness;

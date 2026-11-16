@@ -176,7 +176,10 @@ func _ready() -> void:
 		for move in fighter.moves:
 			_move_fx.styles[move.id] = MoveStyle.of(move.id, loaded.data.moves[move.id])
 	if options.cobblemon_fx:
-		var problem := _move_fx.use_cobblemon(_views, _move_fx.styles.keys())
+		var moves: Array = []
+		for fighter in battle.fighters:
+			moves.append_array(fighter.moves)
+		var problem := _move_fx.use_cobblemon(_views, moves)
 		if not problem.is_empty():
 			printerr("warning: " + problem)
 	_sound = BattleSound.new()
@@ -588,7 +591,7 @@ func _play_events() -> void:
 				if fell and battle.fighters[event.side].action == Fighter.Action.READY:
 					_views[event.side].play_role("angry")
 			"heal":
-				_move_fx.aura(_views[event.side], HEAL_COLOUR, true)
+				_move_fx.aura(_views[event.side], HEAL_COLOUR, true, true)
 				_fx.announce(_views[event.side], "+%d" % event.amount, HEAL_COLOUR)
 			"status":
 				_hud.set_status(event.side, event.status, true)

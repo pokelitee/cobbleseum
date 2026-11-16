@@ -361,6 +361,12 @@ private:
 				}
 			}
 			position++;
+			// Cobblemon's effects also write math.random() for a number in [0, 1).
+			if (info->fn == Fn::RANDOM && arguments == 0) {
+				push_const(0.0f);
+				push_const(1.0f);
+				arguments = 2;
+			}
 			if (arguments != info->arguments) {
 				error = name + " takes " + std::to_string(info->arguments) + " arguments";
 				return;

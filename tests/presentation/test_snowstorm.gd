@@ -66,6 +66,8 @@ func test_random_is_seeded() -> void:
 	var second := _evaluate("math.random(0, 10)", {}, {}, 42)
 	assert_eq(first.value, second.value, "same seed, same draw")
 	assert_true(float(first.value) >= 0.0 and float(first.value) <= 10.0)
+	var unit := _value("math.random()")
+	assert_true(unit >= 0.0 and unit < 1.0, "math.random() with no range draws from [0, 1)")
 
 
 func test_unsupported_text_is_rejected_not_run() -> void:

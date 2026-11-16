@@ -797,7 +797,15 @@ The camera director picks from a set of shot types based on battle events:
     - They replace the 14 Minecraft textures Cobblemon ships in `textures/particle/vanilla/` (generic, critical_hit, small_explosion, smoke, bubbles, spiral, gust, flash, lava and others), keeping each one's size and flipbook layout, so effects index them unchanged. The Minecraft files are deleted from the build.
     - They also fill three textures effects name that the jar lacks (white wool, `particle/flash`, `charge_orb`). Four misspelled paths that clearly mean real Cobblemon textures (the thunder bolts and the fire impact) get copies of those.
     - `tools/preview_sprites.gd` draws them all on one sheet, and `tools/preview_moves.gd -- --pieces=<effect,...>` plays single effects for authoring sequences.
-  - **Later stages:** the 20 styles below restyled to match; then every move, borrowing pieces from related moves, with defaults per style and type and overrides for well-known moves.
+  - **Our styles in Cobblemon's look:** each of the 20 styles below, plus `status` for moves that deal no damage, has a style sequence (`StyleSequence`, `move_sequences/styles/<style>.gd`), which every move without a sequence of its own plays. So with `--cobblemon-fx` every move now has a pixel-art look.
+    - **Hits:** Cobblemon's own impact for the move's type (`impact_<type>`, in that type's colours; Normal's for any other type).
+    - **Borrowed pieces:** pieces from moves that look the part, palette-swapped to the type colour. For example a bullet punch's fist for `punch`, bite fangs for `bite`, Aurora Beam's beam for `beam`, Thunderbolt's bolt for `bolt`, the flamethrower for `stream`, and Mystical Fire's shot plus a flaring glow riding the projectile for `orb`.
+    - **Area moves** add a quake ring and sparks sweeping out from the user (plus bolts for `bolt`, a blast for `explosion`).
+    - **Melee accents** are drawn 1.6× and nudged toward the camera, since our closer spacing and the foe's own body otherwise hide them.
+    - **Palette swap:** it lifts dark pixels to a shade of the type colour, so dark pieces read as their type rather than black.
+    - **Non-move cues:** stat rises and drops, heals and dodges use Cobblemon's `statup`, `statdown`, `heal_*` and dash-line pieces.
+    - The mesh styles below stay as the fallback when the native runtime or the cached effects are missing.
+  - **Later stages:** moves in batches by type, with sequences of their own where Cobblemon has an effect or a well-known move deserves one, and per-type touches to the style defaults; then turning the look on by default.
   - Effects still in flight end with the battle, and nothing here touches the simulation.
 - **Move visuals (our styles):** every damaging move has one of 20 visual styles, drawn in its type colour from simple meshes animated per video frame.
   - Melee: strike (crescent), punch (shockwave star), kick (low arc), bite (closing fangs), slash (claw marks), rush (speed lines and dust).
