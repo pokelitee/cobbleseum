@@ -41,3 +41,20 @@ func test_arena_flag_is_kept_and_passed_on() -> void:
 	assert_eq(SpecFlags.to_spec(SpecFlags.parse(SpecFlags.from_spec(spec)).flags), spec)
 	assert_false(SpecFlags.to_spec({"watch": "garchomp"}).has("arena"))
 
+
+
+func test_look_flags_set_shiny_and_forms() -> void:
+	var spec := SpecFlags.to_spec({"watch": "gastrodon", "vs": "vivillon", "shiny": "b", "form": "east", "vs-form": "base", "seed": "4"})
+	assert_eq(spec.fighters[0].shiny, false)
+	assert_eq(spec.fighters[1].shiny, true)
+	assert_eq(spec.fighters[0].form, "east")
+	assert_eq(spec.fighters[1].form, "", "base is the species' own look")
+	assert_false(SpecFlags.to_spec({"watch": "gastrodon"}).fighters[0].has("shiny"), "left out, it's rolled later")
+	assert_true(SpecFlags.to_spec({"watch": "gastrodon", "shiny": "yes"}).has("error"))
+	for flags: Dictionary in [{"watch": "gastrodon", "shiny": "both", "form": "east", "seed": "4"},
+			{"play": "gastrodon", "vs": "vivillon", "shiny": "none", "vs-form": "marine", "seed": "4"}]:
+		spec = SpecFlags.to_spec(flags)
+		var again := SpecFlags.to_spec(SpecFlags.parse(SpecFlags.from_spec(spec)).flags)
+		for side in 2:
+			assert_eq(again.fighters[side].get("shiny"), spec.fighters[side].get("shiny"), "shiny round-trips")
+			assert_eq(again.fighters[side].get("form", ""), spec.fighters[side].get("form", ""), "forms round-trip")

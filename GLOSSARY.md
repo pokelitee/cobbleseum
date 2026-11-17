@@ -10,6 +10,13 @@ A local-first 3D Pokémon battle game: two Pokémon fight in real time in an are
 One entry in the roster, with its own Showdown ID. A regional or other form, such as Alolan Ninetales, is a species of its own.
 _Avoid_: roster entry, form (as a separate thing), Pokémon (for an entry)
 
+**Cosmetic form**:
+A look a species can appear in that changes nothing in battle, such as East Sea Gastrodon, one of Vivillon's wing patterns or a female model. A form that changes battle data is a species instead.
+_Avoid_: variant, form (alone)
+
+**Shiny**:
+A fighter drawn in its species' alternate colours, marked with a sparkle. Like a cosmetic form, it never changes a battle.
+
 **Roster**:
 Every species that has both a Cobblemon model and Showdown data.
 
@@ -44,7 +51,7 @@ The number a battle's luck, arena and terrain come from.
 The number of one set of battle rules. Every change that can change how a battle turns out gets a new one.
 
 **Battle spec**:
-Everything needed to reproduce a battle exactly: the rules and data versions, the two fighters with their movesets, abilities and held items, each side's AI profile, the arena and the seed, plus every tick's intents for a player's side.
+Everything needed to reproduce a battle exactly: the rules and data versions, the two fighters with their movesets, abilities and held items, each side's AI profile, the arena and the seed, plus every tick's intents for a player's side. It also says how each fighter looks (shiny, cosmetic form), which only the presentation reads.
 _Avoid_: replay file, config
 
 **Replay**:

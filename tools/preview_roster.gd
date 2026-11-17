@@ -2,6 +2,10 @@ extends SceneTree
 ## Renders roster species as they appear in battle, for converter QA (concepts_brief.md §7.5).
 ## Usage (needs a window, not --headless):
 ##   godot --path . --script res://tools/preview_roster.gd -- [species ...] [--flag=bounds_mismatch]
+##     [--forms] [--shiny]
+## A species can name a cosmetic form and its shiny (§12.8): gastrodon@east, charizard~shiny,
+## gastrodon@east~shiny. --forms adds every cosmetic form of every species, and --shiny shows
+## every tile shiny.
 ## Each species is shown at its roster scale, partway into its idle animation, beside an outline of
 ## its hitbox capsule, from a camera framed on the hitbox (not the model, which may be
 ## wrong). Writes one contact sheet, cache/previews/roster_<name>.png, labelled by tile order
@@ -26,15 +30,24 @@ func _run() -> void:
 	var roster: Dictionary = loaded.data.roster
 	var ids: Array[String] = []
 	var flag := ""
+	var all_shiny := false
 	for arg in OS.get_cmdline_user_args():
+		var id := arg.get_slice("~", 0).get_slice("@", 0)
 		if arg.begins_with("--flag="):
 			flag = arg.trim_prefix("--flag=")
-		elif roster.has(arg):
+		elif arg == "--forms":
+			for species: String in roster:
+				for form: String in roster[species].get("forms", {}):
+					ids.append("%s@%s" % [species, form])
+			flag = "forms" if flag.is_empty() else flag
+		elif arg == "--shiny":
+			all_shiny = true
+		elif roster.has(id):
 			ids.append(arg)
 		else:
-			printerr("error: '%s' is not in the roster" % arg)
+			printerr("error: '%s' is not in the roster" % id)
 			return quit(1)
-	if not flag.is_empty():
+	if not flag.is_empty() and flag != "forms":
 		for id: String in roster:
 			if flag in roster[id].flags:
 				ids.append(id)
@@ -49,9 +62,17 @@ func _run() -> void:
 	var sheet := Image.create(TILE * mini(COLUMNS, ids.size()), TILE * rows, false, Image.FORMAT_RGBA8)
 	for i in ids.size():
 		print("%3d %s" % [i + 1, ids[i]])
-		var image: Image = await _render(roster[ids[i]])
+		var parts := ids[i].get_slice("~", 0).split("@")
+		var id := parts[0]
+		var fighter := {"species": id, "form": parts[1] if parts.size() > 1 else "",
+			"shiny": all_shiny or ids[i].ends_with("~shiny")}
+		var problem := Appearance.check({"fighters": [fighter]}, roster)
+		if not problem.is_empty():
+			printerr("error: " + problem)
+			return quit(1)
+		var image: Image = await _render(roster[id], Appearance.resolve(roster[id], fighter, BattleView.MODELS_DIR))
 		sheet.blit_rect(image, Rect2i(0, 0, TILE, TILE), Vector2i((i % COLUMNS) * TILE, (i / COLUMNS) * TILE))
-	var name := flag if not flag.is_empty() else ids[0]
+	var name := (flag if not flag.is_empty() else ids[0].replace("~", "_").replace("@", "_")) + ("_shiny" if all_shiny else "")
 	var path := ProjectSettings.globalize_path("res://cache/previews").path_join("roster_%s.png" % name)
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	sheet.save_png(path)
@@ -59,10 +80,12 @@ func _run() -> void:
 	quit(0)
 
 
-func _render(entry: Dictionary) -> Image:
+func _render(entry: Dictionary, look: Dictionary) -> Image:
+	if not look.warning.is_empty():
+		printerr("warning: " + look.warning)
 	var stage := Node3D.new()
 	_viewport.add_child(stage)
-	var view := FighterView.from_model(BattleView.MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
+	var view := FighterView.from_model(BattleView.MODELS_DIR.path_join(look.model), entry.scale, entry.height, BattleView.skin_path(look))
 	stage.add_child(view)
 	view.place(Vector2.ZERO, Vector2(1, 0.6).normalized())
 	var player: AnimationPlayer = view.find_child("AnimationPlayer", true, false)

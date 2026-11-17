@@ -1,17 +1,18 @@
 extends RefCounted
 ## Build step for the Cobblemon source (concepts_brief.md §7, §8).
 ## Matches Showdown species to Cobblemon models (CobblemonRoster), converts each one into
-## models/<id>.scn, and writes:
+## models/<id>.scn and each of its cosmetic forms into models/<id>@<form>.scn, gives each of
+## those looks its shiny (models/<look>~shiny.res, a skin, or .scn), and writes:
 ## - roster.json: one entry per species with its model, scale, height, hitbox radius, animations,
-##   QA flags and licence. Headless simulation reads only this file.
+##   QA flags, licence, shiny and cosmetic forms. Headless simulation reads only this file.
 ## - report.json: the QA report, a summary plus each species' flags and conversion problems.
 ## - move_fx/: the move particle effects, their textures and the action effects, copied as they
 ##   are; CobblemonMoveFX runs them at presentation time (concepts_brief.md §12.5). The
 ##   Minecraft textures among them are replaced by our own (MoveFxSprites).
 ##
-## Conversion is cached per species. Each model has a sidecar models/<id>.json with a key
-## over its input files and the converter scripts, plus its measurements and report. A model
-## whose key still matches is reused from an interrupted build (the staging folder) or the
+## Conversion is cached per look. Each model or skin has a sidecar models/<file>.json with a
+## key over its input files and the converter scripts, plus a model's measurements and report.
+## One whose key still matches is reused from an interrupted build (the staging folder) or the
 ## previous build, so only changed species are converted again.
 
 const INCREMENTAL := true
@@ -38,6 +39,9 @@ const CONVERTER: Array[String] = [
 ]
 const LICENCE := "CC BY-NC 3.0"
 const PROGRESS_EVERY := 100
+## Appended to a look's file name for its shiny: a skin (.res) or, when the shiny variation
+## swaps the model or poser, a scene of its own (.scn).
+const SHINY_SUFFIX := "~shiny"
 ## Folders copied to move_fx/ unchanged, relative to the source.
 const MOVE_FX_DIRS: Array[String] = [
 	"assets/cobblemon/bedrock/particles",
@@ -61,33 +65,47 @@ func build(source_dir: String, out_dir: String, previous_dir := "") -> String:
 	var roster := {}
 	var qa := {}
 	var converted := 0
+	var written := {}
+	var previous_models := previous_dir.path_join("models") if not previous_dir.is_empty() else ""
 	var started := Time.get_ticks_msec()
 	for i in entries.size():
 		var entry: Dictionary = entries[i]
-		var files := CobblemonSpecies.files(source_dir, entry.folder, entry.aspects)
-		if files.has("error"):
-			qa[entry.id] = {"error": files.error}
+		var base := _look(entry.id, source_dir, entry.folder, entry.aspects, converter_key, models_dir, previous_models)
+		if base.has("fatal"):
+			return base.fatal
+		if base.has("error"):
+			qa[entry.id] = {"error": base.error}
 			continue
-		var key := _input_key(source_dir, entry.folder, files, converter_key)
-		var sidecar := _cached(entry.id, key, models_dir, previous_dir.path_join("models") if not previous_dir.is_empty() else "")
-		if sidecar.is_empty():
-			var result := CobblemonModel.convert(source_dir, entry.folder, entry.aspects)
-			if result.has("error"):
-				qa[entry.id] = {"error": result.error}
+		converted += base.converted
+		written.merge(base.written)
+		var listed := _roster_entry(entry, base.sidecar.report, source_dir)
+		_add_shiny(listed, base, listed.entry)
+		var forms := {}
+		for form: Dictionary in entry.forms:
+			var form_files := CobblemonSpecies.files(source_dir, entry.folder, form.aspects)
+			if not form_files.has("error") and same_look(form_files, base.files):
 				continue
-			var err := ResourceSaver.save(result.scene, models_dir.path_join(entry.id + ".scn"))
-			if err != OK:
-				return "cannot save model %s (%s)" % [entry.id, error_string(err)]
-			sidecar = {"key": key, "report": _json_report(result.report)}
-			_write_json(models_dir.path_join(entry.id + ".json"), sidecar)
-			converted += 1
-		var listed := _roster_entry(entry, sidecar.report, source_dir)
+			var look := _look("%s@%s" % [entry.id, form.id], source_dir, entry.folder, form.aspects, converter_key, models_dir, previous_models)
+			if look.has("fatal"):
+				return look.fatal
+			if look.has("error"):
+				listed.qa.get_or_add("form_errors", {})[form.id] = look.error
+				continue
+			converted += look.converted
+			written.merge(look.written)
+			forms[form.id] = {"name": form.name, "model": look.model}
+			if form.has("chance"):
+				forms[form.id].chance = form.chance
+			_add_shiny(listed, look, forms[form.id])
+		if not forms.is_empty():
+			listed.entry.forms = forms
+			listed.qa.forms = forms.keys()
 		roster[entry.id] = listed.entry
 		qa[entry.id] = listed.qa
 		if (i + 1) % PROGRESS_EVERY == 0:
-			print("  %d/%d species (%d converted, %d s)" % [i + 1, entries.size(), converted, (Time.get_ticks_msec() - started) / 1000])
+			print("  %d/%d species (%d models and skins converted, %d s)" % [i + 1, entries.size(), converted, (Time.get_ticks_msec() - started) / 1000])
 
-	_prune(models_dir, roster)
+	_prune(models_dir, written)
 	var copied := 0
 	for dir in MOVE_FX_DIRS:
 		var count := _copy_tree(source_dir.path_join(dir), out_dir.path_join("move_fx").path_join(dir))
@@ -101,9 +119,106 @@ func build(source_dir: String, out_dir: String, previous_dir := "") -> String:
 	print("  our own particle textures: %d drawn, %d misspelled paths copied" % [MoveFxSprites.RECIPES.size(), MoveFxSprites.COPIES.size()])
 	_write_json(out_dir.path_join("roster.json"), {"species": roster})
 	_write_json(out_dir.path_join("report.json"), {"summary": summary(roster, qa), "species": qa})
-	print("  roster: %d species (%d converted, %d reused, %d failed); see report.json" % [
-		roster.size(), converted, roster.size() - converted, entries.size() - roster.size()])
+	print("  roster: %d species (%d failed); %d models and skins converted, %d reused; see report.json" % [
+		roster.size(), entries.size() - roster.size(), converted, written.size() / 2 - converted])
 	return ""
+
+
+## One look of a species, its base or a cosmetic form, drawn with `aspects`: its scene
+## models/<stem>.scn and its shiny. Returns {"files", "sidecar", "model", "shiny" (a file, or ""
+## with "shiny_error"), "converted" (models and skins converted rather than reused), "written"
+## (the files it keeps in models/)}, {"error"} for a look that can't be converted, or {"fatal"}
+## when the build can't go on.
+static func _look(stem: String, source_dir: String, folder: String, aspects: Array, converter_key: String,
+		models_dir: String, previous_models: String) -> Dictionary:
+	var files := CobblemonSpecies.files(source_dir, folder, aspects)
+	if files.has("error"):
+		return files
+	var scene := _scene(stem, source_dir, folder, aspects, files, converter_key, models_dir, previous_models)
+	if scene.has("error") or scene.has("fatal"):
+		return scene
+	var look := {"files": files, "sidecar": scene.sidecar, "model": stem + ".scn", "shiny": "",
+		"converted": scene.converted, "written": {stem + ".scn": true, stem + ".json": true}}
+	var shiny_files := CobblemonSpecies.files(source_dir, folder, aspects + ["shiny"])
+	if shiny_files.has("error"):
+		look.shiny_error = shiny_files.error
+		return look
+	if same_look(shiny_files, files):
+		look.shiny_error = "no shiny variation"
+		return look
+	if not FileAccess.file_exists(shiny_files.texture):
+		look.shiny_error = "shiny texture %s is missing" % shiny_files.texture.get_file()
+		return look
+	var shiny_stem := stem + SHINY_SUFFIX
+	var shiny: Dictionary
+	var ext := ".res"
+	if shiny_files.geo == files.geo and shiny_files.poser == files.poser:
+		shiny = _skin(shiny_stem, shiny_files, converter_key, models_dir, previous_models)
+	else:
+		shiny = _scene(shiny_stem, source_dir, folder, aspects + ["shiny"], shiny_files, converter_key, models_dir, previous_models)
+		ext = ".scn"
+	if shiny.has("fatal"):
+		return shiny
+	if shiny.has("error"):
+		look.shiny_error = shiny.error
+		return look
+	look.shiny = shiny_stem + ext
+	look.converted += shiny.converted
+	look.written[shiny_stem + ext] = true
+	look.written[shiny_stem + ".json"] = true
+	return look
+
+
+## Converts a look's scene into models/<stem>.scn, or reuses it when its key still matches.
+## Returns {"sidecar", "converted": 0 or 1}, {"error"} or {"fatal"}.
+static func _scene(stem: String, source_dir: String, folder: String, aspects: Array, files: Dictionary,
+		converter_key: String, models_dir: String, previous_models: String) -> Dictionary:
+	var key := _input_key(source_dir, folder, files, converter_key)
+	var sidecar := _cached(stem, key, models_dir, previous_models)
+	if not sidecar.is_empty():
+		return {"sidecar": sidecar, "converted": 0}
+	var result := CobblemonModel.convert(source_dir, folder, aspects)
+	if result.has("error"):
+		return result
+	var err := ResourceSaver.save(result.scene, models_dir.path_join(stem + ".scn"))
+	if err != OK:
+		return {"fatal": "cannot save model %s (%s)" % [stem, error_string(err)]}
+	sidecar = {"key": key, "report": _json_report(result.report)}
+	_write_json(models_dir.path_join(stem + ".json"), sidecar)
+	return {"sidecar": sidecar, "converted": 1}
+
+
+## Writes a shiny skin, models/<stem>.res: the material a look wears when only its textures
+## change (CobblemonModel.skin()), or reuses it when its key still matches. Returns
+## {"converted": 0 or 1} or {"fatal"}.
+static func _skin(stem: String, files: Dictionary, converter_key: String, models_dir: String, previous_models: String) -> Dictionary:
+	var parts: PackedStringArray = [converter_key, "skin", FileAccess.get_sha256(files.texture)]
+	for layer: Dictionary in files.layers:
+		parts.append("layer:%s:%s" % [layer.emissive, FileAccess.get_sha256(layer.texture) if FileAccess.file_exists(layer.texture) else "missing"])
+	var key := "|".join(parts).sha256_text()
+	if not _cached(stem, key, models_dir, previous_models, ".res").is_empty():
+		return {"converted": 0}
+	var err := ResourceSaver.save(CobblemonModel.skin(files), models_dir.path_join(stem + ".res"))
+	if err != OK:
+		return {"fatal": "cannot save skin %s (%s)" % [stem, error_string(err)]}
+	_write_json(models_dir.path_join(stem + ".json"), {"key": key})
+	return {"converted": 1}
+
+
+## Whether two looks' files draw the same: the same model, texture, poser and layers.
+static func same_look(a: Dictionary, b: Dictionary) -> bool:
+	return a.geo == b.geo and a.texture == b.texture and a.poser == b.poser and a.layers == b.layers
+
+
+## Lists a look's shiny on its roster entry (`target`), or flags the species `no_shiny` and
+## records why in its QA record.
+static func _add_shiny(listed: Dictionary, look: Dictionary, target: Dictionary) -> void:
+	if not look.shiny.is_empty():
+		target.shiny = look.shiny
+		return
+	listed.qa.get_or_add("no_shiny", {})[look.model.get_basename()] = look.shiny_error
+	if not listed.entry.flags.has("no_shiny"):
+		listed.entry.flags.append("no_shiny")
 
 
 ## The roster entry for a converted species, plus its QA record.
@@ -169,28 +284,29 @@ static func _input_key(source_dir: String, folder: String, files: Dictionary, co
 	return "|".join(parts).sha256_text()
 
 
-## The sidecar of a model whose key matches, moving it from the previous build into
-## `models_dir` if needed; {} when the species must be converted.
-static func _cached(id: String, key: String, models_dir: String, previous_models: String) -> Dictionary:
+## The sidecar of a model (or, with `ext` ".res", a skin) whose key matches, moving it from the
+## previous build into `models_dir` if needed; {} when it must be converted.
+static func _cached(id: String, key: String, models_dir: String, previous_models: String, ext := ".scn") -> Dictionary:
 	for dir in [models_dir, previous_models]:
 		if dir.is_empty():
 			continue
 		var sidecar: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join(id + ".json"))) \
 			if FileAccess.file_exists(dir.path_join(id + ".json")) else null
-		if not (sidecar is Dictionary and sidecar.get("key") == key and FileAccess.file_exists(dir.path_join(id + ".scn"))):
+		if not (sidecar is Dictionary and sidecar.get("key") == key and FileAccess.file_exists(dir.path_join(id + ext))):
 			continue
 		if dir != models_dir:
-			for ext in [".scn", ".json"]:
-				if DirAccess.rename_absolute(dir.path_join(id + ext), models_dir.path_join(id + ext)) != OK:
+			for moved in [ext, ".json"]:
+				if DirAccess.rename_absolute(dir.path_join(id + moved), models_dir.path_join(id + moved)) != OK:
 					return {}
 		return sidecar
 	return {}
 
 
-## Removes models of species no longer in the roster, e.g. left from an older build.
-static func _prune(models_dir: String, roster: Dictionary) -> void:
+## Removes files this build didn't write or reuse, e.g. models of species or forms no longer
+## in the roster, left from an older build.
+static func _prune(models_dir: String, written: Dictionary) -> void:
 	for file in DirAccess.get_files_at(models_dir):
-		if not roster.has(file.get_basename()):
+		if not written.has(file):
 			DirAccess.remove_absolute(models_dir.path_join(file))
 
 

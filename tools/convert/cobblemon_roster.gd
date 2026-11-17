@@ -4,8 +4,9 @@ extends RefCounted
 ##
 ## A roster entry is a Showdown species (identified by its Showdown ID, e.g. "ninetalesalola")
 ## that Cobblemon implements: the base species by normalised name, a form by its form name
-## ("Alola") and aspects (["alolan"]). Battle-only forms (Mega, Gmax, Primal, ...) and forms
-## Showdown doesn't list as separate species (cosmetic ones) are left out.
+## ("Alola") and aspects (["alolan"]). Battle-only forms (Mega, Gmax, Primal, ...) are left out.
+## Forms Showdown doesn't list as separate species (East Sea Gastrodon, Vivillon's patterns,
+## female models) don't change battle data, so they become cosmetic forms of an entry instead.
 
 const SPECIES_DATA := "data/cobblemon/species"
 ## Height band in metres; models are scaled uniformly into it.
@@ -17,12 +18,16 @@ const MAX_RADIUS := 1.5
 ## Flagged in the QA report when the model's height in its idle pose and its hitbox height
 ## differ by more than this factor (a mis-posed model, or one far bigger than its hitbox).
 const POSE_MISMATCH := 2.0
+## Cosmetic form ids for form names that normalise to nothing, as Showdown names them.
+const SYMBOL_FORM_IDS := {"!": "exclamation", "?": "question"}
+const FEMALE := "female"
 
 
 ## `pokedex`: Showdown ID -> species. `cobblemon`: Cobblemon species id -> species JSON.
 ## `folders`: Cobblemon species id -> model folder ("0038_ninetales"). Returns entries
-## {"id", "name", "num", "folder", "aspects", "base_scale", "hitbox"}, sorted by dex number
-## then ID. "hitbox" is Cobblemon's {"width", "height"} in blocks before base scale, or {}.
+## {"id", "name", "num", "folder", "aspects", "base_scale", "hitbox", "forms"}, sorted by dex
+## number then ID. "hitbox" is Cobblemon's {"width", "height"} in blocks before base scale, or {}.
+## "forms" are the entry's candidate cosmetic forms (cosmetic_forms()).
 static func match_species(pokedex: Dictionary, cobblemon: Dictionary, folders: Dictionary) -> Array:
 	var by_name := {}
 	for cobblemon_id: String in cobblemon:
@@ -50,10 +55,40 @@ static func match_species(pokedex: Dictionary, cobblemon: Dictionary, folders: D
 			base_scale = float(form.get("baseScale", base_scale))
 			hitbox = form.get("hitbox", hitbox)
 		entries.append({"id": id, "name": dex.get("name", id), "num": int(dex.num),
-			"folder": folders[cobblemon_id], "aspects": aspects, "base_scale": base_scale, "hitbox": hitbox})
+			"folder": folders[cobblemon_id], "aspects": aspects, "base_scale": base_scale, "hitbox": hitbox,
+			"forms": cosmetic_forms(id, pokedex, data, aspects)})
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return a.num < b.num if a.num != b.num else a.id < b.id)
 	return entries
+
+
+## The cosmetic forms the entry `id` (Cobblemon species `data`, drawn with `aspects`) may
+## appear in: [{"id", "name", "aspects"}], plus "chance" for the female model. A base species
+## gets each Cobblemon form that isn't battle-only and that Showdown lists as no species of its
+## own, or only as a cosmetic forme. Any entry gets a female model when Showdown says the
+## species can be female; "chance" is its share of females. Candidates only: a form whose
+## files turn out the same as the entry's (a marker form such as "Alola-Bias") shows nothing new.
+static func cosmetic_forms(id: String, pokedex: Dictionary, data: Dictionary, aspects: Array) -> Array:
+	var dex: Dictionary = pokedex[id]
+	var forms: Array = []
+	if str(dex.get("forme", "")).is_empty():
+		for form: Dictionary in data.get("forms", []):
+			var form_aspects: Array = form.get("aspects", [])
+			var shown_as := BattleData.to_id(str(dex.get("name", id)) + str(form.get("name", "")))
+			var listed: Variant = pokedex.get(shown_as)
+			if form.get("battleOnly", false) or form_aspects.is_empty():
+				continue
+			if listed is Dictionary and shown_as != id and not listed.get("isCosmeticForme", false):
+				continue
+			var name := str(form.get("name", ""))
+			var form_id: String = SYMBOL_FORM_IDS.get(name, BattleData.to_id(name))
+			if not form_id.is_empty() and form_id != FEMALE:
+				forms.append({"id": form_id, "name": name, "aspects": aspects + form_aspects})
+	var gender := str(dex.get("gender", ""))
+	if gender != "M" and gender != "N":
+		var chance := 1.0 if gender == "F" else float((dex.get("genderRatio", {}) as Dictionary).get("F", 0.5))
+		forms.append({"id": FEMALE, "name": "Female", "aspects": aspects + [FEMALE], "chance": chance})
+	return forms
 
 
 ## Scale, height and hitbox radius. Cobblemon draws a model at `base_scale` and gives it a

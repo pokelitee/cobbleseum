@@ -10,6 +10,9 @@ extends Node3D
 ## [--ai=<profile>] [--vs-ai=<profile>] [--seed=N] for AI against AI. --arena=<name> (or a
 ## spec's "arena") picks the arena (a preset in Arenas); otherwise the seed picks one that suits
 ## the fighters' types. The arena is part of the battle: its field's terrain (§9.8).
+## --shiny=a|b|both|none, --form=<form> and --vs-form=<form> set how the fighters look; the seed
+## rolls what they leave out (Appearance). A spec's fighters may say the same with "shiny" and
+## "form". A shiny sparkles as the battle opens and has a sparkle on its name plate.
 ##
 ## Play mode (--play=<species> [--vs=<species>] [--ai=<profile>] [--seed=N], or a spec with
 ## "ai": "player"): the battle runs live, one tick per 1/30 s, since a player's choices can't
@@ -136,6 +139,11 @@ func _ready() -> void:
 	var loaded := BattleData.load_all()
 	if loaded.has("error"):
 		return _fail(loaded.error)
+	if not options.flag_spec.is_empty():
+		Appearance.roll_missing(spec, loaded.data.roster)
+	var looks_problem := Appearance.check(spec, loaded.data.roster)
+	if not looks_problem.is_empty():
+		return _fail(looks_problem)
 	var controllers := Controllers.for_spec(spec)
 	if controllers.has("error"):
 		return _fail(controllers.error)
@@ -162,11 +170,16 @@ func _ready() -> void:
 	_build_stage(battle.arena)
 	if _player_camera != null:
 		_player_camera.limit = _arena.camera_limit
+	var looks: Array[Dictionary] = []
 	for side in 2:
 		var entry: Dictionary = loaded.data.roster[battle.fighters[side].species_id]
-		var view := FighterView.from_model(MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
+		var look := Appearance.resolve(entry, spec.fighters[side], MODELS_DIR)
+		if not look.warning.is_empty():
+			printerr("warning: " + look.warning)
+		looks.append(look)
+		var view := FighterView.from_model(MODELS_DIR.path_join(look.model), entry.scale, entry.height, skin_path(look))
 		if view == null:
-			return _fail("cannot load the model %s; run tools/assets.gd" % entry.model)
+			return _fail("cannot load the model %s; run tools/assets.gd" % look.model)
 		add_child(view)
 		view.set_hovering("Flying" in battle.fighters[side].types or view.floats())
 		_views.append(view)
@@ -188,14 +201,15 @@ func _ready() -> void:
 	var portraits := []
 	for side in 2:
 		var entry: Dictionary = loaded.data.roster[battle.fighters[side].species_id]
-		var portrait := FighterPortrait.create(MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
+		var portrait := FighterPortrait.create(MODELS_DIR.path_join(looks[side].model), entry.scale, entry.height, skin_path(looks[side]))
 		if portrait != null:
 			add_child(portrait)
 		portraits.append(portrait.get_texture() if portrait != null else null)
 	_hud = Hud.new()
 	_hud.move_effects_credit = _move_fx.cobblemon != null
 	add_child(_hud)
-	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types], portraits)
+	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types], portraits,
+		[looks[0].shiny, looks[1].shiny])
 	var arena_name: String = Arenas.preset(battle.arena).get("name", battle.arena)
 	_sound = BattleSound.new()
 	add_child(_sound)
@@ -211,6 +225,9 @@ func _ready() -> void:
 	_arena_sound.start()
 	_views[0].play_role_after("cry", 0)
 	_views[1].play_role_after("cry", BattleSound.INTRO_CRY_GAP)
+	for side in 2:
+		if looks[side].shiny:
+			_move_fx.sparkle(_views[side], 0 if side == 0 else BattleSound.INTRO_CRY_GAP)
 	_fx = ImpactFX.new()
 	_fx.layer = 2  # callouts and impact frames draw over the HUD
 	add_child(_fx)
@@ -772,6 +789,11 @@ func _add_crowd(data: BattleData) -> void:
 			_crowd.add_watcher(view, seats[i], _views[i % 2])
 			view.set_hovering("Flying" in data.species[ids[i]].get("types", []) or view.floats())
 	_crowd.build()
+
+
+## The path of a look's shiny skin (Appearance.resolve()), or "" for none.
+static func skin_path(look: Dictionary) -> String:
+	return MODELS_DIR.path_join(look.skin) if not look.skin.is_empty() else ""
 
 
 ## Heights of the HUD's top and bottom bands, matching the layout in Hud.setup.
