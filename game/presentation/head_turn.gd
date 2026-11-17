@@ -13,5 +13,8 @@ func _process_modification() -> void:
 		return
 	var parent := skeleton.get_bone_parent(bone)
 	var parent_basis := skeleton.get_bone_global_pose(parent).basis if parent >= 0 else Basis.IDENTITY
+	# Some Cobblemon animations scale a bone to zero to hide it; its basis then can't be inverted.
+	if is_zero_approx(parent_basis.determinant()):
+		return
 	var up := (parent_basis.inverse() * Vector3.UP).normalized()
 	skeleton.set_bone_pose_rotation(bone, Quaternion(up, yaw) * skeleton.get_bone_pose_rotation(bone))
