@@ -3,7 +3,7 @@
   "leftovers": {"name": "Leftovers", "heal_per_second": 0.0125},
   "blacksludge": {"name": "Black Sludge", "heal_per_second": 0.0125, "needs_type": "Poison"},
   "shellbell": {"name": "Shell Bell", "heal_from_damage": 0.125},
-  "lifeorb": {"name": "Life Orb", "power": 1.3, "hit_cost": 0.017},
+  "lifeorb": {"name": "Life Orb", "power": 1.3, "hit_cost": 0.006},
   "expertbelt": {"name": "Expert Belt", "super_effective_power": 1.2},
   "muscleband": {"name": "Muscle Band", "physical_power": 1.1},
   "wiseglasses": {"name": "Wise Glasses", "special_power": 1.1},

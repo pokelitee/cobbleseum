@@ -143,7 +143,7 @@ func test_life_orb_costs_hp_per_hit_and_rocky_helmet_hits_back() -> void:
 	_run(battle, 15)
 	var costs := battle.events.filter(func(e: Dictionary) -> bool: return e.type == "item_damage" and e.side == 0)
 	assert_eq(costs.size(), 2, "Life Orb's cost and the helmet")
-	assert_eq(a.hp, a.max_hp - roundi(a.max_hp * 0.017) - roundi(a.max_hp * 0.03))
+	assert_eq(a.hp, a.max_hp - roundi(a.max_hp * 0.006) - roundi(a.max_hp * 0.03))
 	assert_true("rockyhelmet" in _items_shown(battle, 1))
 
 

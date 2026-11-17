@@ -51,7 +51,7 @@ Non-goals:
   - Pokémon GO as an asset source.
 - **Left out of the first version:**
   - Terastallization, Mega Evolution and Gigantamax.
-  - Abilities and held items, until M9 adds a first set of each (§9.9, §9.10).
+  - Abilities and held items beyond M9's first sets (§9.9, §9.10).
   - Arena moves such as weather, Pokémon's terrains, entry hazards and screens.
 
 ## 4. Constraints
@@ -445,7 +445,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 ### 9.2 Fighters
 
 - **Stats:** level 50, all IVs 31, no EVs and a neutral nature, so stats come from the species alone.
-- **HP:** the HP stat times a global HP multiplier (22 after the first tuning pass, §9.7). Tuning the multiplier sets battle length.
+- **HP:** the HP stat times a global HP multiplier (22 after the first tuning pass, 19 since held items in rules version 19, §9.7). Tuning the multiplier sets battle length.
 - **Speed:** the Speed stat maps into a band of movement speeds. It also sets how quickly dodges recharge.
 - **Dodges:** each fighter has 2 dodge charges, each recharging in 3 s (slowest) to 1.5 s (fastest, by Speed). A dodge is a 2.5 m dash over 0.2 s, invulnerable throughout: projectiles fly on through and melee strikes whiff. A fighter can't dodge while winding up or recovering, so attacking commits it.
 - **Feints** (rules version 16): a fighter can fake the wind-up of a ready melee or area move that's in reach. A melee feint dashes in like the real thing. The feint breaks off, unreleased, with 3 ticks of the wind-up left, so to the foe it looks like a strike until its last moments, and both AIs dodge it as one. It deals no damage and spends none of the move's cooldown, but the fighter can't feint again for 3 s, and it can't dodge while feinting. The point is to draw a dodge, ideally the foe's last charge, and strike while the foe can't dodge. Projectile, heal and status wind-ups can't be feinted: nothing reacts to them before the release. In play, hold Shift (or LB) with a move key.
@@ -600,6 +600,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 19** (held items, §9.10; 1,000 battles, same seed as the version 18 batch). With the HP multiplier left at 22, items stretched battles to a median of 47.1 s with 6.4% draws: Eviolite, the standard item of 470 roster entries, makes unevolved species half again as bulky. The multiplier went to 19, which gives a median of 42.5 s (41.3 s under version 18), 10th–90th percentile 21.6–78.6 s, draws 4.5% (2.9%), side A 49.9%, hits 53.0 a battle. Hard against ranked: median 48.8 s, draws 7.3% (4.8%), hard wins 54.5%; its draws gather where Eviolite is (7–8% of battles in which either side holds one, 5% otherwise). Standard items: Eviolite 470, Expert Belt 208, Life Orb 124, Leftovers 92, Rocky Helmet 54, Sitrus Berry 29, Assault Vest 22, Black Sludge 2. A paired probe (400 random matchups, side A's item on and off) puts an item at about 10 points of win rate (42.0% to 51.9%), Eviolite and Leftovers most.
 - **Rules version 18** (abilities, §9.9; movesets now weigh the standard ability, §9.6; 1,000 battles, same seed as the version 17 batch): median 41.3 s (41.2 s), 10th–90th percentile 20.7–74.7 s, draws 2.9% (2.5%), side A 48.5% (48.2%), hits 51.4 a battle (51.3); abilities announce themselves 0.9 times a battle (most act quietly on damage). Hard against ranked: hard wins 54.4% (55.3%). A paired probe (400 random matchups whose side A has an ability, each played with and without it, same seeds) puts an ability at about 2 points of win rate (48.1% to 50.1%); Overgrow, Flash Fire and Thick Fat moved most, while most matchups end the same either way.
 - **Rules version 17** (guarding, §9.2; 1,000 battles, same seed as a version 16 batch): median 41.2 s (41.8 s under version 16), 10th–90th percentile 22.1–73.6 s, draws 2.5% (2.9%), side A 48.2% (49.3%), hits 51.3 a battle (51.4), dodges 8.4 (8.8). The ranked AI guards 0.6 times a battle, blocking 0.5 hits, 0.1 of them parries; its reaction delay leaves it too late for most melee strikes, so it mostly guards projectiles and area moves. Hard against ranked (1,000 battles): hard wins 55.3% of decided battles (53.9%), guarding 1.7 times a battle with 0.5 parries, and a fifth of its foe's feints now draw a guard. Guarding adds a visible answer without moving balance.
 - **Rules version 16** (feints, §9.2; 1,000 battles, same seed as a version 15 batch): median 41.1 s (40.0 s under version 15), 10th–90th percentile 21.2–75.3 s, draws 2.4% (2.8%), side A 48.2% (50.3%), hits 50.8 a battle (50.3), dodges 8.5 (8.5). The ranked AI feints 0.54 times a battle. 20% of feints draw a dodge, and half of those dodges are punished by a hit. Openings are rare: the foe has to be down to its last dodge charge while a melee or area move is ready and in reach. Hard against ranked (1,000 battles): hard wins 58.6% of decided battles, against 58.3% under version 15, with 1.1 feints a battle. Feints add a tactic you can see without moving results.
@@ -658,16 +659,18 @@ Since rules version 18 (M9). Showdown implements abilities in code, so its data 
 
 ### 9.10 Held items
 
-Planned for rules version 19 (M9). Like abilities, item effects are our own table, keyed by Showdown's item IDs.
+Since rules version 19 (M9). Like abilities, item effects are our own table, `game/data/items.json`, keyed by Showdown's item IDs and read only by `Items` (`game/sim/items.gd`).
 
-- **Which item:** each species gets a **standard item** by one policy from its stats, types and standard moveset, for example Eviolite for a species that can still evolve, Assault Vest for a bulky one whose moveset has no status-category move, Life Orb for a frail attacker, Black Sludge for a Poison type, and Leftovers otherwise. A battle spec can name another with `"item"` (`""` for none). Items are known to both sides, like abilities.
-- **First set** (about 15), with the readings of §9.9:
+- **Which item:** each species gets a **standard item** by one policy on its base stats, types and standard moveset, the first that fits of: Eviolite if it can still evolve; Assault Vest if HP, Defense and Sp. Def add up to 280 or more and its moveset has no status-category move; Life Orb if its better attacking stat is 110 or more and that bulk is under 260; Rocky Helmet if its Defense is 110 or more and 20 above its Sp. Def; Expert Belt if it attacks with three types or more; Sitrus Berry if its HP is 100 or more; Black Sludge for a Poison type; Leftovers otherwise. Shell Bell, Muscle Band, Wise Glasses, the type boosters, Focus Sash and Lum Berry are never standard; a battle spec can give them. A battle spec can name any item with `"item"` (`""` for none), and an item outside the table is an error. Items are known to both sides, like abilities.
+- **First set** (31, 18 of them type boosters), with the readings of §9.9:
   - Leftovers and Black Sludge (restore a share of max HP each second; Black Sludge hurts non-Poison types), Shell Bell (restores a share of damage dealt);
   - Life Orb (damage ×1.3, a small share of max HP lost per hit), Expert Belt (super-effective ×1.2), Muscle Band and Wise Glasses (physical or special ×1.1), type boosters such as Charcoal (×1.2 to one type);
   - Assault Vest (Sp. Def ×1.5, status-category moves can't be used), Eviolite (Defense and Sp. Def ×1.5 for a species that can evolve), Rocky Helmet (a melee attacker loses a share of its max HP);
   - Focus Sash (from full HP, the first knockout blow leaves 1 HP), Sitrus Berry (restores 1/4 of max HP once, at half HP or less), Lum Berry (cures the first status condition or confusion).
 - **Left out:** Choice items (locking into one move has no clear real-time reading), Mega Stones and Z-Crystals, and items about switching, accuracy or weather.
-- **Presentation:** a consumed item or one that triggers shows its name over the fighter.
+- **Amounts:** Leftovers and Black Sludge move 1/80 of max HP a second (Black Sludge hurts a holder that isn't Poison); Shell Bell restores 1/8 of damage dealt; Life Orb costs 1/170 of max HP a hit (a probe found 1/60 and 1/100 left its holders no better off than without it) and Rocky Helmet takes 1/33 from a melee attacker (Magic Guard ignores both); type boosters are ×1.2. Focus Sash, Sitrus Berry and Lum Berry are used once.
+- **AI:** expected damage includes items (`Battle.damage_parts`), an Assault Vest's status moves never count as ready, and the utility AI discounts melee moves against a Rocky Helmet as against a contact-punishing ability.
+- **Presentation:** an item that takes effect or is used up shows its name over the fighter (`item` events); Life Orb's and Rocky Helmet's damage shows like recoil; the steady healing of Leftovers is a quiet `regen` event, seen only on the HP bar.
 
 ## 10. Simulation and determinism
 
@@ -688,7 +691,7 @@ Planned for rules version 19 (M9). Like abilities, item effects are our own tabl
 
 **Battle spec** (input):
 - rules version and data versions (manifest hashes): `"rules_version"`, and `"data_versions"` with the SHA-256 that `sources.json` pins for each source. Saved specs always have them; a hand-written spec may leave them out and then plays under any;
-- the two roster entries, their movesets and their abilities (§9.9);
+- the two roster entries, their movesets, abilities and held items (§9.9, §9.10);
 - the AI profile for each side (`"ai"` per fighter; default `ranked`);
 - the seed.
 
@@ -1133,11 +1136,11 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - Music and crowd sound. Done (§12.5, §12.7): three original tracks rendered from scores with General MIDI instruments, picked by the seed with variants, a victory sting and overtime's climax layer; the crowd's murmur, cheers and roar in coliseums and each field's ambience in the open.
 - For clips, title cards, captions and an instant replay of the knockout. Done (§12.3, §12.5): the intro card names the arena (and overtime), "COMEBACK!" and "FINAL BLOW" captions, and an instant replay of the knockout from new angles before the victory.
 
-**M9: abilities, items and guarding.** The rules items from "Later" that need no arena moves (§9.2, §9.9, §9.10), one pull request and rules version each, with the AIs taught to use them, tests, a balance batch, and presentation in both clip formats. The ranking (§13) waits until the rules settle.
+**M9: abilities, items and guarding. Done (2026-11-17).** The rules items from "Later" that need no arena moves (§9.2, §9.9, §9.10), one pull request and rules version each, with the AIs taught to use them, tests, a balance batch, and presentation in both clip formats. A fresh ranking (§13) under rules version 19 is still to be run.
 
 - Guarding: a timed parry with a cooldown, which feints can bait. Done (rules version 17, §9.2, §11).
 - Abilities: a standard ability per species from a first set of 78. Done (rules version 18, §9.9).
-- Held items: a standard item per species from a first set of about 15. Rules version 19. Planned.
+- Held items: a standard item per species from a first set of 31. Done (rules version 19, §9.10).
 
 **Later:**
 

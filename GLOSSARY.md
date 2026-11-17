@@ -44,7 +44,7 @@ The number a battle's luck, arena and terrain come from.
 The number of one set of battle rules. Every change that can change how a battle turns out gets a new one.
 
 **Battle spec**:
-Everything needed to reproduce a battle exactly: the rules and data versions, the two fighters with their movesets and abilities, each side's AI profile, the arena and the seed, plus every tick's intents for a player's side.
+Everything needed to reproduce a battle exactly: the rules and data versions, the two fighters with their movesets, abilities and held items, each side's AI profile, the arena and the seed, plus every tick's intents for a player's side.
 _Avoid_: replay file, config
 
 **Replay**:
@@ -80,6 +80,13 @@ _Avoid_: trait, passive, skill
 
 **Standard ability**:
 The ability a species gets from the one policy applied to every species: its highest-valued ability in the table. A battle uses it unless its battle spec names another.
+
+**Held item**:
+An item a fighter carries into battle, such as Leftovers or a Sitrus Berry, with an effect from Cobbleseum's own table. A fighter has at most one, and some are used up.
+_Avoid_: item (alone, where it could mean anything else), equipment
+
+**Standard item**:
+The held item a species gets from the one policy applied to every species, from its stats, types and standard moveset. A battle uses it unless its battle spec names another.
 
 **Move kind**:
 How a move plays in real time: melee, projectile, area, self-buff, debuff, heal or status.
