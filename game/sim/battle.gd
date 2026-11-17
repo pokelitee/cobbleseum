@@ -741,8 +741,9 @@ func _start_conditions() -> void:
 ## usual time or longer with the matching rock.
 func _set_weather(setter: Fighter, weather: String, source: Dictionary) -> void:
 	var ticks := ArenaConditions.weather_ticks_for(setter, weather)
+	var renewed := conditions.weather == weather
 	conditions.set_weather(weather, ticks)
-	var details := {"weather": weather, "seconds": ticks / float(Rules.TICK_RATE)}
+	var details := {"weather": weather, "seconds": ticks / float(Rules.TICK_RATE), "renewed": renewed}
 	details.merge(source)
 	_event("weather", setter.side, details)
 

@@ -660,8 +660,9 @@ func _play_events() -> void:
 				_views[event.side].take_hit()
 				_fx.announce(_views[event.side], "-%d" % event.damage, Color(1, 1, 1), 44)
 			"weather":
-				# A battle's starting weather shows on the intro card and the HUD instead.
-				if not _replaying and int(event.tick) > 0:
+				# A battle's starting weather shows on the intro card and the HUD instead, and a
+				# renewed one only refills the HUD's timer.
+				if not _replaying and int(event.tick) > 0 and not event.get("renewed", false):
 					_hud.flash_title(WEATHER_STARTS[event.weather], WEATHER_COLOURS[event.weather])
 			"weather_end":
 				if not _replaying:

@@ -22,6 +22,8 @@ const LOOKS := {
 }
 ## Fog density never drops below this, so a clear arena's weather still hazes the distance.
 const MIN_FOG := 0.006
+## Particles fade in between these distances from the camera (metres).
+const NEAR_FADE := Vector2(1.5, 4.0)
 
 var _sun: DirectionalLight3D
 var _environment: Environment
@@ -135,6 +137,10 @@ func _emitter(name: String) -> CPUParticles3D:
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.vertex_color_use_as_albedo = true
 	material.albedo_color = Color(1, 1, 1, 0)
+	# Particles right in front of the camera would streak across the frame: they fade out there.
+	material.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+	material.distance_fade_min_distance = NEAR_FADE.x
+	material.distance_fade_max_distance = NEAR_FADE.y
 	quad.material = material
 	particles.mesh = quad
 	_materials[name] = material

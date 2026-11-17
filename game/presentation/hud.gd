@@ -459,6 +459,7 @@ func show_victory(side: int, name: String, hp_share: float, seconds: float) -> v
 ## A title flashed in the middle of the screen, e.g. "Overtime!".
 func flash_title(text: String, colour: Color) -> void:
 	var title := _label(text, 96, colour, true)
+	_fit_width(title, _size.x - 120.0 * _scale)
 	title.size = title.get_minimum_size()
 	title.position = (_size - title.size) * Vector2(0.5, 0.35)
 	add_child(title)
