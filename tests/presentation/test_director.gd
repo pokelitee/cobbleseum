@@ -142,3 +142,63 @@ func test_captions_mark_the_final_blow_and_each_fighters_first_comeback() -> voi
 		{"tick": 70, "text": Director.COMEBACK_CAPTION, "side": 0},
 		{"tick": 280, "text": Director.FINAL_BLOW_CAPTION, "side": 0},
 	], "one comeback each, none on the finishing hit, then the final blow")
+
+
+## Both fighters trade blows every half second, strong moves and heavy hits included.
+func _busy_events() -> Array:
+	var events: Array = []
+	for i in 40:
+		var tick := 20 + i * 15
+		var side := i % 2
+		events.append({"tick": tick, "type": "windup", "side": side, "move": "cannon" if side == 0 else "kick"})
+		events.append({"tick": tick + 8, "type": "hit", "side": side, "move": "cannon" if side == 0 else "kick", "damage": 45 if i % 3 == 0 else 10,
+			"crit": i % 7 == 0, "effectiveness": 1.0, "hp": 200})
+	return events
+
+
+func test_every_shot_holds_about_a_second() -> void:
+	for seed in range(1, 6):
+		var plan := Director.plan(_busy_events(), 640, MAX_HP, MOVE_POWER, SimRandom.new(seed))
+		var shots: Array = plan.shots
+		for i in range(0, shots.size() - 1):
+			assert_true(shots[i].end - shots[i].start >= Director.MIN_SHOT_TICKS,
+				"shot %d (%s) lasts %d ticks" % [i, Director.Shot.keys()[shots[i].shot], shots[i].end - shots[i].start])
+		for i in range(1, shots.size()):
+			assert_eq(shots[i].start, shots[i - 1].end, "shots are contiguous")
+
+
+func test_a_close_up_arrives_as_the_move_goes_off() -> void:
+	var events := [
+		{"tick": 100, "type": "windup", "side": 1, "move": "cannon"},
+		{"tick": 110, "type": "fire", "side": 1, "move": "cannon"},
+	]
+	var plan := Director.plan(events, 400, MAX_HP, [{}, {"cannon": 110}], SimRandom.new(1))
+	var close_up := Director.shot_for(plan.shots, 100)
+	assert_eq([close_up.shot, close_up.side], [Director.Shot.CLOSE_UP, 1])
+	assert_eq([close_up.start, close_up.end], [110 - Director.CLOSE_UP_TICKS, 110], "a second before the release, ending on it")
+
+
+func test_a_short_shot_gives_way_to_a_more_important_one() -> void:
+	# A projectile in flight for 15 ticks, then a heavy hit: the tracking shot can't hold a
+	# second before the punch-in, so the shot before it runs on into the punch-in.
+	var events := [
+		{"tick": 200, "type": "fire", "side": 0, "move": "jet"},
+		{"tick": 215, "type": "hit", "side": 0, "move": "jet", "damage": 100, "crit": false, "effectiveness": 1.0, "hp": 300},
+	]
+	var plan := Director.plan(events, 400, MAX_HP, MOVE_POWER, SimRandom.new(1))
+	var impact := Director.shot_for(plan.shots, 215)
+	assert_eq([impact.shot, impact.start], [Director.Shot.IMPACT, 215], "the punch-in still lands on the hit")
+	assert_true(Director.shot_for(plan.shots, 205).shot != Director.Shot.TRACKING, "the short tracking shot is dropped")
+
+
+func test_close_ups_leave_room_between_them() -> void:
+	var events := [
+		{"tick": 100, "type": "windup", "side": 0, "move": "cannon"},
+		{"tick": 110, "type": "fire", "side": 0, "move": "cannon"},
+		{"tick": 130, "type": "windup", "side": 1, "move": "cannon"},
+		{"tick": 140, "type": "fire", "side": 1, "move": "cannon"},
+	]
+	var power := [{"cannon": 110}, {"cannon": 110}]
+	var plan := Director.plan(events, 400, MAX_HP, power, SimRandom.new(1))
+	assert_eq(Director.shot_for(plan.shots, 105).shot, Director.Shot.CLOSE_UP)
+	assert_true(Director.shot_for(plan.shots, 135).shot != Director.Shot.CLOSE_UP, "no second close-up straight after")

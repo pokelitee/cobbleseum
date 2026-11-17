@@ -10,13 +10,23 @@ enum Shot { WIDE, OVER_SHOULDER, CLOSE_UP, TRACKING, IMPACT, KNOCKOUT, VICTORY }
 
 ## Shots that may interrupt others, highest priority last.
 const PRIORITY: Array[Shot] = [Shot.WIDE, Shot.OVER_SHOULDER, Shot.TRACKING, Shot.CLOSE_UP, Shot.IMPACT, Shot.KNOCKOUT, Shot.VICTORY]
-const BASE_SHOT_MIN_TICKS := 90
-const BASE_SHOT_MAX_TICKS := 180
-## A wind-up gets a close-up when its move is at least this strong.
+## The knockout and the victory cut in on time, whatever shot they interrupt.
+const FORCED_CUTS: Array[Shot] = [Shot.KNOCKOUT, Shot.VICTORY]
+## Every shot holds at least this long (about a second), so the edit never jitters.
+const MIN_SHOT_TICKS := 30
+const BASE_SHOT_MIN_TICKS := 150
+const BASE_SHOT_MAX_TICKS := 270
+## A wind-up gets a close-up when its move is at least this strong. The close-up covers the
+## CLOSE_UP_TICKS before the move's release, starting before the wind-up when that is shorter,
+## so it can hold long enough and arrives as the move goes off.
 const CLOSE_UP_POWER := 90
+const CLOSE_UP_TICKS := 30
+## A close-up waits this long after the last close-up or punch-in, so the wide and
+## over-the-shoulder shots get room between them.
+const CLOSE_UP_GAP_TICKS := 60
 ## Projectiles get a tracking shot when they fly at least this long.
-const TRACKING_MIN_TICKS := 8
-const IMPACT_TICKS := 12
+const TRACKING_MIN_TICKS := 15
+const IMPACT_TICKS := 30
 ## A hit is "heavy" (punch-in, longer hit-stop) at this share of the defender's max HP.
 const HEAVY_HIT_SHARE := 0.1
 const HITSTOP_FRAMES := 2
@@ -69,13 +79,17 @@ static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array,
 	side_at.resize(length)
 
 	_base_shots(shot_at, side_at, random)
+	var busy_until := -CLOSE_UP_GAP_TICKS
 	for i in events.size():
 		var event: Dictionary = events[i]
 		match event.type:
 			"windup":
 				if int(move_power[event.side].get(event.move, 0)) >= CLOSE_UP_POWER:
 					var release := _next_tick(events, i, event.side, ["fire", "hit", "miss"], event.tick + 15)
-					_overlay(shot_at, side_at, event.tick, release, Shot.CLOSE_UP, event.side)
+					var start := mini(event.tick, release - CLOSE_UP_TICKS)
+					if start >= busy_until + CLOSE_UP_GAP_TICKS:
+						_overlay(shot_at, side_at, start, release, Shot.CLOSE_UP, event.side)
+						busy_until = release
 			"fire":
 				var landed := _next_tick(events, i, event.side, ["hit", "miss"], -1)
 				if landed - event.tick >= TRACKING_MIN_TICKS:
@@ -87,6 +101,7 @@ static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array,
 					hitstop[event.tick] += HEAVY_HITSTOP_FRAMES if heavy else HITSTOP_FRAMES
 				if heavy:
 					_overlay(shot_at, side_at, event.tick, event.tick + IMPACT_TICKS, Shot.IMPACT, defender)
+					busy_until = maxi(busy_until, event.tick + IMPACT_TICKS)
 	var victory := {}
 	if not knockout.is_empty():
 		_overlay(shot_at, side_at, knockout.start, victory_start, Shot.KNOCKOUT, knockout.loser)
@@ -94,7 +109,7 @@ static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array,
 			slow[tick] = KNOCKOUT_FRAMES_PER_TICK
 		victory = {"start": victory_start, "side": 1 - int(knockout.loser)}
 		_overlay(shot_at, side_at, victory_start, length, Shot.VICTORY, victory.side)
-	return {"hitstop": hitstop, "slow": slow, "shots": _segments(shot_at, side_at), "victory": victory,
+	return {"hitstop": hitstop, "slow": slow, "shots": _calm(_segments(shot_at, side_at)), "victory": victory,
 		"replay": _replay(knockout, victory_start), "captions": _captions(events, max_hp, knockout)}
 
 
@@ -128,8 +143,11 @@ static func _base_shots(shot_at: PackedInt32Array, side_at: PackedInt32Array, ra
 		wide = not wide
 
 
+## Asks for `shot` over ticks [start, end) where nothing more important is asked for. Only the
+## knockout and the victory may start before the opening wide shot has held MIN_SHOT_TICKS.
 static func _overlay(shot_at: PackedInt32Array, side_at: PackedInt32Array, start: int, end: int, shot: Shot, side: int) -> void:
-	for t in range(maxi(start, 0), mini(end, shot_at.size())):
+	var first := 0 if shot in FORCED_CUTS else MIN_SHOT_TICKS
+	for t in range(maxi(start, first), mini(end, shot_at.size())):
 		if PRIORITY.find(shot) >= PRIORITY.find(shot_at[t] as Shot):
 			shot_at[t] = shot
 			side_at[t] = side
@@ -188,6 +206,56 @@ static func _next_tick(events: Array, from: int, side: int, types: Array, fallba
 		if events[j].side == side and events[j].type in types:
 			return events[j].tick
 	return fallback
+
+
+## The edit with every shot held at least MIN_SHOT_TICKS (concepts_brief.md §12.3), from the
+## segments each tick asked for. A shot asked for while the current one is still too short is
+## pushed back to when it has held long enough, if enough of it is left then, and otherwise
+## dropped, the current shot running on over it. A more important shot (higher in PRIORITY)
+## doesn't wait: the short shot before it is dropped instead, its time going to the shot
+## before that. The knockout and the victory always cut in on time. The opening shot is never
+## dropped, so battles open wide.
+static func _calm(asked: Array) -> Array:
+	var shots: Array = []
+	for segment: Dictionary in asked:
+		var next := segment.duplicate()
+		while true:
+			if shots.is_empty():
+				shots.append(next)
+				break
+			var current: Dictionary = shots[-1]
+			if _same_shot(current, next):
+				current.end = next.end
+				break
+			var held := int(next.start) - int(current.start)
+			if held >= MIN_SHOT_TICKS:
+				shots.append(next)
+				break
+			var forced: bool = next.shot in FORCED_CUTS
+			if shots.size() > 1 and (forced or _rank(next) > _rank(current)):
+				shots.pop_back()
+				shots[-1].end = current.end
+				continue
+			if forced:
+				shots.append(next)
+				break
+			var cut := int(current.start) + MIN_SHOT_TICKS
+			if int(next.end) - cut >= MIN_SHOT_TICKS:
+				current.end = cut
+				next.start = cut
+				shots.append(next)
+			else:
+				current.end = next.end
+			break
+	return shots
+
+
+static func _same_shot(a: Dictionary, b: Dictionary) -> bool:
+	return a.shot == b.shot and a.side == b.side
+
+
+static func _rank(segment: Dictionary) -> int:
+	return PRIORITY.find(segment.shot as Shot)
 
 
 static func _segments(shot_at: PackedInt32Array, side_at: PackedInt32Array) -> Array:
