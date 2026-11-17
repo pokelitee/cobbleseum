@@ -1,8 +1,8 @@
 class_name Hud
 extends CanvasLayer
 ## The battle HUD (concepts_brief.md §12.1, §12.5): a name plate per fighter (its portrait,
-## name, a gold sparkle for a shiny (§12.8), type pills, status badges, and a rounded HP bar
-## with a lagging damage segment and its percentage), move-name banners, captions, the instant replay's tag, and the intro, victory,
+## name, a gold sparkle for a shiny (§12.8), type pills, and a rounded HP bar with a lagging
+## damage segment and its percentage, with a row of effect badges under it), move-name banners, captions, the instant replay's tag, and the intro, victory,
 ## winner and credits cards, in the game's fonts (UiFonts).
 ## Layout follows the orientation: portrait has side B at the top and side A at the bottom;
 ## landscape has side A top-left and side B top-right. Everything animates per video frame.
@@ -33,16 +33,21 @@ const BAR_HEIGHT := 36.0
 ## The fighter's portrait fills the plate's height on its outer end, this far from the name.
 const PORTRAIT_SIZE := BAR_TOP + BAR_HEIGHT
 const PORTRAIT_GAP := 16.0
-## Banners sit this far below the panel's origin (above it for portrait's bottom plate).
-const BANNER_BELOW := 150.0
+## The effect row (HudBadge) sits this far under the HP bar, below the plate.
+const EFFECT_ROW_GAP := 22.0
+## Banners sit this far below the panel's origin, under the effect row (above the panel for
+## portrait's bottom plate).
+const BANNER_BELOW := 196.0
 const BANNER_ABOVE := -86.0
-## Uses a non-breaking hyphen so the licence name never wraps mid-word.
-## Badge text and colour per status condition.
+## Portrait's bottom plate sits this far above the bottom edge, leaving its effect row clear of
+## the credit line.
+const BOTTOM_PLATE_RISE := 270.0
+## Badge code and colour per status condition, confusion and screen (PlateEffects' keys).
 const STATUS_BADGES := {
 	"brn": ["BRN", Color("ff7a2e")], "par": ["PAR", Color("e8c21c")], "psn": ["PSN", Color("b45ad6")],
 	"tox": ["TOX", Color("8e3fb0")], "slp": ["SLP", Color("8a8a9a")], "frz": ["FRZ", Color("5cc8e0")],
 	"confusion": ["CNF", Color("ff5f9e")],
-	"reflect": ["REFLECT", Color("e0559a")], "lightscreen": ["L. SCREEN", Color("d4a51c")],
+	"reflect": ["REFL", Color("e0559a")], "lightscreen": ["LSCR", Color("d4a51c")],
 	"auroraveil": ["VEIL", Color("3ab8d8")],
 }
 ## The credits card; %s is the Cobblemon line (cobblemon_credit()).
@@ -64,9 +69,14 @@ var _lag_values: Array[float] = [1.0, 1.0]
 var _lag_waits: Array[int] = [0, 0]
 var _shakes: Array[int] = [0, 0]
 var _banners: Array[Dictionary] = []
-## Per side: status -> badge label, laid out in a row after the name.
-var _badge_rows: Array[HBoxContainer] = []
-var _badges: Array[Dictionary] = [{}, {}]
+## Per side: the type pills after the name.
+var _type_rows: Array[HBoxContainer] = []
+## Per side: the effect row under the HP bar, its badges by key, the x its start lines up with
+## (the bar's end nearer the portrait), and the width it may take (the bar's).
+var _effect_rows: Array[HBoxContainer] = []
+var _effects: Array[Dictionary] = [{}, {}]
+var _effect_anchors: Array[float] = []
+var _effect_room := 0.0
 var _intro: Control
 var _intro_age := 0
 var _winner: Label
@@ -138,7 +148,7 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 		var panel := Control.new()
 		var home: Vector2
 		if _portrait:
-			home = Vector2(margin, (90 if side == 1 else viewport_size.y / _scale - 220) * _scale)
+			home = Vector2(margin, (90 if side == 1 else viewport_size.y / _scale - BOTTOM_PLATE_RISE) * _scale)
 		else:
 			home = Vector2(margin if side == 0 else viewport_size.x - margin - _content_width, 40 * _scale)
 		panel.position = home
@@ -165,7 +175,6 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 			mark.position = Vector2(after_name + SHINY_MARK_GAP * _scale, (name_label.get_minimum_size().y - mark.size.y) * 0.5)
 			panel.add_child(mark)
 			after_name = mark.position.x + mark.size.x
-		# Type pills, then status badges as they come and go.
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", roundi(8 * _scale))
 		row.position = Vector2(after_name + 16 * _scale, 14 * _scale)
@@ -173,7 +182,7 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 		var own_types: Array = types[side] if side < types.size() else []
 		for type: String in own_types:
 			row.add_child(_pill(type.to_upper(), TypeColors.of(type)))
-		_badge_rows.append(row)
+		_type_rows.append(row)
 		var track := Panel.new()
 		track.position = Vector2(left, BAR_TOP * _scale)
 		track.size = Vector2(bar_width / _scale, BAR_HEIGHT) * _scale
@@ -200,6 +209,14 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 		percent.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		percent.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if mirrored else HORIZONTAL_ALIGNMENT_RIGHT
 		track.add_child(percent)
+		var effects := HBoxContainer.new()
+		effects.add_theme_constant_override("separation", roundi(8 * _scale))
+		effects.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		effects.position.y = (BAR_TOP + BAR_HEIGHT + EFFECT_ROW_GAP) * _scale
+		panel.add_child(effects)
+		_effect_rows.append(effects)
+		_effect_anchors.append(left + bar_width if mirrored else left)
+		_effect_room = bar_width
 		_panels.append(panel)
 		_panel_homes.append(home)
 		_bars.append(bar)
@@ -247,16 +264,35 @@ func set_hp(side: int, fraction: float, immediate := false) -> void:
 	bar.color = HEALTHY if fraction > 0.5 else (WARNING if fraction > 0.2 else DANGER)
 
 
-## Shows or hides a status badge ("brn", ..., or "confusion") beside a fighter's name.
-func set_status(side: int, status: String, active: bool) -> void:
-	if _badges[side].has(status):
-		_badges[side][status].queue_free()
-		_badges[side].erase(status)
-	if not active or not STATUS_BADGES.has(status):
-		return
-	var badge := _pill(STATUS_BADGES[status][0], STATUS_BADGES[status][1])
-	_badge_rows[side].add_child(badge)
-	_badges[side][status] = badge
+## Shows a fighter's effects in the row under its HP bar: `entries` as PlateEffects.read()
+## gives them, in order, each a square badge with its icon, code and timer. Badges come and go
+## with their keys; the row starts at the bar's end by the portrait and shrinks to fit the bar.
+func set_effects(side: int, entries: Array[Dictionary]) -> void:
+	var shown: Dictionary = _effects[side]
+	var row := _effect_rows[side]
+	var keys := entries.map(func(entry: Dictionary) -> String: return entry.key)
+	for key: String in shown.keys():
+		if not key in keys:
+			shown[key].free()
+			shown.erase(key)
+	for i in entries.size():
+		var entry := entries[i]
+		if not shown.has(entry.key):
+			var badge := _effect_badge(entry)
+			row.add_child(badge)
+			shown[entry.key] = badge
+		row.move_child(shown[entry.key], i)
+		(shown[entry.key] as HudBadge).set_left(float(entry.get("left", -1.0)))
+	row.size = row.get_combined_minimum_size()
+	row.scale = Vector2.ONE * minf(1.0, _effect_room / maxf(row.size.x, 1.0))
+	var mirrored := not _portrait and side == 1
+	row.position.x = _effect_anchors[side] - row.size.x * row.scale.x if mirrored else _effect_anchors[side]
+
+
+func _effect_badge(entry: Dictionary) -> HudBadge:
+	var badge: Array = STATUS_BADGES[entry.key]
+	var colour: Color = badge[1]
+	return HudBadge.new([[entry.key, colour], [badge[0], colour.lightened(0.35)]], colour, entry.has("left"), _scale)
 
 
 ## Shows the arena's conditions (§9.11) as pills at the top centre, between the landscape
@@ -645,7 +681,7 @@ func _matchup(names: Array) -> Control:
 	return card
 
 
-## A small rounded tag: a type or a status condition.
+## A small rounded tag in a type's colour.
 func _pill(text: String, colour: Color) -> Label:
 	var pill := _label(text, 24, Color.WHITE)
 	pill.add_theme_constant_override("outline_size", roundi(6 * _scale))

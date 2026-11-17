@@ -340,8 +340,6 @@ func _ready() -> void:
 		var fighter := battle.fighters[side]
 		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp, true)
 		# A clip can start mid-battle, after conditions were inflicted.
-		_hud.set_status(side, fighter.status, not fighter.status.is_empty())
-		_hud.set_status(side, "confusion", fighter.confusion_ticks > 0)
 		_views[side].set_asleep(fighter.status == "slp")
 	_track_smoothed()
 
@@ -715,13 +713,11 @@ func _play_events() -> void:
 				_move_fx.aura(_views[event.side], HEAL_COLOUR, true, true)
 				_fx.announce(_views[event.side], "+%d" % event.amount, HEAL_COLOUR)
 			"status":
-				_hud.set_status(event.side, event.status, true)
 				_fx.announce(_views[event.side], STATUS_CALLOUTS.get(event.status, ""),
 					Hud.STATUS_BADGES[event.status][1].lightened(0.3), 60)
 				if event.status == "slp":
 					_views[event.side].set_asleep(true)
 			"status_end":
-				_hud.set_status(event.side, event.status, false)
 				if event.status == "slp":
 					_views[event.side].set_asleep(false)
 			"status_damage":
@@ -799,9 +795,10 @@ func _play_events() -> void:
 
 ## The weather and surge shown last frame, their ticks left then, and the ticks they lasted in
 ## all (for the HUD's timers).
-## Screen panes in front of shielded fighters, and the screens each side's plate shows.
+## Screen panes in front of shielded fighters.
 var _screen_panes: ScreenPanes
-var _screen_badges := [{}, {}]
+## What each side's plate shows under its HP bar.
+var _plate_effects: Array[PlateEffects] = [PlateEffects.new(), PlateEffects.new()]
 var _weather_seen := ""
 var _weather_left := 0
 var _weather_total := 1.0
@@ -810,8 +807,8 @@ var _surge_left := 0
 var _surge_total := 1.0
 
 
-## Keeps the weather's and surge's looks and the HUD's condition pills in step with the battle
-## shown (the instant replay's copy included), one video frame at a time.
+## Keeps the weather's and surge's looks, the HUD's condition pills and each plate's effect row
+## in step with the battle shown (the instant replay's copy included), one video frame at a time.
 func _sync_conditions() -> void:
 	var conditions := battle.conditions
 	_arena.weather.show_weather(conditions.weather)
@@ -823,14 +820,7 @@ func _sync_conditions() -> void:
 		add_child(_screen_panes)
 	_screen_panes.sync(conditions.screens, _views, [battle.fighters[0].radius, battle.fighters[1].radius])
 	for side in 2:
-		for screen: String in ArenaConditions.SCREENS:
-			var up: bool = conditions.screens[side].has(screen)
-			if up != _screen_badges[side].has(screen):
-				_hud.set_status(side, screen, up)
-				if up:
-					_screen_badges[side][screen] = true
-				else:
-					_screen_badges[side].erase(screen)
+		_hud.set_effects(side, _plate_effects[side].read(battle.fighters[side]))
 	var entries := []
 	if not conditions.weather.is_empty():
 		# A new weather (or a renewed one) sets the timer's full length.

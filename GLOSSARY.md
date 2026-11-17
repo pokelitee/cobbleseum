@@ -278,6 +278,13 @@ _Avoid_: subtitle, callout (text over a fighter)
 The card that ends every clip, crediting Cobblemon and the other sources.
 _Avoid_: end card
 
+**Name plate**:
+A fighter's panel on the HUD: its portrait, name, type pills and HP bar, with its effect row under the bar.
+
+**Effect row**:
+The square badges under a name plate's HP bar for what is on the fighter now: its status condition, confusion and its side's screens, each with a draining timer. Type pills stay on the plate itself, so a condition never reads as a type.
+_Avoid_: status pills
+
 ### Rankings
 
 **Rating**:
