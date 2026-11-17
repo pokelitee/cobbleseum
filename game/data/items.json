@@ -36,5 +36,6 @@
   "smoothrock": {"name": "Smooth Rock", "weather_extends": "sand"},
   "icyrock": {"name": "Icy Rock", "weather_extends": "snow"},
   "utilityumbrella": {"name": "Utility Umbrella", "umbrella": true},
-  "terrainextender": {"name": "Terrain Extender", "surge_extends": true}
+  "terrainextender": {"name": "Terrain Extender", "surge_extends": true},
+  "lightclay": {"name": "Light Clay", "screen_extends": true}
 }

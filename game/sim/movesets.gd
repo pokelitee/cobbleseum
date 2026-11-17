@@ -38,6 +38,10 @@ const DEBUFF_VALUE := 40.0
 ## isn't sandproof this share of the time, so a sandstorm counts that much chip against it.
 const ARENA_VALUE_SCALE := 400.0
 const FOE_SAND_SHARE := 0.75
+## A screen is valued over a battle of this many seconds, up for SCREEN_SECONDS of every
+## SCREEN_COOLDOWN, against a typical foe whose attacks are half physical, half special.
+const SCREEN_BATTLE_SECONDS := 40.0
+const TYPICAL_CATEGORY_SHARE := 0.5
 const TYPES: Array[String] = ["Normal", "Fire", "Water", "Electric", "Grass", "Ice", "Fighting", "Poison",
 	"Ground", "Flying", "Psychic", "Bug", "Rock", "Ghost", "Dragon", "Dark", "Steel", "Fairy"]
 
@@ -182,6 +186,14 @@ static func utility_value(move: BattleMove, physical: bool) -> float:
 ## does a typical foe (which is grounded, for a surge).
 static func arena_value(move: BattleMove, types: Array, ability: String, attacks: Array[BattleMove]) -> float:
 	var seconds := Rules.WEATHER_SECONDS
+	if not move.screen.is_empty():
+		var share := 1.0 if move.screen == "auroraveil" else TYPICAL_CATEGORY_SHARE
+		var uptime := Rules.SCREEN_SECONDS / Rules.SCREEN_COOLDOWN
+		# Aurora Veil needs snow: worth it only to a species that brings its own.
+		if move.screen == "auroraveil" and Abilities.effect(ability).get("sets_weather", "") != "snow":
+			return 0.0
+		return (1.0 - ArenaConditions.SCREEN_FACTOR) * share * uptime * SCREEN_BATTLE_SECONDS / ArenaConditions.DAMAGE_SECONDS \
+			* ARENA_VALUE_SCALE
 	if not move.surge.is_empty():
 		return ArenaConditions.surge_gain(types, ability, attacks, move.surge, seconds, true) * ARENA_VALUE_SCALE
 	var gain := ArenaConditions.weather_gain(types, Abilities.effect(ability), {}, attacks, move.weather, seconds)

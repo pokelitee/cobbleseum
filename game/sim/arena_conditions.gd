@@ -1,7 +1,7 @@
 class_name ArenaConditions
 extends RefCounted
-## Arena conditions (concepts_brief.md §9.11): the weather over the whole battle and the surge
-## on its ground. The battle owns one and both fighters share it, so stats and damage read it
+## Arena conditions (concepts_brief.md §9.11): the weather over the whole battle, the surge
+## on its ground, and each side's screens. The battle owns one and both fighters share it, so stats and damage read it
 ## wherever they're worked out; a Fighter made on its own gets an empty one. Every rule about
 ## what a condition does lives here or in the ability and item tables.
 
@@ -48,6 +48,13 @@ const SOFTENED := 0.5
 ## Valuing a surge's protection: Electric's from sleep, Misty's from every status, as a share of
 ## HP a second.
 const SURGE_SHIELD := {"electric": 0.0005, "misty": 0.002}
+## Screens soften hits on their side: Reflect physical ones, Light Screen special ones, Aurora
+## Veil (only in snow) both. Critical hits and Infiltrator get through; these moves shatter the
+## foe's screens before they hit.
+const SCREENS: Array[String] = ["reflect", "lightscreen", "auroraveil"]
+const SCREEN_NAMES := {"reflect": "Reflect", "lightscreen": "Light Screen", "auroraveil": "Aurora Veil"}
+const SCREEN_FACTOR := 0.5
+const SCREEN_BREAKERS: Array[String] = ["brickbreak", "psychicfangs", "ragingbull"]
 ## Valuing a weather (weather_gain): a fighter deals about its foe's whole HP in a battle of
 ## this many seconds, so a damage factor is worth that rate over the weather's time; doubling
 ## walking speed is worth this share of HP a second.
@@ -59,6 +66,8 @@ var weather := ""
 var weather_ticks := 0
 var surge := ""
 var surge_ticks := 0
+## Each side's screens: {name: ticks left}.
+var screens: Array[Dictionary] = [{}, {}]
 
 
 ## The weather a Showdown move sets ("" for none).
@@ -100,7 +109,69 @@ func tick() -> Array[Dictionary]:
 		if surge_ticks == 0:
 			ended.append({"surge": surge})
 			surge = ""
+	for side in 2:
+		for name: String in screens[side].keys():
+			screens[side][name] -= 1
+			if screens[side][name] <= 0:
+				screens[side].erase(name)
+				ended.append({"screen": name, "side": side})
 	return ended
+
+
+## Raises screen `name` on `side` for `ticks`.
+func set_screen(side: int, name: String, ticks: int) -> void:
+	screens[side][name] = ticks
+
+
+## Ticks a screen raised by `setter` lasts: longer with Light Clay.
+static func screen_ticks_for(setter: Fighter) -> int:
+	var extended: bool = setter.item_effect.get("screen_extends", false)
+	return Rules.seconds_to_ticks(Rules.SCREEN_EXTENDED_SECONDS if extended else Rules.SCREEN_SECONDS)
+
+
+## The screens' multiplier on a hit of `move` on `defender` that isn't a critical hit.
+func screen_factor(attacker: Fighter, defender: Fighter, move: BattleMove) -> float:
+	var up: Dictionary = screens[defender.side]
+	if up.is_empty() or attacker.ability_effect.get("infiltrator", false) or move.fixed_damage > 0:
+		return 1.0
+	return SCREEN_FACTOR if covers(up, move) else 1.0
+
+
+## Whether the screens `up` ({name: ticks}) soften `move`.
+static func covers(up: Dictionary, move: BattleMove) -> bool:
+	return up.has("auroraveil") or up.has("reflect" if move.physical else "lightscreen")
+
+
+## Whether `fighter` can use `move` under the conditions: Aurora Veil only in snow.
+func usable(fighter: Fighter, move: BattleMove) -> bool:
+	return move.screen != "auroraveil" or weather == "snow"
+
+
+## What raising screen `name` now is worth to `me` against `foe`, as a share of HP: half the
+## foe's damage of the kinds it softens, over its time.
+func screen_value(me: Fighter, foe: Fighter, name: String) -> float:
+	if screens[me.side].has(name) or foe.ability_effect.get("infiltrator", false):
+		return 0.0
+	var seconds := screen_ticks_for(me) / float(Rules.TICK_RATE)
+	return screen_gain(foe.moves, name, seconds)
+
+
+## What screen `name` is worth over `seconds` against a foe with `attacks`: the share of its
+## damage (by power) the screen softens, halved.
+static func screen_gain(attacks: Array, name: String, seconds: float) -> float:
+	var total := 0.0
+	var softened := 0.0
+	var up := {name: 1}
+	for move: BattleMove in attacks:
+		if not move.is_damaging():
+			continue
+		var weight := move.power * move.expected_hits()
+		total += weight
+		if covers(up, move) and move.fixed_damage == 0:
+			softened += weight
+	if total <= 0.0:
+		return 0.0
+	return (1.0 - SCREEN_FACTOR) * softened / total * seconds / DAMAGE_SECONDS
 
 
 ## Ticks a weather set by `setter`'s move or ability lasts: longer with its extending item.

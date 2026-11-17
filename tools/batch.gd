@@ -182,7 +182,7 @@ static func summarise(rows: Array[Dictionary]) -> Dictionary:
 		kind_shares[kind] = float(kinds[kind]) / maxi(uses, 1)
 	var per_battle := {}
 	for type in ["hit", "miss", "dodge", "dodged", "status", "boost", "heal", "knockout", "time_up", "ability", "item", "feint",
-			"feint_drew_dodge", "feint_drew_guard", "feint_punished", "guard", "guarded", "parry", "weather", "weather_damage", "surge"]:
+			"feint_drew_dodge", "feint_drew_guard", "feint_punished", "guard", "guarded", "parry", "weather", "weather_damage", "surge", "screen"]:
 		per_battle[type] = float(events.get(type, 0)) / rows.size()
 	return {
 		"battles": rows.size(),

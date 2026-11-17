@@ -143,7 +143,8 @@ func can_dodge() -> bool:
 
 
 func move_ready(index: int) -> bool:
-	return index >= 0 and index < moves.size() and cooldowns[index] == 0 and not Items.forbids(self, moves[index])
+	return index >= 0 and index < moves.size() and cooldowns[index] == 0 and not Items.forbids(self, moves[index]) \
+		and arena.usable(self, moves[index])
 
 
 ## Whether move `index` can be feinted now: a ready melee or area move, feints off cooldown.

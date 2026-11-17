@@ -414,7 +414,7 @@ static func expected_damage(attacker: Fighter, defender: Fighter, move: BattleMo
 	if move.fixed_damage > 0:
 		return move.fixed_damage * move.expected_hits()
 	var parts := Battle.damage_parts(attacker, defender, move, data)
-	return parts.base * parts.factor * (Rules.ROLL_MIN + Rules.ROLL_MAX) * 0.5 * move.expected_hits()
+	return parts.base * parts.factor * parts.screen * (Rules.ROLL_MIN + Rules.ROLL_MAX) * 0.5 * move.expected_hits()
 
 
 ## Response curves, built once: input -> 0-1.

@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 21
+const RULES_VERSION := 22
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -139,6 +139,11 @@ const WEATHER_EXTENDED_SECONDS := 32.0
 ## a second, so with a status move's cooldown a weather stayed up all battle (a paired probe put
 ## carrying one at +23 points of win rate).
 const ARENA_MOVE_COOLDOWN := 30.0
+## Screens (Reflect, Light Screen, Aurora Veil) last SCREEN_SECONDS (longer with Light Clay),
+## and their moves cool down for SCREEN_COOLDOWN, so a screen is up a little over half the time.
+const SCREEN_SECONDS := 8.0
+const SCREEN_EXTENDED_SECONDS := 13.0
+const SCREEN_COOLDOWN := 14.0
 
 ## Stat stages run from -6 to +6 with the main-series multipliers (§9.5). They wear off:
 ## every STAGE_DECAY_SECONDS without a change, each stage moves one step back toward 0.
