@@ -32,6 +32,24 @@ extends Node3D
 ## exits with code 2 if the battle's checksum doesn't match --expect-checksum.
 
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
+## The view's own options, besides the battle flags (SpecFlags).
+const OPTIONS: Array[String] = ["ai-debug", "mesh-fx", "cobblemon-fx", "clip-seconds", "expect-checksum"]
+const HELP := """Cobbleseum: real-time battles with Cobblemon's models and Showdown's data.
+
+Usage: godot --path . [-- <spec.json> | <battle flags>] [options]
+With neither, the showcase battle plays.
+
+  <spec.json>              a battle spec, or a play-mode battle saved in recordings/specs/
+  --ai-debug               starts with the AI debug overlay on (F3 toggles it)
+  --mesh-fx                draws our mesh move styles instead of Cobblemon's effects
+
+%s
+
+%s
+
+In play mode: WASD or arrows move, Space dodges, J K L I or 1-4 use moves, G guards, hold
+Shift to feint; R starts a rematch after the knockout and Esc quits.
+Recording clips: tools/record.gd (--help there)."""
 const SPECS_DIR := "res://recordings/specs"
 ## Play mode: frames the controls hint stays up, and frames after the knockout before the
 ## battle spec is saved and the rematch hint shows.
@@ -148,7 +166,14 @@ var _smooth: SmoothMotion
 
 func _ready() -> void:
 	UiFonts.use_by_default()
-	var options := parse_args(OS.get_cmdline_user_args())
+	var args := OS.get_cmdline_user_args()
+	var handled := Cli.info(args, HELP % [Cli.SPEC_FLAGS_HELP, Cli.INFO_HELP])
+	if handled >= 0:
+		get_tree().quit(handled)
+		return
+	var options := parse_args(args)
+	if options.has("error"):
+		return _fail(options.error)
 	var spec: Variant = options.flag_spec if not options.flag_spec.is_empty() \
 		else JSON.parse_string(FileAccess.get_file_as_string(options.spec))
 	if spec is Dictionary and spec.has("error"):
@@ -158,6 +183,9 @@ func _ready() -> void:
 	var loaded := BattleData.load_all()
 	if loaded.has("error"):
 		return _fail(loaded.error)
+	var names_problem := Cli.check_spec(spec, loaded.data)
+	if not names_problem.is_empty():
+		return _fail(names_problem)
 	if not options.flag_spec.is_empty():
 		Appearance.roll_missing(spec, loaded.data.roster)
 	var looks_problem := Appearance.check(spec, loaded.data.roster)
@@ -170,6 +198,7 @@ func _ready() -> void:
 	if created.has("error"):
 		return _fail(created.error)
 	battle = created.battle
+	print("\n".join(Cli.describe(spec, battle, not options.flag_spec.is_empty())))
 	for side in 2:
 		if controllers.controllers[side] is PlayerController:
 			_player_side = side
@@ -961,11 +990,15 @@ func _is_recording() -> bool:
 	return not Array(OS.get_cmdline_args()).filter(func(a: String) -> bool: return a.begins_with("--write-movie")).is_empty()
 
 
-## The view's options from its user arguments (see the top of this file).
+## The view's options from its user arguments (see the top of this file), with "error" for an
+## unknown option.
 static func parse_args(args: PackedStringArray) -> Dictionary:
 	var parsed := SpecFlags.parse(args)
 	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": "", "ai_debug": false,
 		"cobblemon_fx": true, "flag_spec": SpecFlags.to_spec(parsed.flags)}
+	var unknown := Cli.unknown_option(parsed.rest, OPTIONS)
+	if not unknown.is_empty():
+		options.error = unknown
 	for arg: String in parsed.rest:
 		if arg == "--ai-debug":
 			options.ai_debug = true
