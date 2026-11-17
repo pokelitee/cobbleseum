@@ -67,6 +67,12 @@ var _celebrating := false
 ## A one-off role to play after a delay (the intro cry), in frames.
 var _pending_role := ""
 var _pending_frames := 0
+## The looping roles a fighter returns to between one-off animations (see pad_base_animations).
+const BASE_ROLES: Array[String] = ["idle", "walk", "run", "air_idle", "air_fly", "sleep", "air_sleep", "happy"]
+## Roles played once between base loops. Cobblemon loops many of these (hurt, angry, sad,
+## shocked) since its battles hold them as a state; here they'd never end. The faint is left as
+## authored, since nothing follows it.
+const ONE_OFF_ROLES: Array[String] = ["physical", "special", "status", "recoil", "cry", "shock", "angry", "sad"]
 ## Procedural stand-ins for one-off roles the species has no animation for.
 const PROCEDURAL_ROLES := {"physical": "lunge", "special": "rear", "status": "spin", "recoil": "tilt"}
 
@@ -113,6 +119,8 @@ static func from_model(path: String, scale: float, model_height: float, skin := 
 		view._head = HeadTurn.new()
 		view._head.bone = skeleton.find_bone(HEAD_BONE)
 		skeleton.add_child(view._head)
+	pad_base_animations(view._player.get_animation_library(""), view._animations, skeleton)
+	play_one_offs_once(view._player.get_animation_library(""), view._animations)
 	view._player.animation_finished.connect(view._on_animation_finished)
 	view._quirks = model.get_meta("quirks", [])
 	if view._animations.has("blink") or not view._quirks.is_empty():
@@ -125,6 +133,49 @@ static func from_model(path: String, scale: float, model_height: float, skin := 
 	view._overlay_wait = view._rng.randi_range(OVERLAY_GAP.x, OVERLAY_GAP.y)
 	view.play_idle()
 	return view
+
+
+## Gives each base animation (BASE_ROLES in `roles`) a rest-pose track for every bone channel
+## another animation in `library` moves and it doesn't, so the fighter comes back to its own
+## pose after a one-off, a blink or a fidget. Godot's mixer leaves a bone no playing animation
+## tracks where it was last put, which left eyelids closed after an attack or recoil that
+## closes them. Animations are shared by every instance of the model; padding again adds nothing.
+static func pad_base_animations(library: AnimationLibrary, roles: Dictionary, skeleton: Skeleton3D) -> void:
+	var moved := {}
+	for animation_name in library.get_animation_list():
+		var animation := library.get_animation(animation_name)
+		for track in animation.get_track_count():
+			moved[[animation.track_get_path(track), animation.track_get_type(track)]] = true
+	for role in BASE_ROLES:
+		if not roles.has(role) or not library.has_animation(roles[role]):
+			continue
+		var animation := library.get_animation(roles[role])
+		for key: Array in moved:
+			var path: NodePath = key[0]
+			var type: Animation.TrackType = key[1]
+			if animation.find_track(path, type) >= 0:
+				continue
+			var bone := skeleton.find_bone(String(path.get_concatenated_subnames()))
+			if bone < 0:
+				continue
+			var rest := skeleton.get_bone_rest(bone)
+			var track := animation.add_track(type)
+			animation.track_set_path(track, path)
+			match type:
+				Animation.TYPE_POSITION_3D:
+					animation.position_track_insert_key(track, 0.0, rest.origin)
+				Animation.TYPE_ROTATION_3D:
+					animation.rotation_track_insert_key(track, 0.0, rest.basis.get_rotation_quaternion())
+				Animation.TYPE_SCALE_3D:
+					animation.scale_track_insert_key(track, 0.0, rest.basis.get_scale())
+
+
+## Makes the animations of ONE_OFF_ROLES in `roles` play once, so the fighter returns to its
+## base loop after them. No species uses one of them for a base role too.
+static func play_one_offs_once(library: AnimationLibrary, roles: Dictionary) -> void:
+	for role in ONE_OFF_ROLES:
+		if roles.has(role) and library.has_animation(roles[role]):
+			library.get_animation(roles[role]).loop_mode = Animation.LOOP_NONE
 
 
 ## Sets the shading of a converted model's materials (each surface's and its layer passes).
