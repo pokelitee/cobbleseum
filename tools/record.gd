@@ -1,12 +1,12 @@
 extends SceneTree
 ## Records a battle as video clips (concepts_brief.md §12).
 ## Usage: godot --headless --path . --script res://tools/record.gd -- <spec.json>
-##        [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--cobblemon-fx]
+##        [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--mesh-fx]
 ## Instead of <spec.json>, --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=] (SpecFlags)
 ## describes an AI-against-AI battle.
 ## --ai-debug records the AI debug overlay on top (for reviewing AI behaviour, not posting).
-## --cobblemon-fx (prototype) draws Cobblemon's own effects for the moves CobblemonMoveFX
-## fits; its clips go to a folder ending in _cobblemon.
+## Moves draw in Cobblemon's style when the native runtime and the cached effects are there
+## (see battle_view.gd); --mesh-fx draws our mesh styles instead, into a folder ending in _mesh.
 ##
 ## 1. Runs the battle headless to find where it ends and its checksum.
 ## 2. For each format, launches a second Godot with Movie Maker on the battle view. The view
@@ -58,13 +58,15 @@ func _initialize() -> void:
 			seconds = maxf(1.0, arg.get_slice("=", 1).to_float())
 		elif arg.begins_with("--format="):
 			format = arg.get_slice("=", 1)
-		elif arg == "--ai-debug" or arg == "--cobblemon-fx":
+		elif arg == "--ai-debug" or arg == "--mesh-fx":
 			_view_args.append(arg)
+		elif arg == "--cobblemon-fx":
+			pass  # the default now; still accepted so older commands keep working
 		else:
 			spec_path = arg
 	if spec_path.is_empty() and flag_spec.is_empty():
 		return _fail("usage: -- <spec.json> | --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=]" +
-			" [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--cobblemon-fx]")
+			" [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--mesh-fx]")
 	var formats: Array = VideoFormat.SIZES.keys() if format == "both" else [format]
 	if not VideoFormat.SIZES.has(formats[0]):
 		return _fail("unknown format '%s' (use vertical, landscape or both)" % format)
@@ -95,7 +97,7 @@ func _initialize() -> void:
 	var recordings := ProjectSettings.globalize_path("res://recordings")
 	_ensure_ignored(recordings)
 	var out_dir := recordings.path_join("%s_%s_%d%s" % [Time.get_date_string_from_system(), "-vs-".join(names), int(spec.seed),
-		"_cobblemon" if _view_args.has("--cobblemon-fx") else ""])
+		"_mesh" if _view_args.has("--mesh-fx") else ""])
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	print("battle: %s after %d ticks, checksum %s" % [Battle.Result.keys()[battle.result], end_tick, battle.checksum().left(12)])
 	for clip_format: String in formats:
@@ -111,7 +113,7 @@ func _initialize() -> void:
 		"events": battle.events,
 	}
 	_write(out_dir.path_join("battle.json"), JSON.stringify(record, "  "))
-	_write(out_dir.path_join("credits.txt"), credits(_view_args.has("--cobblemon-fx")))
+	_write(out_dir.path_join("credits.txt"), credits(not _view_args.has("--mesh-fx") and CobblemonMoveFX.available()))
 	print("wrote %s" % out_dir)
 	quit(0)
 

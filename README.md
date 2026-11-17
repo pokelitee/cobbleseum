@@ -110,14 +110,14 @@ Preview every move style (opens a window; images go to `cache/previews/move_<sty
 godot --path . --script res://tools/preview_moves.gd
 ```
 
-Moves with a Cobblemon-style sequence (`game/presentation/move_sequences/`) can be compared with our styles, single particle effects previewed while authoring sequences, our own pixel-art particle textures (`tools/sprites/`) checked on one sheet, and the sequences' cost per frame measured; `--cobblemon-fx` draws them in recordings and battles:
+Moves with a Cobblemon-style sequence (`game/presentation/move_sequences/`) can be compared with our styles, single particle effects previewed while authoring sequences, our own pixel-art particle textures (`tools/sprites/`) checked on one sheet, and the sequences' cost per frame measured. Battles and recordings draw every move in this style when the native runtime is built; `--mesh-fx` draws our mesh styles instead:
 
 ```bash
 godot --path . --script res://tools/preview_moves.gd -- --compare=icebeam,shadowball
 godot --path . --script res://tools/preview_moves.gd -- --pieces=bulldoze_actorquake,bite_targetspark
 godot --headless --path . --script res://tools/preview_sprites.gd
 godot --headless --path . --script res://tools/bench_move_fx.gd
-godot --headless --path . --script res://tools/record.gd -- --watch=vulpixalola --vs=scizor --seed=7101 --cobblemon-fx
+godot --headless --path . --script res://tools/record.gd -- --watch=vulpixalola --vs=scizor --seed=7101 --mesh-fx
 ```
 
 Check that no third-party assets are tracked:
