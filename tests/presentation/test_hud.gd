@@ -40,10 +40,10 @@ func test_plates_show_types_and_the_hp_percentage() -> void:
 	var hud := Hud.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(hud)
 	hud.setup(["Left", "Right"], Vector2(1920, 1080), [["Fire", "Flying"], ["Water"]])
-	var pills := hud._badge_rows[0].get_children().map(func(l: Label) -> String: return l.text)
+	var pills := hud._type_rows[0].get_children().map(func(l: Label) -> String: return l.text)
 	assert_eq(pills, ["FIRE", "FLYING"])
-	hud.set_status(0, "brn", true)
-	assert_eq(hud._badge_rows[0].get_child_count(), 3, "status badges follow the type pills")
+	hud.set_effects(0, [{"key": "brn", "left": 1.0}] as Array[Dictionary])
+	assert_eq(hud._type_rows[0].get_child_count(), 2, "status badges stay out of the type row")
 	hud.set_hp(1, 0.423)
 	assert_eq(hud._percents[1].text, "43%", "rounded up, so a fighter with HP left never shows 0%")
 	hud.set_hp(1, 0.0)
@@ -172,8 +172,71 @@ func test_a_shiny_has_a_sparkle_on_its_plate_in_both_formats() -> void:
 		var marks := hud._panels.map(func(p: Control) -> Array: return p.get_children().filter(func(c: Node) -> bool: return c is Hud.ShinyMark))
 		assert_eq(marks.map(func(m: Array) -> int: return m.size()), [0, 1], "only the shiny side at %s" % size)
 		var mark: Control = marks[1][0]
-		var row: Control = hud._badge_rows[1]
+		var row: Control = hud._type_rows[1]
 		assert_true(mark.position.x + mark.size.x <= row.position.x, "the type pills make room for it at %s" % size)
 		var name_label: Label = hud._panels[1].get_children().filter(func(c: Node) -> bool: return c is Label)[0]
 		assert_true(mark.position.x >= name_label.position.x + name_label.get_minimum_size().x, "after the name at %s" % size)
 		hud.free()
+
+
+## Every effect at once, as PlateEffects would give them.
+func _all_effects() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for key: String in PlateEffects.TIMED:
+		entries.append({"key": key, "left": 0.5})
+	return entries
+
+
+func test_effects_sit_in_a_row_under_the_bar_on_screen() -> void:
+	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
+		var hud := _hud(size)
+		for side in 2:
+			hud.banner(side, "High Jump Kick", "Fighting")
+			hud.set_effects(side, _all_effects())
+			var row: Control = hud._effect_rows[side]
+			var rect := Rect2(row.global_position, row.size * row.scale)
+			var track: Control = hud._bars[side].get_parent()
+			var track_rect := Rect2(track.global_position, track.size)
+			assert_true(rect.position.y >= track_rect.end.y, "row %d under the bar at %s" % [side, size])
+			assert_true(rect.position.x >= track_rect.position.x - 0.5 and rect.end.x <= track_rect.end.x + 0.5,
+				"row %d shrinks to the bar's width at %s: %s" % [side, size, rect])
+			assert_true(Rect2(Vector2.ZERO, size).encloses(rect), "row %d on screen at %s" % [side, size])
+			var banner: Label = hud._banners[-1].label
+			assert_false(rect.intersects(Rect2(banner.global_position, banner.size)), "row %d clear of its banner at %s" % [side, size])
+			var credit: Label = hud.get_children().filter(func(n: Node) -> bool: return n is Label and n.text == Hud.cobblemon_credit(false))[0]
+			assert_false(rect.intersects(Rect2(credit.position, credit.get_minimum_size())), "row %d clear of the credit line at %s" % [side, size])
+		hud.free()
+
+
+func test_effect_badges_come_and_go_in_order_with_their_timers() -> void:
+	var hud := _hud()
+	hud.set_effects(0, [{"key": "par", "left": 0.75}, {"key": "reflect", "left": 0.5}] as Array[Dictionary])
+	var row: HBoxContainer = hud._effect_rows[0]
+	assert_eq(row.get_child_count(), 2)
+	var codes := row.get_children().map(func(b: HudBadge) -> String: return (b.find_children("*", "Label", false, false)[0] as Label).text)
+	assert_eq(codes, ["PAR", "REFL"])
+	assert_almost_eq((row.get_child(0) as HudBadge).left(), 0.75, 1e-3, "the timer drains")
+	hud.set_effects(0, [{"key": "confusion", "left": 1.0}, {"key": "reflect", "left": 0.25}] as Array[Dictionary])
+	assert_eq(row.get_child_count(), 2, "paralysis went")
+	assert_eq((row.get_child(0) as HudBadge), hud._effects[0].confusion, "in the order given")
+	assert_almost_eq((row.get_child(1) as HudBadge).left(), 0.25, 1e-3)
+	hud.set_effects(0, [] as Array[Dictionary])
+	assert_eq(row.get_child_count(), 0)
+	hud.free()
+
+
+func test_the_right_hand_landscape_row_lines_up_with_its_portrait_end() -> void:
+	var hud := _hud()
+	hud.set_effects(1, [{"key": "brn", "left": 1.0}] as Array[Dictionary])
+	var row: Control = hud._effect_rows[1]
+	var track: Control = hud._bars[1].get_parent()
+	assert_almost_eq(row.global_position.x + row.size.x, track.global_position.x + track.size.x, 0.5)
+	hud.free()
+
+
+func test_every_badge_has_an_icon_and_a_code() -> void:
+	for key: String in PlateEffects.TIMED:
+		assert_true(Hud.STATUS_BADGES.has(key), "%s has a code" % key)
+		var rows: Array = HudBadge.ICONS[key]
+		for row: String in rows:
+			assert_eq(row.length(), (rows[0] as String).length(), "%s's rows are even" % key)
