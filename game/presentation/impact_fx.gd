@@ -7,10 +7,12 @@ extends CanvasLayer
 ## Impact frames on criticals and super-effective hits: a white flash, then a two-tone frame.
 const FLASH_ALPHA := 0.75
 const IMPACT_SEQUENCE: Array[String] = ["flash", "ink"]
-## Callouts stay this far (in reference pixels) inside the screen edges.
+## Callouts stay this far (in reference pixels) inside the screen edges, and this far apart
+## when they stack over one fighter.
 const SCREEN_MARGIN := 40.0
-## Largest vertical offset a callout uses (a critical and super-effective hit stack three).
-const MAX_STACK_OFFSET := 140.0
+const STACK_GAP := 6.0
+## Callouts sit over this share of their fighter's height, following it as it moves.
+const CALLOUT_HEIGHT := 0.9
 ## Shake: offset in metres at full strength, frames it lasts, and strength per HP share dealt.
 const SHAKE_MAX := 0.35
 const SHAKE_FRAMES := 14
@@ -39,6 +41,8 @@ var _shake_frames := 0
 var _shake_strength := 0.0
 var _frame := 0
 var _callouts: Array[Dictionary] = []
+## Counts callouts as they're made, so ones made on the same frame keep their order.
+var _callout_count := 0
 var _cut_flash := 0
 
 
@@ -65,23 +69,22 @@ func on_hit(event: Dictionary, defender: FighterView, damage_share: float, big: 
 	_shake_strength = minf(SHAKE_MAX, damage_share * SHAKE_PER_SHARE * SHAKE_MAX + (0.1 if big else 0.0))
 	if big:
 		_impact_queue = IMPACT_SEQUENCE.duplicate()
-	var anchor := defender.global_position + Vector3.UP * defender.height * 0.9
-	_callout("-%d" % event.damage, anchor, Color(1, 1, 1), 64, 0.0)
+	_callout("-%d" % event.damage, defender, Color(1, 1, 1), 64)
 	if event.crit:
-		_callout("Critical hit!", anchor, Color(1.0, 0.85, 0.2), 72, 70.0)
+		_callout("Critical hit!", defender, Color(1.0, 0.85, 0.2), 72)
 	if event.effectiveness > 1.0:
-		_callout("It's super effective!", anchor, Color(1.0, 0.45, 0.25), 72, 140.0 if event.crit else 70.0)
+		_callout("It's super effective!", defender, Color(1.0, 0.45, 0.25), 72)
 	elif event.effectiveness < 1.0:
-		_callout("Not very effective...", anchor, Color(0.75, 0.8, 0.9), 56, 70.0)
+		_callout("Not very effective...", defender, Color(0.75, 0.8, 0.9), 56)
 
 
 ## A callout above a fighter, e.g. "Attack rose!" or "Burned!".
 func announce(view: FighterView, text: String, colour: Color, font_size := 56) -> void:
-	_callout(text, view.global_position + Vector3.UP * view.height * 0.9, colour, font_size, 0.0)
+	_callout(text, view, colour, font_size)
 
 
 func on_dodge(dodger: FighterView) -> void:
-	_callout("Dodged!", dodger.global_position + Vector3.UP * dodger.height * 0.9, Color(0.6, 0.9, 1.0), 60, 0.0)
+	_callout("Dodged!", dodger, Color(0.6, 0.9, 1.0), 60)
 
 
 ## Whites out the screen and fades back over CUT_FLASH_FRAMES, hiding a cut. Callouts from
@@ -120,24 +123,55 @@ func next_frame() -> void:
 		_camera.v_offset = 0.0
 	for callout in _callouts.duplicate():
 		callout.age += 1
-		var t: float = callout.age / float(CALLOUT_FRAMES)
-		var label: Label = callout.label
-		var screen := _camera.unproject_position(callout.anchor) if not _camera.is_position_behind(callout.anchor) else label.position
-		var wanted := screen - label.size * 0.5 + Vector2(0, -callout.offset - CALLOUT_RISE * t) * _ui_scale
-		var margin := SCREEN_MARGIN * _ui_scale
-		# Clamping keeps the stack order: callouts with a smaller offset sit further down.
-		var stack: float = (MAX_STACK_OFFSET - callout.offset) * _ui_scale
-		label.position = wanted.clamp(Vector2(margin, _hud_bands.x + margin + stack),
-			_screen - label.size - Vector2(margin, _hud_bands.y + margin))
-		var pop := 1.0 + 0.4 * maxf(0.0, 1.0 - t * 6.0)
-		label.scale = Vector2.ONE * pop
-		label.modulate.a = clampf((1.0 - t) * 3.0, 0.0, 1.0)
 		if callout.age >= CALLOUT_FRAMES:
-			label.queue_free()
+			(callout.label as Label).queue_free()
 			_callouts.erase(callout)
+	place_callouts()
 
 
-func _callout(text: String, anchor: Vector3, colour: Color, font_size: int, offset: float) -> void:
+## Places each callout over its fighter as the camera now sees it, `between` (0 to 1) of a
+## video frame on from the last one: in the window this runs every display frame, so callouts
+## follow their fighters smoothly. Callouts over one fighter stack, the newest at the bottom
+## (those made together in the order they were made), rising as they age and pushing older ones
+## up rather than overlapping them; the stack stays on screen and out of the HUD's bands.
+func place_callouts(between := 0.0) -> void:
+	var stacks := {}
+	for callout in _callouts:
+		stacks.get_or_add(callout.view, []).append(callout)
+	var margin := SCREEN_MARGIN * _ui_scale
+	var top := _hud_bands.x + margin
+	var bottom := _screen.y - _hud_bands.y - margin
+	for view: Variant in stacks:
+		var stack: Array = stacks[view]
+		stack.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return a.age < b.age if a.age != b.age else a.order < b.order)
+		if is_instance_valid(view):
+			var fighter := view as FighterView
+			var anchor := fighter.global_position + Vector3.UP * fighter.height * CALLOUT_HEIGHT
+			if not _camera.is_position_behind(anchor):
+				stack[0].screen = _camera.unproject_position(anchor)
+		var screen: Vector2 = stack[0].get("screen", _screen * 0.5)
+		var above := INF
+		for callout: Dictionary in stack:
+			callout.screen = screen
+			var label: Label = callout.label
+			var t := clampf((callout.age + between) / float(CALLOUT_FRAMES), 0.0, 1.0)
+			var y := screen.y - label.size.y * 0.5 - CALLOUT_RISE * t * _ui_scale
+			y = minf(y, above - label.size.y - STACK_GAP * _ui_scale)
+			above = y
+			label.position = Vector2(clampf(screen.x - label.size.x * 0.5, margin, _screen.x - label.size.x - margin), y)
+			label.scale = Vector2.ONE * (1.0 + 0.4 * maxf(0.0, 1.0 - t * 6.0))
+			label.modulate.a = clampf((1.0 - t) * 3.0, 0.0, 1.0)
+		var highest: float = (stack[-1].label as Label).position.y
+		var lowest: float = (stack[0].label as Label).position.y + (stack[0].label as Label).size.y
+		# Kept below the HUD's top band first: a stack too tall for the screen runs off the bottom.
+		var shift := minf(0.0, bottom - lowest)
+		shift = maxf(shift, top - highest)
+		for callout: Dictionary in stack:
+			(callout.label as Label).position.y += shift
+
+
+func _callout(text: String, view: FighterView, colour: Color, font_size: int) -> void:
 	var label := Label.new()
 	label.text = text
 	label.add_theme_font_override("font", UiFonts.DISPLAY)
@@ -148,7 +182,8 @@ func _callout(text: String, anchor: Vector3, colour: Color, font_size: int, offs
 	add_child(label)
 	label.size = label.get_minimum_size()
 	label.pivot_offset = label.size * 0.5
-	_callouts.append({"label": label, "anchor": anchor, "age": 0, "offset": offset})
+	_callouts.append({"label": label, "view": view, "age": 0, "order": _callout_count})
+	_callout_count += 1
 
 
 func _full_screen(size: Vector2) -> ColorRect:

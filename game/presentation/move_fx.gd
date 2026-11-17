@@ -139,14 +139,14 @@ func windup(attacker: FighterView, move: BattleMove, frames := -1) -> void:
 	add_child(ring)
 	if frames < 0:
 		frames = maxi(WINDUP_FRAMES, move.windup_ticks)
-	_effects.append({"node": ring, "age": 0, "frames": frames, "kind": "grow", "base": ring.scale, "growth": 0.6})
+	_effects.append(_carried({"node": ring, "age": 0, "frames": frames, "kind": "grow", "base": ring.scale, "growth": 0.6}, attacker))
 	var style := style_of(move)
 	if style in CHARGING or move.charges:
 		var glow := _mesh(_sphere(1.0), Color.WHITE.lerp(colour, 0.5), 0.7)
 		glow.position = _front(attacker, 0.6)
 		add_child(glow)
-		_effects.append({"node": glow, "age": 0, "frames": frames, "kind": "charge",
-			"size": 0.18 + 0.12 * attacker.height})
+		_effects.append(_carried({"node": glow, "age": 0, "frames": frames, "kind": "charge",
+			"size": 0.18 + 0.12 * attacker.height}, attacker))
 	elif style == "rush":
 		_dust(attacker.position, colour, attacker.height * 0.6)
 
@@ -202,8 +202,8 @@ func hit(defender: FighterView, move: BattleMove, big: bool) -> void:
 		shard.scale = Vector3.ONE * size * 0.12
 		burst.add_child(shard)
 		shards.append({"node": shard, "direction": direction})
-	_effects.append({"node": burst, "age": 0, "frames": BURST_FRAMES, "kind": "burst", "flash": flash,
-		"ring": ring, "shards": shards, "size": size})
+	_effects.append(_carried({"node": burst, "age": 0, "frames": BURST_FRAMES, "kind": "burst", "flash": flash,
+		"ring": ring, "shards": shards, "size": size}, defender))
 	match style_of(move):
 		"mind":
 			for i in 3:
@@ -212,7 +212,7 @@ func hit(defender: FighterView, move: BattleMove, big: bool) -> void:
 				halo.rotation = Vector3(deg_to_rad(60 * i), deg_to_rad(40 * i), 0)
 				halo.scale = Vector3.ONE * defender.height * 0.5
 				add_child(halo)
-				_effects.append({"node": halo, "age": 0, "frames": BURST_FRAMES, "kind": "grow", "base": halo.scale, "growth": 0.8})
+				_effects.append(_carried({"node": halo, "age": 0, "frames": BURST_FRAMES, "kind": "grow", "base": halo.scale, "growth": 0.8}, defender))
 		"quake", "erupt":
 			_dust(defender.position, colour, defender.height)
 
@@ -315,15 +315,16 @@ func aura(view: FighterView, colour: Color, rising: bool, healing := false) -> v
 		add_child(ring)
 		var low := view.position + Vector3.UP * view.height * 0.1
 		var high := view.position + Vector3.UP * view.height * 1.0
-		_effects.append({"node": ring, "age": -i * 4, "frames": AURA_FRAMES, "kind": "drift",
-			"from": low if rising else high, "to": high if rising else low})
+		_effects.append(_carried({"node": ring, "age": -i * 4, "frames": AURA_FRAMES, "kind": "drift",
+			"from": low if rising else high, "to": high if rising else low}, view))
 
 
 ## A dodge: speed lines streaming behind the fighter and a puff of dust.
 func dodge(view: FighterView, direction: Vector2) -> void:
 	if cobblemon != null:
+		# The dash lines and dust stay where the dodge began.
 		for piece: String in AURA_PIECES.dodge.split(","):
-			cobblemon.play_piece(piece, view, _foe(view), {"on": "user", "at": "middle"})
+			cobblemon.play_piece(piece, view, _foe(view), {"on": "user", "at": "middle", "carried": false})
 		return
 	_rush(view, Vector3(direction.x, 0, direction.y), Color(0.85, 0.95, 1.0))
 
@@ -339,8 +340,8 @@ func guard(view: FighterView, blocked := false) -> void:
 	shell.position = view.position + Vector3.UP * view.height * 0.5
 	shell.scale = Vector3.ONE * maxf(view.height, 1.0) * 0.7
 	add_child(shell)
-	_effects.append({"node": shell, "age": 0, "frames": GUARD_FRAMES, "kind": "grow", "base": shell.scale,
-		"growth": 0.05 if not blocked else 0.3})
+	_effects.append(_carried({"node": shell, "age": 0, "frames": GUARD_FRAMES, "kind": "grow", "base": shell.scale,
+		"growth": 0.05 if not blocked else 0.3}, view))
 
 
 ## A shiny's sparkle as the battle opens (concepts_brief.md §12.8), `delay` frames from now,
@@ -365,8 +366,8 @@ func _start_sparkle(view: FighterView) -> void:
 			ray.scale = Vector3(0.06, 1.0, 0.02)
 			ray.rotation_degrees.z = turn
 			glint.add_child(ray)
-		_effects.append({"node": root, "glint": glint, "age": -i * SPARKLE_GAP, "frames": SPARKLE_FRAMES, "kind": "glint",
-			"size": clampf(view.height * 0.35, 0.25, 0.6)})
+		_effects.append(_carried({"node": root, "glint": glint, "age": -i * SPARKLE_GAP, "frames": SPARKLE_FRAMES, "kind": "glint",
+			"size": clampf(view.height * 0.35, 0.25, 0.6)}, view))
 
 
 ## Matches projectile visuals to the simulation's projectiles and moves them. Once the battle
@@ -391,11 +392,33 @@ func sync_projectiles(battle: Battle) -> void:
 	_projectiles = alive
 
 
-## Shifts the particle effects riding something SmoothMotion draws between video frames
-## along with it, after it has been drawn.
+## Shifts the effects riding something SmoothMotion draws between video frames along with
+## it, after it has been drawn: particle effects riding a projectile or carried by a fighter,
+## and our own pieces carried by a fighter.
 func shift_riders() -> void:
 	if cobblemon != null and smooth != null:
 		cobblemon.shift_riders(smooth)
+	for effect in _effects:
+		_carry(effect)
+
+
+## Marks a running effect placed on `view`'s body (a glow, aura, burst or shield) to move
+## with that fighter for its life, by as much as the fighter has moved since it started.
+func _carried(effect: Dictionary, view: FighterView) -> Dictionary:
+	effect.carrier = weakref(view)
+	effect.carried_from = view.position
+	effect.placed = (effect.node as Node3D).position
+	return effect
+
+
+## Moves a carried effect with its fighter; others stay where they are.
+func _carry(effect: Dictionary) -> void:
+	if not effect.has("carrier"):
+		return
+	var carrier: FighterView = effect.carrier.get_ref()
+	if carrier == null:
+		return
+	(effect.node as Node3D).position = effect.placed + carrier.position - effect.carried_from
 
 
 ## Advances every running effect by one video frame.
@@ -467,7 +490,9 @@ func next_frame() -> void:
 			"drift":
 				var d := clampf(t, 0.0, 1.0)
 				node.position = (effect.from as Vector3).lerp(effect.to, d)
+				effect.placed = node.position
 				_fade(node, 0.0 if t < 0.0 else 1.0 - d)
+		_carry(effect)
 		if effect.age >= effect.frames:
 			node.queue_free()
 			_effects.erase(effect)

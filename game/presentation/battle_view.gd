@@ -388,8 +388,10 @@ func _process(delta: float) -> void:
 		if _smooth != null:
 			_smooth.capture()
 	if _smooth != null:
-		_smooth.show(clampf(_accumulator * Rules.TICK_RATE, 0.0, 1.0))
+		var between := clampf(_accumulator * Rules.TICK_RATE, 0.0, 1.0)
+		_smooth.show(between)
 		_move_fx.shift_riders()
+		_fx.place_callouts(between)
 
 
 ## One video frame: hold the current tick, or advance to the next one. After the plan (or

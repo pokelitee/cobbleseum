@@ -19,6 +19,14 @@ const LOCATORS := {
 	"eye": [0.8, true], "face": [0.75, true], "jaw_lower": [0.65, true],
 }
 const BLEND_MODES := {"alpha": "blend_mix, depth_prepass_alpha", "blend": "blend_mix", "add": "blend_add"}
+## Phases whose pieces sit on a fighter's body (a wind-up's glow or a buff's aura on the user,
+## a hit's sparks on the foe), so their fighter carries them for their life. Pieces outside
+## them stay in the world: shots fired at the foe, blasts, and projectiles (which ride their
+## projectile instead).
+const CARRIED_PHASES: Array[String] = ["windup", "hit"]
+## Pieces on the ground stay where they were put even in those phases: floor scorches, quake
+## and ground rings, powder settling, dust.
+const GROUND_PIECES := "floor|ground|quake|scorch|crater|dust|_land|bigring|actorring"
 
 ## Effects or textures that were missing, for previews and reports.
 var problems: Dictionary = {}
@@ -34,6 +42,7 @@ var _emitters: Array[SnowstormEmitter] = []
 ## Spawns waiting for their delay: {"frames": int, "spawn": Dictionary, "user", "foe", "cut": int}.
 var _pending: Array[Dictionary] = []
 var _spawned := 0
+var _ground := RegEx.create_from_string(GROUND_PIECES)
 
 
 ## Whether the extracted effects are in the cache.
@@ -115,7 +124,8 @@ func play(move: BattleMove, style: String, phase: String, user: FighterView, foe
 
 
 ## Plays one piece outside any sequence, with SequenceSteps' options (on, at, aim, tint, ...),
-## for auras, dodges, previews and authoring.
+## for auras, dodges, previews and authoring. Its fighter carries it unless the options say
+## "carried": false.
 func play_piece(effect: String, user: FighterView, foe: FighterView, options := {}, colour := Color.WHITE) -> SnowstormEmitter:
 	var spawn := {"effect": effect, "on": "foe", "at": "target"}
 	spawn.merge(options, true)
@@ -159,6 +169,7 @@ func shift_riders(smooth: SmoothMotion) -> void:
 	for emitter in _emitters:
 		var anchor: Variant = emitter.anchor.get_ref() if emitter.anchor != null else null
 		emitter.position = smooth.offset_of(anchor) if anchor is Node3D else Vector3.ZERO
+		emitter.carry()
 
 
 ## The battle is over: nothing new starts, and running effects stop emitting and fade out.
@@ -193,6 +204,9 @@ func spawn_child(effect_id: String, at: Transform3D, vars: Dictionary, queries: 
 			var holder: SnowstormEmitter = ref.get_ref()
 			return holder.frame if holder != null else null
 		emitter.anchor = parent.anchor
+	if emitter != null:
+		emitter.carrier = parent.carrier
+		emitter.carried_from = parent.carried_from
 	return emitter
 
 
@@ -223,6 +237,9 @@ func _start(entry: Dictionary) -> SnowstormEmitter:
 		swap, float(spawn.get("scale", 1.0)))
 	if emitter == null:
 		return null
+	if spawn.get("carried", entry.phase in CARRIED_PHASES) and _ground.search(str(spawn.effect)) == null:
+		emitter.carrier = weakref(subject)
+		emitter.carried_from = subject.position
 	if spawn.has("max"):
 		emitter.max_age = float(spawn.max)
 	if entry.cut >= 0 and entry.phase == "windup" and not spawn.get("keep", false):

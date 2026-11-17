@@ -70,3 +70,52 @@ func test_a_cut_flash_whites_out_then_fades() -> void:
 	assert_eq(alphas[-1], 0.0)
 	for node in [fx, view, camera]:
 		node.free()
+
+
+func _stage() -> Array:
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var camera := Camera3D.new()
+	root.add_child(camera)
+	camera.look_at_from_position(Vector3(0, 2, 8), Vector3(0, 1, 0))
+	var view := FighterView.new()
+	view.height = 1.5
+	root.add_child(view)
+	var fx := ImpactFX.new()
+	root.add_child(fx)
+	fx.setup(camera, Vector2(1920, 1080), Vector2(170, 80))
+	return [camera, view, fx]
+
+
+func test_callouts_follow_their_fighter() -> void:
+	var stage := _stage()
+	var view: FighterView = stage[1]
+	var fx: ImpactFX = stage[2]
+	fx.announce(view, "Attack rose!", Color.WHITE)
+	fx.next_frame()
+	var label: Label = fx._callouts[0].label
+	var before := label.position.x
+	view.position.x += 2.0
+	fx.next_frame()
+	assert_true(label.position.x - before > 100.0, "the callout moved with the fighter: %s -> %s" % [before, label.position.x])
+	for node in stage:
+		node.free()
+
+
+func test_callouts_over_one_fighter_stack_without_overlapping() -> void:
+	var stage := _stage()
+	var view: FighterView = stage[1]
+	var fx: ImpactFX = stage[2]
+	fx.on_hit({"damage": 40, "crit": true, "effectiveness": 2.0}, view, 0.1, true)
+	fx.next_frame()
+	fx.announce(view, "Rough Skin", Color.WHITE)
+	for i in 3:
+		fx.next_frame()
+	var labels: Array = fx._callouts.map(func(c: Dictionary) -> Label: return c.label)
+	labels.sort_custom(func(a: Label, b: Label) -> bool: return a.position.y < b.position.y)
+	for i in range(1, labels.size()):
+		assert_true(labels[i].position.y >= labels[i - 1].position.y + labels[i - 1].size.y,
+			"%s overlaps %s" % [labels[i].text, labels[i - 1].text])
+	assert_eq(labels[-1].text, "Rough Skin", "the newest sits at the bottom")
+	assert_eq(labels[-2].text, "-40", "then the damage, under the hit's other callouts")
+	for node in stage:
+		node.free()
