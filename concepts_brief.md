@@ -1,6 +1,6 @@
 # Cobbleseum concept brief
 
-Status: living document. First draft 2026-11-08; presentation section and milestones revised 2026-11-09.
+Status: living document. First draft 2026-11-08; presentation section and milestones revised 2026-11-09; milestones M11–M17 added from a battle review 2026-11-17.
 
 ## 1. Summary
 
@@ -1102,6 +1102,7 @@ A fighter can appear **shiny** (its species' alternate colours) and in a **cosme
   - The repository never redistributes assets.
   - Every clip credits Cobblemon on its credits card and in generated description text.
   - Commercial use of clips needs permission. Whether clips will be monetised is an open question (§19).
+- **Trainer sprites** (planned, M15): the games' trainer sprites are official art, not openly licensed fan work like Cobblemon's. They are fetched into the local cache only, never committed or redistributed, and like the rest of the Pokémon IP they keep clips non-commercial.
 
 ## 15. Proposed project layout
 
@@ -1215,11 +1216,50 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - Abilities: a standard ability per species from a first set of 78. Done (rules version 18, §9.9).
 - Held items: a standard item per species from a first set of 31. Done (rules version 19, §9.10).
 
+**Review of an AI-vs-AI battle (2026-11-17).** Watching a full battle raised the milestones below, in this order. Concrete bugs found in the same review (fainting Pokémon sinking through the floor, eyes stuck closed, Rayquaza's movement, the surge look) are fixed as bugs, outside these milestones. The species ranking (§13) is still deferred: it runs once, after M15, when the rules settle.
+
+**M11: battle feel.** Presentation only; no rules change.
+
+- **Smooth motion:** fighters, the camera and effects interpolate between ticks at the display rate. Today a window shows the 30 Hz simulation in steps (0 or 2 steps in some display frames), which reads as jitter and lag.
+- **A calmer edit:** every shot holds for at least about 1 s, and an overlay shot (close-up, impact, tracking) that can't get that long is dropped or merged with its neighbour, never cut in for a tick or two. Nearby angles blend with a short ease instead of a hard cut, and wide and over-the-shoulder shots alternate less often. Watch mode and recordings keep sharing one director.
+- **Responsive animation:** the simulation stays the source of truth and animation follows it. Attack crossfades drop to about 0.05 s; attack animations are time-fitted so the strike pose lands on the release; walking blends by actual speed.
+- **Callouts follow their fighter:** damage numbers, stat changes, ability and item names track the fighter's head each frame (still rising and fading, clamped to the screen, stacked so they don't overlap) instead of staying where the fighter was. Move banners and captions stay in screen space on the HUD.
+- **Effects follow their fighter:** move-effect pieces placed on a fighter's body (Swords Dance and other buffs, stat cues, heals, status, charge glows, hit sparks) follow that fighter for their life. Ground pieces (quake rings, scorch, blasts) and projectiles stay in the world.
+
+**M12: HUD clean-up.**
+
+- **Status reads apart from type:** type pills stay rounded and filled in the type's colour. Status conditions and confusion become square dark badges with an icon, a short code (PAR, BRN) and a draining timer, in a row of their own under the HP bar. Screens move to that row too.
+- **Stat stages on the plate:** small ↑ and ↓ arrows with counts per changed stat in the same row, gone once the stage wears off.
+- **Head-and-shoulders portraits:** the portrait frames a square on the head (the head bone, or the top of the silhouette where the bone sits mid-body), like a character-select bust. Small round species, whose head is most of them, keep the whole body.
+
+**M13: setup screen and CLI.**
+
+- **Setup screen:** a plain launch opens it instead of the showcase battle. It sets the mode (watch, play, record), each side's species (searchable, with a model preview; team slots in M15), form and shiny, ability, item and moves (standard by default), the arena and weather, each side's AI profile and the seed. It builds the same battle spec the flags build; Record runs `tools/record.gd`. After a battle: rematch or back to the menu.
+- **CLI:** `--help` for the game, `record.gd`, `battle.gd` and `rank.gd`; unknown flags and misspelt species, arenas, moves, abilities and items fail with the nearest matches; `--list=species|arenas|moves|abilities|items|profiles`; the resolved spec (seed, arena, looks) printed at the start, so any run can be repeated.
+
+**M14: spacing by fighting style.** A rules change (new rules version, balance batch). The utility AI picks its preferred distance from its whole moveset and stats, not only from which moves are ready: species that lean special and ranged kite at range and dash in only for a ready melee opening, and physical brawlers press in. Today any ready melee or area move pulls a fighter to about 2 m, even when most of its moveset is ranged.
+
+**M15: team battles (singles).** One Pokémon out per side, teams of 1–6 (3v3 and 6v6 as the usual sizes), to stage battles like the games' and the anime's. Its own rules versions, one pull request each where they split cleanly:
+
+- **N fighters per side in the simulation:** the battle, AI, director, HUD, highlights and spec stop assuming exactly two fighters. A side has a team and an active fighter; the battle ends when a side has no one left. Doubles (M17) reuse this, so no new one-per-side assumptions.
+- **Switching:** a "switch to N" intent, available whenever the fighter could act. The recall and send-out take about 1 s, in which the incoming Pokémon can be hit; then a switch cooldown of about 5 s. A knockout forces a pick. Stat stages and confusion clear on switching out; major status stays with the Pokémon.
+- **Team specs:** the battle spec lists each side's team (species, and optionally moves, ability, item, form and shiny per member); quick runs use a flag such as `--team=a,b,c`. Recreations of battles from the games or the anime are hand-written specs kept locally, not committed.
+- **AI:** switching is another utility candidate, scored by the matchup gain of a bench member (expected damage dealt against taken), own HP, status and stage losses, minus the send-out risk. Profiles get a switch chance, like the feint and guard chances.
+- **Entry hazards** (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) right after switching, as their own rules version, acting on send-out.
+- **Pace:** 1v1 tuning is unchanged. A team-battle HP multiplier by team size keeps a full 6v6 around 2–3 minutes (about 20–30 s a knockout), tuned by balance batch; the overtime clock scales with the Pokémon left.
+- **Trainers:** a trainer stands in each side's trainer's box, throws on send-out and recall, and reacts. Its look comes from the games' trainer sprites, billboarded, fetched into the git-ignored cache like other assets and never committed (§14).
+- **HUD and clips:** each side shows its team as six balls (healthy, statused, fainted); clips pick the best window across the whole battle; the music ends only on the final knockout (§12.5).
+- **Ranking:** stays one-on-one (§13). Team results don't feed it, since a team win can't be credited to one species.
+
+**M16: battlefield marks.** Presentation only. Hits and area and ground moves leave decals by move style and type (scorch, frost, cracks, crater rings, splash stains) and small debris that settles, drawn from the cosmetic stream so renders repeat. They last the whole battle, up to about 40 (the oldest fade), so an arena shows the fight by the knockout. They never touch the simulation; marks that change the ground for play would be a later rules change the AI understands.
+
+**M17: doubles.** Two Pokémon out per side, after M15. Targeting, spread moves, ally interactions, the camera and the AI get their own design pass when the milestone starts.
+
 **Later:**
 
-- Arena moves and weather. Done in M10 (§9.11): weather, surges and screens; entry hazards wait for team battles.
-- Tournament mode seeded from the ranking.
-- Team battles (2v2 and up).
+- Arena moves and weather. Done in M10 (§9.11): weather, surges and screens; entry hazards wait for team battles (M15).
+- Tournament mode seeded from the ranking. Format not decided.
+- Team battles. Planned as M15 (singles) and M17 (doubles).
 - Shiny and form variants in clips. Done (§12.8): cosmetic forms and shinies, rolled from the seed or set by flags, with a sparkle on entry and on the name plate.
 
 ## 18. Risks
