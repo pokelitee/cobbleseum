@@ -18,6 +18,8 @@ extends RefCounted
 ## - Feints (hard and ranked profiles): with the foe down to its last dodge charge (or out of
 ##   them with a guard ready), it may fake a melee or area wind-up to draw that dodge or guard,
 ##   then strike while the foe has neither left.
+## - Spacing by style: the distance it keeps follows its melee lean (melee_lean), so kiters hold
+##   their range and go in for melee only on an opening, and brawlers press in.
 ## - Exact ties go to the side's random stream, never list order.
 ## With `keep_scores` set (the debug overlay), the last evaluation is kept in `last_scores`.
 
@@ -32,13 +34,22 @@ const CIRCLE_SCORE := 0.15
 const WAITING_CIRCLE_BONUS := 0.2
 ## Move value (StandInAI.move_score, in move-power units) at which it saturates.
 const VALUE_SCALE := 150.0
-## Ticks ahead a projectile is checked for a hit, and the gap bands kept: with a melee move
-## ready (just outside the foe's reach, inside dash range, so it closes only to strike), with
-## ranged moves ready, and while waiting on cooldowns (out of the way).
+## Ticks ahead a projectile is checked for a hit.
 const THREAT_HORIZON := 12
+## The gap bands kept (§11, spacing by style). With a melee move ready and the fighter leaning
+## melee, on an opening, or in overtime: just outside the foe's reach, inside dash range, so it
+## closes only to strike. Otherwise with ranged moves ready, or waiting on cooldowns, a band
+## blended by the melee lean from the kiter's (lean 0) to the brawler's (lean 1, pressing in).
+## A kiter waiting farther out than this dragged battles into draws.
 const MELEE_GAP := Vector2(1.8, 2.8)
-const RANGED_GAP := Vector2(3.5, 6.0)
-const WAITING_GAP := Vector2(3.0, 5.0)
+const KITER_RANGED_GAP := Vector2(3.5, 6.0)
+const BRAWLER_RANGED_GAP := Vector2(2.5, 4.5)
+const KITER_WAITING_GAP := Vector2(3.0, 5.0)
+const BRAWLER_WAITING_GAP := Vector2(2.2, 3.5)
+## Below this melee lean a ready melee move pulls the fighter in only on an opening.
+const KITER_LEAN := 0.5
+## The lean of a fighter with no damaging move to weigh.
+const NEUTRAL_LEAN := 0.5
 ## Each new strafe direction also shifts the band by up to this much, so distances vary.
 const BAND_JITTER := 0.5
 const STRAFE_MIN_TICKS := 30
@@ -204,7 +215,7 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 		var guard := guard_considerations(me, seen, threat)
 		if not guard.is_empty():
 			candidates.append(_scored("guard", Action.GUARD, guard))
-	var band := _band(me, gap)
+	var band := _band(battle, me, foe, seen)
 	candidates.append(_scored("approach", Action.APPROACH, {"too_far": _sample("too_far", gap - band.y)}))
 	candidates.append(_scored("retreat", Action.RETREAT, {"too_close": _sample("too_close", band.x - gap)}))
 	candidates.append(_scored("circle", Action.CIRCLE, {"base": CIRCLE_SCORE + (0.0 if any_ready else WAITING_CIRCLE_BONUS)}))
@@ -218,7 +229,8 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 
 ## A feint, when the foe is down to its last dodge charge: the first melee or area move that
 ## could be used for real (ready, in reach, able to connect). The chance is rolled once, when
-## it comes up, with the profile's feint_chance.
+## it comes up, with the profile's feint_chance: as soon as a move could be feinted, before it's
+## in reach, so a fighter keeping its range knows to close in for the feint (_band).
 func _add_feint(battle: Battle, me: Fighter, foe: Fighter, gap: float, urgency: float,
 		candidates: Array[Dictionary]) -> void:
 	# An opening: one way left to answer a strike, a dodge or else a guard.
@@ -228,14 +240,14 @@ func _add_feint(battle: Battle, me: Fighter, foe: Fighter, gap: float, urgency: 
 		return
 	for i in me.moves.size():
 		var move := me.moves[i]
-		if not me.can_feint(i) or gap > move.reach() or not battle.can_reach(me, foe, move):
+		if not me.can_feint(i):
 			continue
 		if _feint_roll < 0:
 			_feint_roll = 1 if random.chance(profile.feint_chance) else 0
-		if _feint_roll == 1:
+		if _feint_roll == 1 and gap <= move.reach() and battle.can_reach(me, foe, move):
 			candidates.append(_scored("feint:" + move.id, Action.FEINT,
 				{"base": FEINT_SCORE, "safe_to_commit": 1.0 - 0.6 * urgency}, i))
-		return
+			return
 
 
 ## Terrain tactics, where the ground has relief: with no attack ready while the foe can see it
@@ -526,9 +538,11 @@ func _threat(battle: Battle, me: Fighter, seen: Dictionary, side: int) -> Dictio
 	return best
 
 
-## The gap to keep, from the moves that are ready (close for melee and area, mid range for
-## projectiles, a loose middle while waiting on cooldowns).
-func _band(me: Fighter, _gap: float) -> Vector2:
+## The gap to keep, from the fighter's style and the moves that are ready. A ready melee or area
+## move brings it close if it leans melee, or on an opening; otherwise it keeps the ranged band
+## (projectiles ready) or the waiting band, each blended by its melee lean. In overtime everyone
+## closes in for a ready melee move, so kiting doesn't run out the clock.
+func _band(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary) -> Vector2:
 	var melee := false
 	var ranged := false
 	for i in me.moves.size():
@@ -538,10 +552,46 @@ func _band(me: Fighter, _gap: float) -> Vector2:
 			ranged = true
 		else:
 			melee = true
-	var band := (MELEE_GAP if melee else (RANGED_GAP if ranged else WAITING_GAP)) + Vector2.ONE * _band_shift
-	if melee:
+	var lean := melee_lean(me, foe, battle.data())
+	var overtime := battle.tick >= Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS)
+	var close := melee and (lean >= KITER_LEAN or overtime or _opening(foe, seen))
+	var band: Vector2
+	if close:
+		band = MELEE_GAP
+	elif ranged:
+		band = KITER_RANGED_GAP.lerp(BRAWLER_RANGED_GAP, lean)
+	else:
+		band = KITER_WAITING_GAP.lerp(BRAWLER_WAITING_GAP, lean)
+	band += Vector2.ONE * _band_shift
+	if close:
 		band.y = minf(band.y, Rules.MELEE_DASH_RANGE - 0.2)
 	return band
+
+
+## How much the fighter leans melee against this foe, 0-1: its close moves' (melee and area)
+## share of the expected damage per second of its whole moveset, ready or not. Expected damage
+## covers its attacking stats, STAB, the foe's defences and type, and stat stages, so the lean
+## shifts as boosts and drops come and go. Self-destructing moves don't count.
+static func melee_lean(me: Fighter, foe: Fighter, data: BattleData) -> float:
+	var close := 0.0
+	var total := 0.0
+	for move in me.moves:
+		if not move.is_damaging() or move.self_destructs:
+			continue
+		var cycle := maxf(move.windup_ticks + move.recovery_ticks + move.cooldown_ticks, 1.0)
+		var rate := expected_damage(me, foe, move, data) / cycle
+		total += rate
+		if move.kind != BattleMove.Kind.PROJECTILE:
+			close += rate
+	return close / total if total > 0.0 else NEUTRAL_LEAN
+
+
+## Whether a fighter keeping its range should go in for a melee strike: the foe (as seen) is
+## recovering, asleep, frozen or stunned, or has no dodge and no guard ready, or this AI has
+## rolled to feint (it closes in for the feint).
+func _opening(foe: Fighter, seen: Dictionary) -> bool:
+	return seen.action == Fighter.Action.RECOVERY or foe.is_incapacitated() \
+		or (foe.dodge_charges == 0 and foe.guard_cooldown > 0) or _feint_roll == 1
 
 
 func _movement_intent(me: Fighter, seen: Dictionary, action: String) -> Dictionary:
