@@ -25,7 +25,8 @@ extends Node3D
 ## The battle is run headless first so the Director can plan the whole presentation: hit-stop,
 ## slow motion and camera shots. Each video frame then either holds the current tick or
 ## advances the simulation by one. Under Movie Maker every frame is 1/30 s; otherwise frames
-## follow real time. After a knockout, the instant replay re-shows it from a second copy of
+## follow real time, and SmoothMotion draws the fighters, camera and projectiles between them
+## at the display's rate. After a knockout, the instant replay re-shows it from a second copy of
 ## the battle (a replay of the spec, skipped ahead), so the battle itself is never stepped
 ## back or again. With --clip-seconds the view plays only the window Highlights picks, then
 ## the credits card, and quits. Before quitting it finishes the battle off screen and
@@ -163,6 +164,9 @@ var _caption_index := 0
 var _after: AfterBattle
 ## The arguments the setup screen started this battle with, used instead of the command line's.
 static var launch_args: PackedStringArray = []
+## Draws fighters, the camera and projectiles smoothly between video frames in the window;
+## null while recording, where every frame is one step.
+var _smooth: SmoothMotion
 
 
 func _ready() -> void:
@@ -290,6 +294,9 @@ func _ready() -> void:
 	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height],
 		SimRandom.stream(int(spec.seed), CAMERA_WOBBLE_STREAM))
 	_rig.limit = _arena.camera_limit
+	if not _is_recording():
+		_smooth = SmoothMotion.new()
+		_move_fx.smooth = _smooth
 
 	if _live:
 		var player := battle.fighters[_player_side]
@@ -303,6 +310,7 @@ func _ready() -> void:
 		_hud.set_intro_subtitle(arena_name + _weather_subtitle())
 		_arena.weather.snap(battle.conditions.weather)
 		_arena.surge.snap(battle.conditions.surge)
+		_track_smoothed()
 		return
 	var start := 0
 	_end_tick = plan.slow.size()
@@ -334,6 +342,17 @@ func _ready() -> void:
 		_hud.set_status(side, fighter.status, not fighter.status.is_empty())
 		_hud.set_status(side, "confusion", fighter.confusion_ticks > 0)
 		_views[side].set_asleep(fighter.status == "slp")
+	_track_smoothed()
+
+
+## Hands the fighters and the camera to the smoothing, which projectiles join as they fly.
+func _track_smoothed() -> void:
+	if _smooth == null:
+		return
+	for view in _views:
+		for node in view.smoothed_nodes():
+			_smooth.track(node)
+	_smooth.track_camera(_camera)
 
 
 ## Runs a copy of the battle headless and plans its presentation. A knockout's instant replay
@@ -368,7 +387,14 @@ func _process(delta: float) -> void:
 		frames = int(_accumulator * Rules.TICK_RATE)
 		_accumulator -= frames / float(Rules.TICK_RATE)
 	for i in frames:
+		if _smooth != null:
+			_smooth.restore()
 		_next_frame()
+		if _smooth != null:
+			_smooth.capture()
+	if _smooth != null:
+		_smooth.show(clampf(_accumulator * Rules.TICK_RATE, 0.0, 1.0))
+		_move_fx.shift_riders()
 
 
 ## One video frame: hold the current tick, or advance to the next one. After the plan (or
@@ -455,6 +481,8 @@ func _begin_replay() -> void:
 	_crowd.set_time_scale(scale)
 	_hud.show_replay()
 	_fx.cut_flash()
+	if _smooth != null:
+		_smooth.snap_all()
 
 
 ## One video frame of the instant replay: hold the replayed tick, or step the copy to the
@@ -490,6 +518,8 @@ func _end_replay() -> void:
 	_replaying = false
 	_hud.hide_replay()
 	_fx.cut_flash()
+	if _smooth != null:
+		_smooth.snap_all()
 
 
 ## Music and the arena's sound run in real time, through hit-stop and slow motion alike.
@@ -903,6 +933,8 @@ func _sync_views(shown: int) -> void:
 	var progress := float(shown - int(_segment.start)) / span
 	_rig.apply(_camera, _segment, battle, _segment_frames / float(Rules.TICK_RATE), progress,
 		_frames_shown / float(Rules.TICK_RATE), _segment_frames == 0)
+	if _rig.cut and _smooth != null:
+		_smooth.snap(_camera)
 
 
 ## The arena (its own sky, sun and particles) and the camera.

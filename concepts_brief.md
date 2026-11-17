@@ -867,6 +867,8 @@ Presentation time is counted separately from simulation ticks. That makes timing
 | Slow motion | Fewer ticks per rendered frame, for knockouts and near-misses. |
 | Skip ahead | Many ticks in one frame without drawing, to start a clip mid-battle. |
 
+**Smooth motion in the window** (`SmoothMotion`): the presentation steps 30 times a second, so a display refreshing faster would show some steps twice and none in some frames, which reads as jitter. Each display frame instead draws the fighters (their place, facing and procedural motion), the camera (with its field of view), projectiles and the particle effects riding them part of the way from the step before last to the last one. That draws them up to one step (33 ms) behind, in exchange for even motion; camera cuts and the cuts into and out of the instant replay jump instead. Animations already play in real time. Steps always see things where the steps left them, so the battle and the edit don't change, and recordings, which draw exactly one step per frame, don't use it at all.
+
 Recording runs the battle headless first, which produces the full event log. So the presentation knows in advance where every big moment is, including the knockout, and can build up to it.
 
 ### 12.3 Camera director
@@ -877,7 +879,7 @@ The camera director picks from a set of shot types based on battle events:
 |---|---|
 | Wide establishing | At the opening, and as the default between moments |
 | Over-the-shoulder | When one fighter is closing in on the other |
-| Attacker close-up | During the wind-up of a strong move |
+| Attacker close-up | Into the release of a strong move |
 | Projectile tracking | While a projectile is in flight |
 | Impact punch-in | On a heavy hit, critical hit or super-effective hit |
 | Low angle | On big hits from large fighters |
@@ -885,7 +887,11 @@ The camera director picks from a set of shot types based on battle events:
 | Instant replay | After the knockout's linger and before the victory: the knockout again, from 24 ticks before it (or the finishing move's wind-up, if later) to 12 ticks after, at 2 frames per tick (at most about 2.5 s). A low over-the-shoulder shot from behind the attacker into the hit, then a punch-in on the loser through the faint. A white flash covers the cut in and out, a "REPLAY" tag with a blinking red dot sits top-left, and the name plates fade out (the victory card follows). Move sounds and the faint cry play again under a smaller cheer, and the music stays cut until the sting. The pictures come from a second copy of the battle, replayed from its spec and skipped ahead, so the battle itself, its checksum and the rules are untouched. |
 | Victory | After the knockout (2.5 s at normal speed): in front of the winner, a little to one side, slowly pushing in. The winner celebrates, the crowd cheers again, and the HUD's victory card slides in below: "WINNER", the name outlined in its side's colour, its HP left and the battle's length, while the name plates fade. Play mode keeps the plain "wins!" line, since a live battle has no planned ending. |
 
-- **Cuts:** timed to events, with a minimum shot length so the edit never jitters.
+- **Cuts:** timed to events, and calm (`Director._calm`):
+  - every shot holds at least a second (30 ticks). A shot asked for sooner waits until the current one has held that long, if enough of it is left by then, and is dropped otherwise; a more important shot (in the table's order, lowest first: wide, over-the-shoulder, tracking, close-up, punch-in) doesn't wait, and the short shot before it gives its time to the shot before that. The knockout and the victory always cut in on time. Battles open on a wide shot of at least a second;
+  - an attacker's close-up covers the second before its strong move goes off, starting before the wind-up when that is shorter, and waits two seconds after the last close-up or punch-in; a punch-in lasts a second; projectiles get a tracking shot when they fly at least half a second;
+  - wide and over-the-shoulder shots alternate every 5 to 9 seconds;
+  - a new shot whose camera would sit near the current one (within 3 m for fighters of reference height, looking within 40° of the same way) eases over in 0.4 s instead of cutting, and tracking whips into its punch-in in 0.2 s.
 - **Repeatability:** shot choices draw from the cosmetic random stream, so re-rendering a battle produces the same edit.
 - **Readability:** every shot keeps both fighters readable, and no shot lets one fighter hide the other.
 
