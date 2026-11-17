@@ -75,6 +75,8 @@ var cobblemon: CobblemonMoveFX = null
 var views: Array[FighterView] = []
 ## Sparkles waiting to start: {"view": FighterView, "frames": int}.
 var _sparkles: Array[Dictionary] = []
+## Draws projectiles between video frames in the window (BattleView's); null when recording.
+var smooth: SmoothMotion
 
 
 ## Turns on Cobblemon-style sequences: each move's own, or its style's. Loads what `moves`
@@ -389,6 +391,13 @@ func sync_projectiles(battle: Battle) -> void:
 	_projectiles = alive
 
 
+## Shifts the particle effects riding something SmoothMotion draws between video frames
+## along with it, after it has been drawn.
+func shift_riders() -> void:
+	if cobblemon != null and smooth != null:
+		cobblemon.shift_riders(smooth)
+
+
 ## Advances every running effect by one video frame.
 func next_frame() -> void:
 	_frame += 1
@@ -559,6 +568,8 @@ func _new_projectile(projectile: Dictionary, move: BattleMove, target: Vector2) 
 	var reach := maxf(1.0, (target - (projectile.position as Vector2)).length())
 	var root := Node3D.new()
 	add_child(root)
+	if smooth != null:
+		smooth.track(root)
 	var visual := {"source": projectile, "node": root, "style": style, "colour": colour, "origin": origin,
 		"direction": direction, "reach": reach, "history": [], "parts": [], "power": move.power, "spawned": _frame}
 	if _converted(move) and views.size() == 2:

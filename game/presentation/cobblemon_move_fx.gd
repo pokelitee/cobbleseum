@@ -132,6 +132,7 @@ func play_riding(move: BattleMove, style: String, phase: String, node: Node3D, u
 		return riding.global_transform if riding != null and riding.is_inside_tree() else null
 	for emitter in started:
 		emitter.follow = follow
+		emitter.anchor = ref
 		var at: Variant = follow.call()
 		if at is Transform3D:
 			emitter.frame = at
@@ -150,6 +151,14 @@ func next_frame() -> void:
 		if emitter.is_finished():
 			_emitters.erase(emitter)
 			emitter.queue_free()
+
+
+## Draws each effect that rides a node with that node, as `smooth` has drawn it between video
+## frames; the particles themselves stay where the last frame put them.
+func shift_riders(smooth: SmoothMotion) -> void:
+	for emitter in _emitters:
+		var anchor: Variant = emitter.anchor.get_ref() if emitter.anchor != null else null
+		emitter.position = smooth.offset_of(anchor) if anchor is Node3D else Vector3.ZERO
 
 
 ## The battle is over: nothing new starts, and running effects stop emitting and fade out.
@@ -183,6 +192,7 @@ func spawn_child(effect_id: String, at: Transform3D, vars: Dictionary, queries: 
 		emitter.follow = func() -> Variant:
 			var holder: SnowstormEmitter = ref.get_ref()
 			return holder.frame if holder != null else null
+		emitter.anchor = parent.anchor
 	return emitter
 
 

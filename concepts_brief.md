@@ -867,6 +867,8 @@ Presentation time is counted separately from simulation ticks. That makes timing
 | Slow motion | Fewer ticks per rendered frame, for knockouts and near-misses. |
 | Skip ahead | Many ticks in one frame without drawing, to start a clip mid-battle. |
 
+**Smooth motion in the window** (`SmoothMotion`): the presentation steps 30 times a second, so a display refreshing faster would show some steps twice and none in some frames, which reads as jitter. Each display frame instead draws the fighters (their place, facing and procedural motion), the camera (with its field of view), projectiles and the particle effects riding them part of the way from the step before last to the last one. That draws them up to one step (33 ms) behind, in exchange for even motion; camera cuts and the cuts into and out of the instant replay jump instead. Animations already play in real time. Steps always see things where the steps left them, so the battle and the edit don't change, and recordings, which draw exactly one step per frame, don't use it at all.
+
 Recording runs the battle headless first, which produces the full event log. So the presentation knows in advance where every big moment is, including the knockout, and can build up to it.
 
 ### 12.3 Camera director

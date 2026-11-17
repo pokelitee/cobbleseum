@@ -53,6 +53,8 @@ var speed := 1.0
 ## When valid, called each frame for the emitter's new frame (an emitter riding a projectile
 ## or bound to its parent).
 var follow := Callable()
+## The node the effect rides (a WeakRef to a Node3D), or null; drawn with it between frames.
+var anchor: WeakRef
 ## Multiplies sizes and offsets for effects with cobblemon:emitter_space scaling "entity".
 var entity_scale := 1.0
 ## Multiplies particle sizes (a sequence's "scale").
