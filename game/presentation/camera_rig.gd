@@ -46,6 +46,8 @@ var _fov := 50.0
 ## can't end up inside the stands or hills (Arena.camera_limit).
 var limit := INF
 var _last_shot := -1
+## Whether the last apply() cut to a new shot rather than moving the camera.
+var cut := false
 
 
 ## `random` seeds the handheld wobble; give it its own stream so it can't shift other choices.
@@ -61,7 +63,7 @@ func _init(is_portrait: bool, fighter_heights: Array, random: SimRandom) -> void
 ## time (drives the wobble).
 func apply(camera: Camera3D, segment: Dictionary, battle: Battle, shot_seconds: float, progress: float, seconds: float, new_shot: bool) -> void:
 	var whip: bool = new_shot and _last_shot == Director.Shot.TRACKING and segment.shot == Director.Shot.IMPACT
-	var cut := new_shot and not whip
+	cut = new_shot and not whip
 	_last_shot = segment.shot
 	var pose := pose_for(segment, battle, shot_seconds, progress, cut)
 	# Shots are framed for the floor; lift them with the fighters' ground.

@@ -299,6 +299,12 @@ func place(position_2d: Vector2, facing: Vector2, ground := 0.0) -> void:
 		_motion.head_target = 0.0 if absf(off) > HEAD_GIVE_UP else clampf(-off, -HEAD_MAX, HEAD_MAX)
 
 
+## The nodes SmoothMotion draws between video frames: the view's place and facing, and the
+## procedural motion of the model inside it.
+func smoothed_nodes() -> Array[Node3D]:
+	return [self, _motion_root]
+
+
 ## The fighter's movement over the last tick (m/s on the floor), for leaning and swooping.
 func set_velocity(velocity: Vector2) -> void:
 	_motion.velocity = velocity
