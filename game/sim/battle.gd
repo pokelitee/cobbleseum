@@ -22,7 +22,7 @@ var arena := ""
 ## The arena's ground (§9.8), from its field and the seed.
 var terrain: Terrain
 ## With record_intents set (battles with a player), every tick's intents per side, as
-## [move x, move y, use, dodge x, dodge y, feint]; a ReplayController plays them back.
+## [move x, move y, use, dodge x, dodge y, feint, guard]; a ReplayController plays them back.
 var record_intents := false
 var intent_log: Array = [[], []]
 
@@ -33,7 +33,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 24
+const FIGHTER_STATE_SIZE := 26
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
@@ -46,7 +46,7 @@ var _projectile_count := 0
 ## roster loaded, species outside it are rejected. A spec that names a rules or data version
 ## other than these is rejected, since it would play as a different battle.
 ## Controllers are objects with decide(battle, side) -> {"move": Vector2, "use": int,
-## "dodge": Vector2 (zero for none), "feint": int (a move to feint)}; each
+## "dodge": Vector2 (zero for none), "feint": int (a move to feint), "guard": bool}; each
 ## owns its random stream (see random_stream()).
 ## Returns {"battle": Battle} or {"error": String}.
 static func create(battle_spec: Dictionary, data: BattleData, controllers: Array) -> Dictionary:
@@ -132,7 +132,8 @@ func saved_spec() -> Dictionary:
 static func intent_to_log(intent: Dictionary) -> Array:
 	var move: Vector2 = intent.get("move", Vector2.ZERO)
 	var dodge: Vector2 = intent.get("dodge", Vector2.ZERO)
-	return [move.x, move.y, int(intent.get("use", -1)), dodge.x, dodge.y, int(intent.get("feint", -1))]
+	return [move.x, move.y, int(intent.get("use", -1)), dodge.x, dodge.y, int(intent.get("feint", -1)),
+		1 if intent.get("guard", false) else 0]
 
 
 static func intent_from_log(entry: Array) -> Dictionary:
@@ -143,6 +144,8 @@ static func intent_from_log(entry: Array) -> Dictionary:
 		intent.dodge = Vector2(entry[3], entry[4])
 	if entry.size() > 5 and int(entry[5]) >= 0:
 		intent.feint = int(entry[5])
+	if entry.size() > 6 and int(entry[6]) != 0:
+		intent.guard = true
 	return intent
 
 
@@ -200,6 +203,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 	for i in fighter.cooldowns.size():
 		fighter.cooldowns[i] = maxi(0, fighter.cooldowns[i] - 1)
 	fighter.feint_cooldown = maxi(0, fighter.feint_cooldown - 1)
+	fighter.guard_cooldown = maxi(0, fighter.guard_cooldown - 1)
 	if fighter.dodge_charges < Rules.DODGE_CHARGES:
 		fighter.dodge_recharge_ticks += 1
 		if fighter.dodge_recharge_ticks >= fighter.dodge_recharge_total:
@@ -212,6 +216,8 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			_drift(fighter, foe, Vector2.ZERO)
 		return
 	for followup in fighter.followups.duplicate():
+		if not fighter.followups.has(followup):
+			continue  # a parry dropped it
 		followup.ticks -= 1
 		if followup.ticks <= 0:
 			fighter.followups.erase(followup)
@@ -243,6 +249,16 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 				_event("feint_end", fighter.side, {"move": move.id})
 			elif fighter.action_ticks <= 0:
 				_release(fighter, foe)
+		Fighter.Action.GUARD:
+			_turn(fighter, to_foe, Rules.AIM_TURN_RATE)
+			_drift(fighter, foe, Vector2.ZERO)
+			fighter.action_ticks -= 1
+			if fighter.action_ticks == Rules.seconds_to_ticks(Rules.GUARD_RECOVERY):
+				_event("guard_end", fighter.side, {"blocked": fighter.guard_blocked})
+				if fighter.guard_blocked:
+					fighter.action_ticks = 0
+			if fighter.action_ticks <= 0:
+				fighter.action = Fighter.Action.READY
 		Fighter.Action.RECOVERY:
 			_turn(fighter, to_foe, Rules.TURN_RATE)
 			_drift(fighter, foe, Vector2.ZERO)
@@ -253,12 +269,19 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			var dodge: Vector2 = intent.get("dodge", Vector2.ZERO)
 			var use: int = intent.get("use", -1)
 			var feint: int = intent.get("feint", -1)
+			var guard: bool = intent.get("guard", false)
 			if dodge.length_squared() > 0.0 and fighter.can_dodge():
 				fighter.dodge_charges -= 1
 				fighter.action = Fighter.Action.DODGE
 				fighter.action_ticks = Rules.seconds_to_ticks(Rules.DODGE_SECONDS)
 				fighter.dodge_step = dodge.normalized() * Rules.DODGE_DISTANCE / fighter.action_ticks
 				_event("dodge", fighter.side, {"direction": [dodge.normalized().x, dodge.normalized().y]})
+			elif guard and fighter.can_guard():
+				fighter.action = Fighter.Action.GUARD
+				fighter.action_ticks = Rules.seconds_to_ticks(Rules.GUARD_SECONDS) + Rules.seconds_to_ticks(Rules.GUARD_RECOVERY)
+				fighter.guard_cooldown = Rules.seconds_to_ticks(Rules.GUARD_COOLDOWN)
+				fighter.guard_blocked = false
+				_event("guard", fighter.side, {})
 			elif fighter.move_ready(use) and _gap(fighter, foe) <= fighter.moves[use].reach():
 				var move := fighter.moves[use]
 				if fighter.confusion_ticks > 0 and _random.chance(Rules.CONFUSION_CHANCE):
@@ -365,9 +388,9 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 			_boost(fighter, move.boosts, move.id)
 	else:
 		var hits := _roll_hits(move)
-		_strike(fighter, foe, fighter.action_move)
+		var parried := _strike(fighter, foe, fighter.action_move)
 		var interval := Rules.seconds_to_ticks(Rules.MULTI_HIT_INTERVAL)
-		for i in range(1, hits):
+		for i in range(1, hits if not parried else 1):
 			fighter.followups.append({"ticks": i * interval, "move": fighter.action_move, "last": i == hits - 1})
 		if move.recharges:
 			_event("recharge", fighter.side, {"move": move.id})
@@ -375,8 +398,9 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 			_hurt(fighter, fighter.hp, "self_destruct", {"move": move.id})
 
 
-## One strike of a damaging move, or the launch of a projectile.
-func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> void:
+## One strike of a damaging move, or the launch of a projectile. Returns whether the foe
+## parried it.
+func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> bool:
 	var move := fighter.moves[move_index]
 	match move.kind:
 		BattleMove.Kind.MELEE, BattleMove.Kind.AREA:
@@ -389,6 +413,9 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> void:
 			elif foe.is_invulnerable():
 				_event("miss", fighter.side, {"move": move.id})
 				_event("dodged", foe.side, {"move": move.id})
+			elif foe.guards_against(fighter.position - foe.position):
+				_guarded(fighter, foe, move)
+				return move.kind == BattleMove.Kind.MELEE
 			else:
 				_hit(fighter, foe, move)
 		_:
@@ -408,6 +435,7 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> void:
 				"travelled": 0.0,
 			})
 			_event("fire", fighter.side, {"move": move.id})
+	return false
 
 
 ## Hits for one use: fixed, or 2-5 with the main-series weights.
@@ -435,6 +463,9 @@ func _move_projectiles() -> void:
 		var height: float = projectile.height
 		var level := absf(height - (target.ground + Rules.CHEST_HEIGHT)) <= Rules.PROJECTILE_VERTICAL_REACH
 		if closest.distance_to(target.position) <= target.radius + Rules.PROJECTILE_RADIUS and not target.is_knocked_out() and level:
+			if target.guards_against(-(projectile.velocity as Vector2)):
+				_guarded(owner, target, move)
+				continue
 			if not target.is_invulnerable():
 				if move.is_damaging():
 					_hit(owner, target, move)
@@ -485,6 +516,20 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 		_hurt(attacker, recoil, "recoil", {"move": move.id})
 	if not move.self_boosts.is_empty() and not attacker.is_knocked_out():
 		_boost(attacker, move.self_boosts, move.id)
+
+
+## A hit stopped by the defender's guard: no damage or effects. Parrying a melee strike
+## staggers the attacker and drops its remaining multi-hit strikes.
+func _guarded(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
+	defender.guard_blocked = true
+	var parry := move.kind == BattleMove.Kind.MELEE
+	_event("miss", attacker.side, {"move": move.id})
+	_event("guarded", defender.side, {"move": move.id, "parry": parry})
+	if parry:
+		attacker.followups.clear()
+		if attacker.action == Fighter.Action.READY or attacker.action == Fighter.Action.RECOVERY:
+			attacker.action = Fighter.Action.RECOVERY
+			attacker.action_ticks = maxi(attacker.action_ticks, Rules.seconds_to_ticks(Rules.PARRY_STAGGER))
 
 
 ## A debuff or status projectile reaching its target.
@@ -677,6 +722,8 @@ func _record_state() -> void:
 		_state[i + 21] = fighter.ground
 		_state[i + 22] = fighter.feint_cooldown
 		_state[i + 23] = 1.0 if fighter.feinting else 0.0
+		_state[i + 24] = fighter.guard_cooldown
+		_state[i + 25] = 1.0 if fighter.guard_blocked else 0.0
 		i += FIGHTER_STATE_SIZE
 	for projectile in projectiles:
 		_state[i] = projectile.position.x

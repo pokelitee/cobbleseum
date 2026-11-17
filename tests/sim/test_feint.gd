@@ -44,6 +44,7 @@ func _place(battle: Battle, gap: float) -> void:
 func _profile(feint_chance: float, dodge_chance := 1.0) -> AIProfile:
 	var profile := Controllers.load_profile("ranked").duplicate() as AIProfile
 	profile.feint_chance = feint_chance
+	profile.guard_chance = 0.0
 	profile.dodge_chance = dodge_chance
 	profile.mistake_chance = 0.0
 	return profile

@@ -34,7 +34,7 @@ One of a battle's two places, A or B. Every matchup is played from both sides.
 One step of a battle. There are 30 ticks a second.
 
 **Intent**:
-What a fighter is told to do on one tick: move in a direction, dodge, use one of its moves, or feint one. The player and the AI give the same intents.
+What a fighter is told to do on one tick: move in a direction, dodge, guard, use one of its moves, or feint one. The player and the AI give the same intents.
 _Avoid_: input, command, action
 
 **Seed**:
@@ -91,8 +91,12 @@ The time before a fighter can use a move again. Strong, scarce moves have longer
 A short, invulnerable dash. Each fighter has two dodge charges, which refill over time.
 
 **Feint**:
-A fake wind-up of a melee or area move that breaks off before it lands, to draw the foe's dodge. It deals no damage and spends no move cooldown, but a fighter can feint only once every few seconds.
+A fake wind-up of a melee or area move that breaks off before it lands, to draw the foe's dodge or guard. It deals no damage and spends no move cooldown, but a fighter can feint only once every few seconds.
 _Avoid_: fake, bluff, cancel
+
+**Guard**:
+A short stance that blocks hits from the front, with a cooldown. A guard that blocks a melee strike **parries** it, staggering the attacker; one that blocks nothing leaves the fighter briefly open.
+_Avoid_: block (for the action), shield, protect (that's a move)
 
 **Stat stage**:
 A step from −6 to +6 that raises or lowers one of a fighter's stats until it wears off.
@@ -129,7 +133,7 @@ Reserved for a battle condition, set by moves, that changes play. Not in the gam
 The AI that controls a fighter by scoring every action it could take and picking the best, giving the same intents as a player.
 
 **AI profile**:
-A named set of the utility AI's settings: reaction delay, decision interval, mistake chance, dodge chance and feint chance. Rankings use the ranked profile.
+A named set of the utility AI's settings: reaction delay, decision interval, mistake chance, dodge chance, feint chance and guard chance. Rankings use the ranked profile.
 _Avoid_: difficulty, level, skill
 
 **Stand-in AI**:

@@ -72,8 +72,10 @@ var _victory_age := -1
 var _credits: Control
 ## Play mode's move bar: per move {"panel", "shade"} (the shade covers it while cooling down).
 var _move_slots: Array[Dictionary] = []
-## The feint indicator under the move bar (its shade covers it while feints cool down).
+## The feint and guard indicators under the move bar (their shades cover them while they cool
+## down).
 var _feint_shade: ColorRect
+var _guard_shade: ColorRect
 var _hint: Label
 ## Flashed titles: {"label": Label, "age": frames}.
 var _titles: Array[Dictionary] = []
@@ -395,8 +397,8 @@ func flash_title(text: String, colour: Color) -> void:
 
 
 ## Play mode: the player's moves along the bottom, each with its key and a cooldown shade,
-## and under them the feint modifier's key, shaded while feints cool down.
-func show_move_bar(names: Array, types: Array, keys: Array, feint_key := "") -> void:
+## and under them the feint modifier's and the guard's keys, shaded while they cool down.
+func show_move_bar(names: Array, types: Array, keys: Array, feint_key := "", guard_key := "") -> void:
 	var slot_width := 300.0 * _scale
 	var gap := 16.0 * _scale
 	var total := names.size() * slot_width + (names.size() - 1) * gap
@@ -414,26 +416,36 @@ func show_move_bar(names: Array, types: Array, keys: Array, feint_key := "") -> 
 		shade.size = panel.size
 		panel.add_child(shade)
 		_move_slots.append({"panel": panel, "shade": shade})
-	if feint_key.is_empty():
-		return
-	var feint := ColorRect.new()
-	feint.color = Color(0.2, 0.22, 0.3, 0.85)
-	feint.size = Vector2(300, 44) * _scale
-	feint.position = Vector2((_size.x - feint.size.x) * 0.5, _size.y - 92 * _scale)
-	add_child(feint)
-	var label := _label("%s  Feint" % feint_key, 24, Color.WHITE)
+	if not feint_key.is_empty():
+		_feint_shade = _indicator("%s  Feint" % feint_key, -1.0 if not guard_key.is_empty() else 0.0)
+	if not guard_key.is_empty():
+		_guard_shade = _indicator("%s  Guard" % guard_key, 1.0 if not feint_key.is_empty() else 0.0)
+
+
+## A key indicator under the move bar, centred, or half a width plus a gap to the left (-1) or
+## right (1). Returns its cooldown shade.
+func _indicator(text: String, offset: float) -> ColorRect:
+	var box := ColorRect.new()
+	box.color = Color(0.2, 0.22, 0.3, 0.85)
+	box.size = Vector2(300, 44) * _scale
+	box.position = Vector2((_size.x - box.size.x) * 0.5 + offset * (box.size.x + 16 * _scale) * 0.5, _size.y - 92 * _scale)
+	add_child(box)
+	var label := _label(text, 24, Color.WHITE)
 	label.position = Vector2(12, 6) * _scale
-	feint.add_child(label)
-	_feint_shade = ColorRect.new()
-	_feint_shade.color = Color(0, 0, 0, 0.6)
-	_feint_shade.size = feint.size
-	feint.add_child(_feint_shade)
+	box.add_child(label)
+	var shade := ColorRect.new()
+	shade.color = Color(0, 0, 0, 0.6)
+	shade.size = box.size
+	box.add_child(shade)
+	return shade
 
 
-## Shades each move, and the feint indicator, by how much of its cooldown is left.
+## Shades each move, and the feint and guard indicators, by how much of its cooldown is left.
 func update_move_bar(fighter: Fighter) -> void:
 	if _feint_shade != null:
 		_feint_shade.scale.x = clampf(float(fighter.feint_cooldown) / Rules.seconds_to_ticks(Rules.FEINT_COOLDOWN), 0.0, 1.0)
+	if _guard_shade != null:
+		_guard_shade.scale.x = clampf(float(fighter.guard_cooldown) / Rules.seconds_to_ticks(Rules.GUARD_COOLDOWN), 0.0, 1.0)
 	for i in _move_slots.size():
 		var shade: ColorRect = _move_slots[i].shade
 		var total := maxi(fighter.moves[i].cooldown_ticks, 1)

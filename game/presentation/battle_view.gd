@@ -46,6 +46,8 @@ const STATUS_CALLOUTS := {
 const RISE_COLOUR := Color(1.0, 0.55, 0.3)
 const DROP_COLOUR := Color(0.4, 0.6, 1.0)
 const HEAL_COLOUR := Color(0.45, 1.0, 0.55)
+## The "Blocked!" and "Parried!" callouts over a fighter whose guard stopped a hit.
+const GUARD_CALLOUT := Color(0.6, 0.85, 1.0)
 ## Metres a fighter must move in a tick to play its walk animation.
 const WALK_THRESHOLD := 0.01
 ## Hits taking at least this share of the defender's HP (or big ones) make the crowd cheer;
@@ -223,8 +225,8 @@ func _ready() -> void:
 		var player := battle.fighters[_player_side]
 		_hud.show_move_bar(player.moves.map(func(m: BattleMove) -> String: return m.name),
 			player.moves.map(func(m: BattleMove) -> String: return m.type), PlayerController.MOVE_KEYS,
-			PlayerController.FEINT_KEY)
-		_hud.show_hint("Move: WASD / stick   Dodge: Space / A   Feint: hold Shift / LB   F3: AI scores")
+			PlayerController.FEINT_KEY, PlayerController.GUARD_KEY)
+		_hud.show_hint("Move: WASD / stick   Dodge: Space / A   Guard: G / RT   Feint: hold Shift / LB   F3: AI scores")
 		_event_index = 0
 		for side in 2:
 			_hud.set_hp(side, 1.0, true)
@@ -622,6 +624,13 @@ func _play_events() -> void:
 				_fx.announce(_views[event.side], "Can't move!", Hud.STATUS_BADGES.par[1].lightened(0.3), 48)
 			"dodge":
 				_move_fx.dodge(_views[event.side], Vector2(event.direction[0], event.direction[1]))
+			"guard":
+				_move_fx.guard(_views[event.side])
+			"guarded":
+				_move_fx.guard(_views[event.side], true)
+				_fx.announce(_views[event.side], "Parried!" if event.parry else "Blocked!", GUARD_CALLOUT, 60)
+				if event.parry:
+					_views[1 - int(event.side)].play_role("recoil")
 			"dodged":
 				_fx.on_dodge(_views[event.side])
 			"knockout":

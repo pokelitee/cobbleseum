@@ -14,6 +14,8 @@ extends SceneTree
 ## - how often each move kind is used, plus dodges, statuses and side bias;
 ## - feints: how many, how many drew a dodge, and how many of those the feinter followed with
 ##   a hit.
+## - guards: how many, how many blocked a hit, how many parried a melee strike, and how many
+##   whiffed after a feint broke off (a guard the feint drew).
 ## Matchups and battle seeds come from --seed, so a report can be reproduced exactly.
 
 const DEFAULT_BATTLES := 500
@@ -83,6 +85,8 @@ static func run(spec: Dictionary, data: BattleData) -> Dictionary:
 			moves_by_id[move.id] = move
 	for event in battle.events:
 		counts[event.type] = counts.get(event.type, 0) + 1
+		if event.type == "guarded" and event.parry:
+			counts.parry = counts.get("parry", 0) + 1
 		if event.type == "windup":
 			var kind: String = BattleMove.Kind.keys()[moves_by_id[event.move].kind].to_lower()
 			kinds[kind] = kinds.get(kind, 0) + 1
@@ -94,27 +98,41 @@ static func run(spec: Dictionary, data: BattleData) -> Dictionary:
 	}
 
 
-## {"feint_drew_dodge", "feint_punished"}: feints the foe dodged soon after they broke off,
-## and those dodges the feinter followed with a hit.
+## {"feint_drew_dodge", "feint_drew_guard", "feint_punished"}: feints the foe dodged soon after
+## they broke off, feints the foe guarded against (a guard up at the break-off or raised soon
+## after, which whiffs), and the drawn dodges the feinter followed with a hit.
 static func feint_outcomes(events: Array[Dictionary]) -> Dictionary:
 	var drew := 0
+	var drew_guard := 0
 	var punished := 0
 	for i in events.size():
 		if events[i].type != "feint_end":
 			continue
 		var side := int(events[i].side)
+		# A guard up when the feint broke off, or raised soon after (the foe sees it late).
+		var guarded := false
+		for j in range(i - 1, -1, -1):
+			if events[i].tick - events[j].tick > Rules.seconds_to_ticks(Rules.GUARD_SECONDS):
+				break
+			if events[j].type == "guard" and int(events[j].side) == 1 - side:
+				guarded = true
+				break
 		var dodge := -1
 		for j in range(i + 1, events.size()):
 			var event: Dictionary = events[j]
 			if event.tick > (events[i].tick if dodge < 0 else dodge) + (FEINT_DRAW_TICKS if dodge < 0 else FEINT_PUNISH_TICKS):
 				break
-			if dodge < 0 and event.type == "dodge" and int(event.side) == 1 - side:
+			if not guarded and event.type == "guard" and int(event.side) == 1 - side and event.tick <= events[i].tick + FEINT_DRAW_TICKS:
+				guarded = true
+			elif dodge < 0 and event.type == "dodge" and int(event.side) == 1 - side:
 				dodge = event.tick
 				drew += 1
 			elif dodge >= 0 and event.type == "hit" and int(event.side) == side:
 				punished += 1
 				break
-	return {"feint_drew_dodge": drew, "feint_punished": punished}
+		if guarded:
+			drew_guard += 1
+	return {"feint_drew_dodge": drew, "feint_drew_guard": drew_guard, "feint_punished": punished}
 
 
 ## 0 or 1 for the side whose best super-effective hit on the other is stronger, -1 if even.
@@ -164,7 +182,7 @@ static func summarise(rows: Array[Dictionary]) -> Dictionary:
 		kind_shares[kind] = float(kinds[kind]) / maxi(uses, 1)
 	var per_battle := {}
 	for type in ["hit", "miss", "dodge", "dodged", "status", "boost", "heal", "knockout", "time_up", "feint",
-			"feint_drew_dodge", "feint_punished"]:
+			"feint_drew_dodge", "feint_drew_guard", "feint_punished", "guard", "guarded", "parry"]:
 		per_battle[type] = float(events.get(type, 0)) / rows.size()
 	return {
 		"battles": rows.size(),
