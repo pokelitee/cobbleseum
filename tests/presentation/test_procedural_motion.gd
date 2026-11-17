@@ -166,3 +166,31 @@ func test_a_fainted_serpent_drops_without_tipping_over_and_stops_waving() -> voi
 	assert_almost_eq(serpent.transform().origin.y, 0.0, 1e-4, "out of the hover, on the ground")
 	assert_almost_eq(serpent.wave_strength, 0.0, 1e-3)
 
+
+
+func test_a_fitted_lunge_reaches_furthest_as_the_move_goes_off() -> void:
+	var motion := ProceduralMotion.new(2.0, false)
+	motion.start("lunge", 9.0)
+	var furthest := 0.0
+	var at := 0
+	for frame in range(1, 30):
+		motion.next_frame()
+		if motion.transform().origin.z < furthest:
+			furthest = motion.transform().origin.z
+			at = frame
+	assert_eq(at, 9, "the strike lands on the release")
+
+
+func test_a_still_idle_breathes_gently() -> void:
+	var motion := ProceduralMotion.new(2.0, false)
+	motion.breathes = true
+	var heights: Array[float] = []
+	for frame in 90:
+		motion.next_frame()
+		heights.append(motion.transform().basis.get_scale().y)
+	assert_true(heights.max() > 1.005 and heights.min() < 0.995, "it rises and falls")
+	assert_true(heights.max() < 1.03 and heights.min() > 0.97, "subtly")
+	_advance(motion, 10, 0.0)
+	var held := motion.transform()
+	_advance(motion, 10, 0.0)
+	assert_eq(motion.transform(), held, "hit-stop holds the breath")

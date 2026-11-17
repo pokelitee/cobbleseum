@@ -634,7 +634,7 @@ func _play_events() -> void:
 		match event.type:
 			"windup":
 				var move := _move(event.side, event.move)
-				_views[event.side].play_role(wind_up_role(move))
+				_views[event.side].play_role(wind_up_role(move), move.windup_ticks / float(Rules.TICK_RATE))
 				_move_fx.windup(_views[event.side], move)
 				_hit_counts[event.side] = 0
 				_hud.banner(event.side, move.name, move.type)
@@ -642,7 +642,7 @@ func _play_events() -> void:
 			"feint":
 				# Looks like the real wind-up, without the move's banner: the move never comes.
 				var move := _move(event.side, event.move)
-				_views[event.side].play_role(wind_up_role(move))
+				_views[event.side].play_role(wind_up_role(move), move.windup_ticks / float(Rules.TICK_RATE))
 				_move_fx.windup(_views[event.side], move, int(event.ticks))
 				_sound.windup(move)
 			"feint_end":

@@ -348,8 +348,8 @@ Unknown queries and variables, such as riding yaw and a few custom variables, ev
 
 Animations play in three layers:
 
-1. **Base loop:** an idle or locomotion animation, crossfaded between states. Walk and run animations play faster or slower to match movement speed. Base animations are padded so that bones they don't key hold the idle pose; otherwise a crossfade passes through the rest pose and the model briefly looks like it's in a T-pose. They also put back, at its rest pose, every bone that only other animations move (eyelids, mouths, a fidget's paw): Godot leaves a bone no playing animation tracks where it was last put, so eyes closed by a hit stayed closed.
-2. **One-off actions** on top: attack animations, applied only to the bones they key. They play once: Cobblemon loops many of its hurt, angry, sad and shocked animations (about 400 species), which would otherwise never end.
+1. **Base loop:** an idle or locomotion animation, crossfaded between states in 0.15 s. Walk and run animations play faster or slower to match movement speed (normal speed at 2.5 m/s walking and 4.5 m/s running for a 1.5 m fighter, scaled by the square root of its height, between 0.6× and 1.7×). A walk or run that is only a held pose (Bulbasaur's, among others) is treated as missing, so the procedural hop moves the fighter instead of sliding a statue. Base animations are padded so that bones they don't key hold the idle pose; otherwise a crossfade passes through the rest pose and the model briefly looks like it's in a T-pose. They also put back, at its rest pose, every bone that only other animations move (eyelids, mouths, a fidget's paw): Godot leaves a bone no playing animation tracks where it was last put, so eyes closed by a hit stayed closed.
+2. **One-off actions** on top: attack animations, applied only to the bones they key, crossfaded in 0.05 s so they answer the battle at once. An attack is fitted to its wind-up so its strike lands as the move goes off: the strike is where its bones turn fastest (`AnimationTiming`; Cobblemon's 3 s attack animations strike about 1.2 s in), and the animation plays up to 2× faster and starts partway in to reach it on the release. They play once: Cobblemon loops many of its hurt, angry, sad and shocked animations (about 400 species), which would otherwise never end.
 3. **Additive reactions:** hit recoil, cries and blinking, applied as offsets from rest and faded in and out.
 
 **Procedural layer.** Most species lack attack, hit or faint animations, so a procedural layer on the model root fills the gaps:
@@ -362,9 +362,9 @@ Animations play in three layers:
 Implemented in `game/presentation/procedural_motion.gd`, as a transform on a node between the fighter and its model, so it stacks with animations, knockback and the hit flash. It fills in only the animation roles a species has no animation for:
 
 - a hop while walking (408 entries have no walk animation);
-- a lunge for physical moves, a rear-back with squash and stretch for special moves, and a spin for status moves;
+- a lunge for physical moves, a rear-back with squash and stretch for special moves, and a spin for status moves; the lunge reaches furthest and the rear-back springs forward as the move goes off;
 - a backward tilt for hits;
-- slow breathing while asleep;
+- slow breathing while asleep, and gentler breathing with a slight bob at rest when the idle is a held pose (786 of 1,005 converted species, many of them standing still in Cobblemon too, from the Eevee line and Gengar to the legendary birds) or missing;
 - tipping over onto its side for knockouts, instead of fading. It's lifted as it tips so the body comes to rest on the ground (only a twentieth of the silhouette, such as an outstretched fin or wing, may dip into it) rather than through it.
 
 Species with a faint animation of their own drop out of a hover to the ground, and are lifted wherever the animation would sink them into it (Tinkaton, Clefairy, Jigglypuff and Raichu sink by 10–40% of their height).

@@ -9,6 +9,8 @@ extends RefCounted
 ## - always: leaning into movement (pitched forward by forward speed, banked by sideways
 ##   speed, twice as much for fliers), fliers swooping low at speed, and a squash on landing
 ## - sleep: slow breathing (no sleep animation)
+## - idle: subtle breathing and a slight bob when the species' idle holds one pose (about 340
+##   do in Cobblemon itself) or it has none
 ## - serpents (BodyWave): a wave down the body instead of hopping, gentle at rest, stronger
 ##   and faster when moving; on a knockout they drop to the ground rather than tipping over
 ## - faint: tipping over onto its side, resting on the ground (no faint animation); with a
@@ -41,6 +43,15 @@ const HOVER_BOB := 0.05
 const HOVER_SPEED := 0.08
 const BREATH := 0.03
 const BREATH_SPEED := 0.12
+## Breathing at rest for a still idle: gentler and slower than asleep (a cycle of about 3 s),
+## with a slight rise and fall of the whole body.
+const IDLE_BREATH := 0.015
+const IDLE_BREATH_SPEED := 0.07
+const IDLE_BOB := 0.008
+## Where in a fitted action its strike falls, as a share of it: the lunge's furthest reach and
+## the rear-back's spring forward. A fitted action's length stays within FIT_RANGE times its own.
+const STRIKE_SHARE := {"lunge": 0.5, "rear": 0.75}
+const FIT_RANGE := Vector2(0.6, 2.5)
 const FAINT_FRAMES := 20
 const FAINT_ANGLE := deg_to_rad(85.0)
 ## How far a fainted model settles into the ground, as a share of its height, so it doesn't
@@ -59,6 +70,8 @@ var height := 1.0
 var hovers := false
 var moving := false
 var asleep := false
+## Breathes at rest: the species' idle holds still.
+var breathes := false
 ## A serpent with a BodyWave: it slithers rather than hops, and doesn't tip over when it faints.
 var slithers := false
 ## The BodyWave's phase and strength.
@@ -75,6 +88,7 @@ var _lean := Vector2.ZERO
 var _swoop := 0.0
 var _action := ""
 var _action_age := 0.0
+var _action_frames := 1.0
 var _fainting := false
 var _faint_age := 0.0
 ## The fainting model's silhouette seen from the front (x, y in the model's space), so it can
@@ -100,10 +114,14 @@ func _init(fighter_height: float, hovering: bool) -> void:
 
 
 ## Starts a one-off action ("lunge", "rear", "spin" or "tilt"), replacing any running one.
-func start(action: String) -> void:
+## `strike_frames`, when given, fits a lunge or rear-back so its strike lands that many frames on.
+func start(action: String, strike_frames := 0.0) -> void:
 	if ACTION_FRAMES.has(action) and not _fainting:
 		_action = action
 		_action_age = 0.0
+		_action_frames = ACTION_FRAMES[action]
+		if strike_frames > 0.0 and STRIKE_SHARE.has(action):
+			_action_frames = clampf(strike_frames / STRIKE_SHARE[action], _action_frames * FIT_RANGE.x, _action_frames * FIT_RANGE.y)
 
 
 ## Tips over. `outline` is the model's posed silhouette seen from the front (any points in the
@@ -145,7 +163,7 @@ func next_frame(time_scale := 1.0) -> void:
 	head_yaw = lerpf(head_yaw, 0.0 if _fainting else head_target, ease)
 	if not _action.is_empty():
 		_action_age += time_scale
-		if _action_age >= ACTION_FRAMES[_action]:
+		if _action_age >= _action_frames:
 			_action = ""
 	if _fainting:
 		_faint_age = minf(_faint_age + time_scale, FAINT_FRAMES)
@@ -169,8 +187,13 @@ func transform() -> Transform3D:
 	if asleep:
 		var breath := BREATH * sin(_phase * BREATH_SPEED)
 		scale *= Vector3(1.0 - breath * 0.5, 1.0 + breath, 1.0 - breath * 0.5)
+	elif breathes and not _fainting:
+		var breath := sin(_phase * IDLE_BREATH_SPEED)
+		scale *= Vector3(1.0 - IDLE_BREATH * breath * 0.5, 1.0 + IDLE_BREATH * breath, 1.0 - IDLE_BREATH * breath * 0.5)
+		if not hovers:
+			offset.y += height * IDLE_BOB * (0.5 + 0.5 * breath)
 	if not _action.is_empty():
-		var t: float = _action_age / ACTION_FRAMES[_action]
+		var t: float = _action_age / _action_frames
 		match _action:
 			"lunge":
 				offset.z -= height * LUNGE_DISTANCE * sin(PI * t)
