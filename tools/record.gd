@@ -2,8 +2,8 @@ extends SceneTree
 ## Records a battle as video clips (concepts_brief.md §12).
 ## Usage: godot --headless --path . --script res://tools/record.gd -- <spec.json>
 ##        [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--mesh-fx]
-## Instead of <spec.json>, --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=] (SpecFlags)
-## describes an AI-against-AI battle.
+## Instead of <spec.json>, --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=] [--arena=]
+## [--shiny=a|b|both|none] [--form=] [--vs-form=] (SpecFlags) describes an AI-against-AI battle.
 ## --ai-debug records the AI debug overlay on top (for reviewing AI behaviour, not posting).
 ## Moves draw in Cobblemon's style when the native runtime and the cached effects are there
 ## (see battle_view.gd); --mesh-fx draws our mesh styles instead, into a folder ending in _mesh.
@@ -65,7 +65,8 @@ func _initialize() -> void:
 		else:
 			spec_path = arg
 	if spec_path.is_empty() and flag_spec.is_empty():
-		return _fail("usage: -- <spec.json> | --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=]" +
+		return _fail("usage: -- <spec.json> | --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=] [--arena=]" +
+			" [--shiny=a|b|both|none] [--form=] [--vs-form=]" +
 			" [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--mesh-fx]")
 	var formats: Array = VideoFormat.SIZES.keys() if format == "both" else [format]
 	if not VideoFormat.SIZES.has(formats[0]):
@@ -81,6 +82,11 @@ func _initialize() -> void:
 		return _fail(loaded.error)
 	if OS.execute("ffmpeg", ["-version"], [], true) != 0:
 		return _fail("ffmpeg is needed to encode the clip; install it and put it on PATH")
+	if not flag_spec.is_empty():
+		Appearance.roll_missing(spec, loaded.data.roster)
+	var looks_problem := Appearance.check(spec, loaded.data.roster)
+	if not looks_problem.is_empty():
+		return _fail(looks_problem)
 
 	var controllers := Controllers.for_spec(spec)
 	if controllers.has("error"):

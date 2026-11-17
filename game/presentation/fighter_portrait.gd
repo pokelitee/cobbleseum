@@ -22,10 +22,11 @@ const MARGIN := 0.06
 var _view: FighterView
 
 
-## A portrait of the converted species scene at `path`, or null if the model can't be loaded.
-## Add it to the tree for it to draw; its texture is valid from then on.
-static func create(path: String, scale: float, model_height: float) -> FighterPortrait:
-	var view := FighterView.from_model(path, scale, model_height)
+## A portrait of the converted species scene at `path` (wearing `skin`, if given; see
+## FighterView.from_model()), or null if the model can't be loaded. Add it to the tree for it to
+## draw; its texture is valid from then on.
+static func create(path: String, scale: float, model_height: float, skin := "") -> FighterPortrait:
+	var view := FighterView.from_model(path, scale, model_height, skin)
 	if view == null:
 		return null
 	var portrait := FighterPortrait.new()

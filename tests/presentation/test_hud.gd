@@ -162,3 +162,18 @@ func test_each_plate_holds_a_portrait_or_the_initial_beside_the_bar() -> void:
 	hud.setup(["Left", "Right"], Vector2(1920, 1080), [[], []], [picture, picture])
 	assert_true((hud._panels[1].get_child(1).get_child(0) as TextureRect).flip_h, "the right-hand plate's portrait faces the middle")
 	hud.free()
+
+
+func test_a_shiny_has_a_sparkle_on_its_plate_in_both_formats() -> void:
+	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
+		var hud := Hud.new()
+		(Engine.get_main_loop() as SceneTree).root.add_child(hud)
+		hud.setup(["Left", "Right"], size, [["Fire"], ["Water"]], [null, null], [false, true])
+		var marks := hud._panels.map(func(p: Control) -> Array: return p.get_children().filter(func(c: Node) -> bool: return c is Hud.ShinyMark))
+		assert_eq(marks.map(func(m: Array) -> int: return m.size()), [0, 1], "only the shiny side at %s" % size)
+		var mark: Control = marks[1][0]
+		var row: Control = hud._badge_rows[1]
+		assert_true(mark.position.x + mark.size.x <= row.position.x, "the type pills make room for it at %s" % size)
+		var name_label: Label = hud._panels[1].get_children().filter(func(c: Node) -> bool: return c is Label)[0]
+		assert_true(mark.position.x >= name_label.position.x + name_label.get_minimum_size().x, "after the name at %s" % size)
+		hud.free()

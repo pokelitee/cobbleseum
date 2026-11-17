@@ -57,9 +57,10 @@ static func convert(source_root: String, folder: String, aspects: Array = []) ->
 		return {"error": "%s: %s" % [folder, built.error]}
 	var root: Node3D = built.scene
 	var skeleton: Skeleton3D = root.get_node("Skeleton")
-	_add_layers(skeleton.get_node("Mesh"), files.layers)
-	var report := {}
 	var mesh: MeshInstance3D = skeleton.get_node("Mesh")
+	if mesh.mesh != null:
+		add_layers(mesh.mesh.surface_get_material(0), files.layers)
+	var report := {}
 	var bounds := mesh.get_aabb().size if mesh.mesh != null else Vector3.ZERO
 	report.bounds = [bounds.x, bounds.y, bounds.z]
 	if files.texture.is_empty() or not FileAccess.file_exists(files.texture):
@@ -105,12 +106,19 @@ static func convert(source_root: String, folder: String, aspects: Array = []) ->
 	return {"scene": scene, "report": report}
 
 
-## Chains a material pass per layer onto the mesh: emissive layers draw unshaded at full
+## The material a look wears when only its textures change from the model's (most shinies):
+## its texture and layers on the converter's material, for FighterView to put on the model.
+## `files` are CobblemonSpecies.files() for the look.
+static func skin(files: Dictionary) -> Material:
+	var material := BedrockGeometry.material(CobblemonSpecies.load_texture(files.texture))
+	add_layers(material, files.layers)
+	return material
+
+
+## Chains a material pass per layer onto `material`: emissive layers draw unshaded at full
 ## brightness (glowing eyes, flames), the rest shaded, both blended by the layer's alpha.
-static func _add_layers(mesh_instance: MeshInstance3D, layers: Array) -> void:
-	if mesh_instance.mesh == null:
-		return
-	var last: Material = mesh_instance.mesh.surface_get_material(0)
+static func add_layers(material: Material, layers: Array) -> void:
+	var last := material
 	for layer: Dictionary in layers:
 		var texture := CobblemonSpecies.load_texture(layer.texture)
 		if texture == null:

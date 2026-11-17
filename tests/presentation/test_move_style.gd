@@ -58,3 +58,21 @@ func test_projectiles_still_in_flight_end_with_the_battle() -> void:
 class Idle extends RefCounted:
 	func decide(_battle: Battle, _side: int) -> Dictionary:
 		return {}
+
+
+func test_a_shiny_sparkle_waits_for_its_delay_then_pops_and_fades() -> void:
+	var fx := MoveFX.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(fx)
+	var view := FighterView.new()
+	view.height = 1.2
+	fx.add_child(view)
+	fx.sparkle(view, 5)
+	for i in 5:
+		fx.next_frame()
+	assert_eq(fx._effects.size(), 0, "nothing before the delay")
+	fx.next_frame()
+	assert_eq(fx._effects.size(), MoveFX.SPARKLE_GLINTS, "then the glints, without Cobblemon's style")
+	for i in MoveFX.SPARKLE_FRAMES + MoveFX.SPARKLE_GLINTS * MoveFX.SPARKLE_GAP + 1:
+		fx.next_frame()
+	assert_eq(fx._effects.size(), 0, "and they're gone once they've popped")
+	fx.free()

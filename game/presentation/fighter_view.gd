@@ -71,9 +71,10 @@ var _pending_frames := 0
 const PROCEDURAL_ROLES := {"physical": "lunge", "special": "rear", "status": "spin", "recoil": "tilt"}
 
 
-## Instances a converted species scene from the cache at the roster's scale and height.
-## Returns null if it can't be loaded.
-static func from_model(path: String, scale: float, model_height: float) -> FighterView:
+## Instances a converted species scene from the cache at the roster's scale and height, wearing
+## the material at `skin` (a shiny skin, Appearance) when one is given. Returns null if the model
+## can't be loaded; a skin that can't be is left off, with a warning.
+static func from_model(path: String, scale: float, model_height: float, skin := "") -> FighterView:
 	var scene: PackedScene = load(path) if ResourceLoader.exists(path) else null
 	if scene == null:
 		return null
@@ -89,6 +90,13 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 	view._mesh = mesh
 	if mesh.mesh != null:
 		shade(mesh.mesh)
+		if not skin.is_empty():
+			var material: Material = load(skin) if ResourceLoader.exists(skin) else null
+			if material == null:
+				push_warning("cannot load the skin %s; the model keeps its own colours" % skin)
+			else:
+				shade_material(material)
+				mesh.set_surface_override_material(0, material)
 	view._flash_material = StandardMaterial3D.new()
 	view._flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	view._flash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -123,17 +131,22 @@ static func from_model(path: String, scale: float, model_height: float) -> Fight
 ## The materials are shared by every instance of the model, and setting them again is harmless.
 static func shade(mesh: Mesh) -> void:
 	for surface in mesh.get_surface_count():
-		var material := mesh.surface_get_material(surface) as BaseMaterial3D
-		while material != null:
-			if material.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
-				material.albedo_color = Color(EMISSIVE_ENERGY, EMISSIVE_ENERGY, EMISSIVE_ENERGY, material.albedo_color.a)
-			else:
-				material.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-				material.roughness = RIM_ROUGHNESS
-				material.rim_enabled = true
-				material.rim = RIM
-				material.rim_tint = RIM_TINT
-			material = material.next_pass as BaseMaterial3D
+		shade_material(mesh.surface_get_material(surface))
+
+
+## Sets the shading of one material and its layer passes, as shade() does.
+static func shade_material(first: Material) -> void:
+	var material := first as BaseMaterial3D
+	while material != null:
+		if material.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+			material.albedo_color = Color(EMISSIVE_ENERGY, EMISSIVE_ENERGY, EMISSIVE_ENERGY, material.albedo_color.a)
+		else:
+			material.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+			material.roughness = RIM_ROUGHNESS
+			material.rim_enabled = true
+			material.rim = RIM
+			material.rim_tint = RIM_TINT
+		material = material.next_pass as BaseMaterial3D
 
 
 ## Hovering fighters float above the ground (§9.2), play their air animations when the species

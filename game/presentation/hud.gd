@@ -1,8 +1,8 @@
 class_name Hud
 extends CanvasLayer
 ## The battle HUD (concepts_brief.md §12.1, §12.5): a name plate per fighter (its portrait,
-## name, type pills, status badges, and a rounded HP bar with a lagging damage segment and its
-## percentage), move-name banners, captions, the instant replay's tag, and the intro, victory,
+## name, a gold sparkle for a shiny (§12.8), type pills, status badges, and a rounded HP bar
+## with a lagging damage segment and its percentage), move-name banners, captions, the instant replay's tag, and the intro, victory,
 ## winner and credits cards, in the game's fonts (UiFonts).
 ## Layout follows the orientation: portrait has side B at the top and side A at the bottom;
 ## landscape has side A top-left and side B top-right. Everything animates per video frame.
@@ -23,6 +23,9 @@ const DANGER := Color(1.0, 0.3, 0.25)
 const SIDE_COLOURS: Array[Color] = [Color(0.92, 0.3, 0.26), Color(0.26, 0.52, 0.96)]
 const PLATE := Color(0.06, 0.08, 0.14, 0.8)
 const GOLD := Color(1.0, 0.86, 0.32)
+## A shiny's sparkle on its name plate: its size and its gap after the name, in reference pixels.
+const SHINY_MARK_SIZE := 46.0
+const SHINY_MARK_GAP := 10.0
 ## The plate reaches this far around the name and bar, and the bar sits this far down.
 const PLATE_PAD := Vector2(18, 12)
 const BAR_TOP := 80.0
@@ -112,9 +115,11 @@ static func cobblemon_credit(move_effects: bool) -> String:
 	return "Models, animations and sounds: Cobblemon (CC BY‑NC 3.0)"
 
 
-## Builds the HUD for fighters `names` (side A first), with each one's `types` for its pills
-## and its `portraits` (FighterPortrait textures; a null one shows the name's initial instead).
-func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portraits: Array = [null, null]) -> void:
+## Builds the HUD for fighters `names` (side A first), with each one's `types` for its pills,
+## its `portraits` (FighterPortrait textures; a null one shows the name's initial instead) and
+## whether it's `shiny`.
+func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portraits: Array = [null, null],
+		shiny: Array = [false, false]) -> void:
 	_size = viewport_size
 	_portrait = VideoFormat.is_portrait(viewport_size)
 	_scale = minf(viewport_size.x, viewport_size.y) / REFERENCE_SIZE
@@ -148,10 +153,17 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 		var name_label := _label(names[side], 56, Color.WHITE, true)
 		name_label.position.x = left
 		panel.add_child(name_label)
+		var after_name := left + name_label.get_minimum_size().x
+		if side < shiny.size() and shiny[side]:
+			var mark := ShinyMark.new()
+			mark.size = Vector2.ONE * SHINY_MARK_SIZE * _scale
+			mark.position = Vector2(after_name + SHINY_MARK_GAP * _scale, (name_label.get_minimum_size().y - mark.size.y) * 0.5)
+			panel.add_child(mark)
+			after_name = mark.position.x + mark.size.x
 		# Type pills, then status badges as they come and go.
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", roundi(8 * _scale))
-		row.position = Vector2(left + name_label.get_minimum_size().x + 16 * _scale, 14 * _scale)
+		row.position = Vector2(after_name + 16 * _scale, 14 * _scale)
 		panel.add_child(row)
 		var own_types: Array = types[side] if side < types.size() else []
 		for type: String in own_types:
@@ -673,3 +685,27 @@ func _rect(colour: Color, position: Vector2, size: Vector2) -> ColorRect:
 	rect.size = size * _scale
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return rect
+
+
+## A shiny's mark: a gold four-pointed sparkle with a smaller one beside it, outlined dark so it
+## reads on the plate and over bright arenas alike.
+class ShinyMark:
+	extends Control
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var big := size.x * 0.4
+		_star(Vector2(size.x * 0.42, size.y * 0.55), big)
+		_star(Vector2(size.x * 0.84, size.y * 0.2), big * 0.45)
+
+	func _star(centre: Vector2, radius: float) -> void:
+		var points := PackedVector2Array()
+		for i in 8:
+			var reach := radius if i % 2 == 0 else radius * 0.28
+			points.append(centre + Vector2.UP.rotated(TAU * i / 8.0) * reach)
+		var outline := points.duplicate()
+		outline.append(points[0])
+		draw_polyline(outline, Color(0.35, 0.2, 0.0), maxf(2.0, radius * 0.2), true)
+		draw_colored_polygon(points, Hud.GOLD)

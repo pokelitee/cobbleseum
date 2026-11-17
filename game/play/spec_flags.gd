@@ -5,9 +5,14 @@ extends RefCounted
 ## - --play=<species>: the player against --vs, which --ai controls.
 ## - --watch=<species>: AI against AI; --ai controls it and --vs-ai (default: --ai) its foe.
 ## --vs defaults to DEFAULT_FOE and --seed to one from the clock; --arena picks the arena.
+## How the fighters look (Appearance, presentation only): --shiny=a|b|both|none makes them shiny or
+## not, and --form=<form> and --vs-form=<form> pick each one's cosmetic form ("base" for its
+## own look). What the flags leave out is rolled from the seed once the roster is loaded.
 
 const DEFAULT_FOE := "blastoise"
-const KEYS: Array[String] = ["play", "watch", "vs", "ai", "vs-ai", "seed", "arena"]
+const KEYS: Array[String] = ["play", "watch", "vs", "ai", "vs-ai", "seed", "arena", "shiny", "form", "vs-form"]
+## Which sides --shiny makes shiny.
+const SHINY_SIDES := {"a": [true, false], "b": [false, true], "both": [true, true], "none": [false, false]}
 
 
 ## Splits `args` into these flags {key: value} and every other argument.
@@ -43,6 +48,15 @@ static func to_spec(flags: Dictionary) -> Dictionary:
 	]}
 	if flags.has("arena"):
 		spec.arena = flags.arena
+	if flags.has("shiny"):
+		if not SHINY_SIDES.has(flags.shiny):
+			return {"error": "--shiny must be a, b, both or none, not '%s'" % flags.shiny}
+		for side in 2:
+			spec.fighters[side].shiny = SHINY_SIDES[flags.shiny][side]
+	for side in 2:
+		var key: String = ["form", "vs-form"][side]
+		if flags.has(key):
+			spec.fighters[side].form = "" if flags[key] == Appearance.BASE_FORM else str(flags[key])
 	return spec
 
 
@@ -55,4 +69,17 @@ static func from_spec(spec: Dictionary) -> PackedStringArray:
 		"--vs=%s" % fighters[1].species,
 		"--ai=%s" % (fighters[1].ai if playing else fighters[0].ai),
 	] + ([] if playing else ["--vs-ai=%s" % fighters[1].ai]) + ["--seed=%d" % int(spec.seed)]
-		+ (["--arena=%s" % spec.arena] if spec.has("arena") else []))
+		+ (["--arena=%s" % spec.arena] if spec.has("arena") else []) + _look_flags(fighters))
+
+
+## The --shiny, --form and --vs-form flags for what the fighters' specs say about their looks.
+static func _look_flags(fighters: Array) -> Array:
+	var flags: Array = []
+	if fighters[0].has("shiny") or fighters[1].has("shiny"):
+		var shiny := [bool(fighters[0].get("shiny", false)), bool(fighters[1].get("shiny", false))]
+		flags.append("--shiny=%s" % SHINY_SIDES.find_key(shiny))
+	for side in 2:
+		if fighters[side].has("form"):
+			var form := str(fighters[side].form)
+			flags.append("--%s=%s" % [["form", "vs-form"][side], form if not form.is_empty() else Appearance.BASE_FORM])
+	return flags

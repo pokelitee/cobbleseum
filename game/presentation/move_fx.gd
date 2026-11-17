@@ -49,6 +49,17 @@ const AURA_PIECES := {
 const GUARD_PIECE_SPEED := 2.5
 const GUARD_FRAMES := 11
 const GUARD_COLOUR := Color(0.55, 0.85, 1.0)
+## A shiny's sparkle (sparkle()): Cobblemon's shiny ring, else SPARKLE_GLINTS gold glints
+## popping one after another around the fighter, each for SPARKLE_FRAMES.
+const SPARKLE_PIECE := "shiny_ring"
+## Cobblemon sizes the ring for its own camera; ours sits farther back, so it plays larger.
+const SPARKLE_SCALE := 1.5
+const SPARKLE_GLINTS := 6
+const SPARKLE_FRAMES := 12
+const SPARKLE_GAP := 3
+const SPARKLE_COLOUR := Color(1.0, 0.9, 0.5)
+## A glint's scale before it pops, kept above zero so its transform stays invertible.
+const GLINT_MIN_SCALE := 0.001
 const CHARGING: Array[String] = ["beam", "bolt", "stream", "pulse", "sound", "mind", "explosion", "orb", "bullet"]
 
 ## Move id -> style, from MoveStyle; moves not listed use their kind's default.
@@ -62,6 +73,8 @@ var _frame := 0
 var cobblemon: CobblemonMoveFX = null
 ## The fighters by side, so converted effects know each move's foe.
 var views: Array[FighterView] = []
+## Sparkles waiting to start: {"view": FighterView, "frames": int}.
+var _sparkles: Array[Dictionary] = []
 
 
 ## Turns on Cobblemon-style sequences: each move's own, or its style's. Loads what `moves`
@@ -82,6 +95,7 @@ func use_cobblemon(fighters: Array[FighterView], moves: Array = []) -> String:
 	var pieces: Array[String] = []
 	for names: String in AURA_PIECES.values():
 		pieces.append_array(names.split(","))
+	pieces.append(SPARKLE_PIECE)
 	cobblemon.prepare(pairs, pieces)
 	return ""
 
@@ -327,6 +341,32 @@ func guard(view: FighterView, blocked := false) -> void:
 		"growth": 0.05 if not blocked else 0.3})
 
 
+## A shiny's sparkle as the battle opens (concepts_brief.md §12.8), `delay` frames from now,
+## where the fighter is then: Cobblemon's shiny ring with its style on, else gold glints.
+func sparkle(view: FighterView, delay := 0) -> void:
+	_sparkles.append({"view": view, "frames": delay})
+
+
+func _start_sparkle(view: FighterView) -> void:
+	if cobblemon != null:
+		cobblemon.play_piece(SPARKLE_PIECE, view, _foe(view), {"on": "user", "at": "root", "scale": SPARKLE_SCALE})
+		return
+	for i in SPARKLE_GLINTS:
+		var angle := TAU * i / SPARKLE_GLINTS
+		var around := Vector3(cos(angle), 0, sin(angle)) * maxf(view.height * 0.45, 0.4)
+		var root := _camera_root(view.position + around + Vector3.UP * view.height * (0.3 + 0.6 * float(i % 3) / 2.0), 0.3)
+		var glint := Node3D.new()
+		glint.scale = Vector3.ONE * GLINT_MIN_SCALE
+		root.add_child(glint)
+		for turn in [0.0, 90.0]:
+			var ray := _mesh(BoxMesh.new(), SPARKLE_COLOUR, 1.0)
+			ray.scale = Vector3(0.06, 1.0, 0.02)
+			ray.rotation_degrees.z = turn
+			glint.add_child(ray)
+		_effects.append({"node": root, "glint": glint, "age": -i * SPARKLE_GAP, "frames": SPARKLE_FRAMES, "kind": "glint",
+			"size": clampf(view.height * 0.35, 0.25, 0.6)})
+
+
 ## Matches projectile visuals to the simulation's projectiles and moves them. Once the battle
 ## is over, the ones still in flight end: the simulation stops stepping, so they would hang in
 ## the air through the knockout and the victory.
@@ -352,6 +392,12 @@ func sync_projectiles(battle: Battle) -> void:
 ## Advances every running effect by one video frame.
 func next_frame() -> void:
 	_frame += 1
+	for waiting in _sparkles.duplicate():
+		waiting.frames -= 1
+		if waiting.frames < 0:
+			_sparkles.erase(waiting)
+			if is_instance_valid(waiting.view):
+				_start_sparkle(waiting.view)
 	if cobblemon != null:
 		cobblemon.next_frame()
 	for effect in _effects.duplicate():
@@ -403,6 +449,12 @@ func next_frame() -> void:
 				_fade_all(node, 1.0 - t)
 			"drop":
 				node.position = effect.origin + Vector3.UP * SKY_HEIGHT * (1.0 - clampf(t, 0.0, 1.0))
+			"glint":
+				var pop := sin(PI * clampf(t, 0.0, 1.0))
+				var glint: Node3D = effect.glint
+				glint.scale = Vector3.ONE * maxf(effect.size * pop, GLINT_MIN_SCALE)
+				glint.rotation.z = t * 1.5
+				_fade_all(node, pop)
 			"drift":
 				var d := clampf(t, 0.0, 1.0)
 				node.position = (effect.from as Vector3).lerp(effect.to, d)

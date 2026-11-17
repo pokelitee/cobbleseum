@@ -161,3 +161,13 @@ func test_species_outside_the_roster_are_rejected() -> void:
 	data.roster = {"squirt": {"radius": 0.7}}
 	var created := Battle.create(_spec(1), data, StandInAI.pair(1))
 	assert_true(str(created.get("error", "")).contains("not in the roster"), str(created))
+
+
+func test_fighter_looks_never_change_the_battle() -> void:
+	var plain := _run(_spec(21))
+	var styled_spec := _spec(21)
+	styled_spec.fighters[0].shiny = true
+	styled_spec.fighters[1].form = "east"
+	var styled := _run(styled_spec)
+	assert_eq(styled.checksum(), plain.checksum(), "shininess and cosmetic forms are presentation only")
+	assert_eq(styled.events, plain.events)
