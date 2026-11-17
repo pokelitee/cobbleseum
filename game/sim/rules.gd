@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 19
+const RULES_VERSION := 20
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -129,6 +129,11 @@ const STATUS_MOVE_COOLDOWN := 6.0
 ## an extra bar of HP.
 const HEAL_WINDUP := 1.2
 const HEAL_FACTOR := 0.5
+
+## Arena conditions (§9.11): weather lasts this long from a move or an ability, longer with the
+## item that extends it (Damp Rock). A starting weather from the arena or spec lasts the battle.
+const WEATHER_SECONDS := 20.0
+const WEATHER_EXTENDED_SECONDS := 32.0
 
 ## Stat stages run from -6 to +6 with the main-series multipliers (§9.5). They wear off:
 ## every STAGE_DECAY_SECONDS without a change, each stage moves one step back toward 0.

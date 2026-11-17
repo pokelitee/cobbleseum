@@ -55,6 +55,14 @@ const GUARD_CALLOUT := Color(0.6, 0.85, 1.0)
 const ABILITY_CALLOUT := Color(1.0, 0.85, 0.45)
 ## A held item's name over the fighter when it takes effect or is used up.
 const ITEM_CALLOUT := Color(0.75, 1.0, 0.7)
+## Weather (§9.11): each one's colour (the HUD's pill, callouts) and what's said when it starts
+## and ends.
+const WEATHER_COLOURS := {"rain": Color(0.4, 0.65, 1.0), "sun": Color(1.0, 0.68, 0.25),
+	"sand": Color(0.85, 0.7, 0.45), "snow": Color(0.78, 0.9, 1.0)}
+const WEATHER_STARTS := {"rain": "It started to rain!", "sun": "The sunlight turned harsh!",
+	"sand": "A sandstorm kicked up!", "snow": "It started to snow!"}
+const WEATHER_ENDS := {"rain": "The rain stopped.", "sun": "The sunlight faded.",
+	"sand": "The sandstorm subsided.", "snow": "The snow stopped."}
 ## Metres a fighter must move in a tick to play its walk animation.
 const WALK_THRESHOLD := 0.01
 ## Hits taking at least this share of the defender's HP (or big ones) make the crowd cheer;
@@ -251,7 +259,8 @@ func _ready() -> void:
 		_event_index = 0
 		for side in 2:
 			_hud.set_hp(side, 1.0, true)
-		_hud.set_intro_subtitle(arena_name)
+		_hud.set_intro_subtitle(arena_name + _weather_subtitle())
+		_arena.weather.snap(battle.conditions.weather)
 		return
 	var start := 0
 	_end_tick = plan.slow.size()
@@ -269,7 +278,8 @@ func _ready() -> void:
 	var overtime := battle.tick >= roundi(Rules.OVERTIME_SECONDS * Rules.TICK_RATE)
 	if overtime:
 		_music.overtime()
-	_hud.set_intro_subtitle(arena_name + (" · Overtime" if overtime else ""))
+	_hud.set_intro_subtitle(arena_name + _weather_subtitle() + (" · Overtime" if overtime else ""))
+	_arena.weather.snap(battle.conditions.weather)
 	while _caption_index < plan.captions.size() and int(plan.captions[_caption_index].tick) < _tick:
 		_caption_index += 1
 	_begin_tick()
@@ -366,6 +376,7 @@ func _advance_effects() -> void:
 	_fx.next_frame()
 	_move_fx.next_frame()
 	_hud.next_frame()
+	_sync_conditions()
 	_sound.next_frame()
 	_next_audio_frame()
 	if _overlay.visible:
@@ -648,6 +659,15 @@ func _play_events() -> void:
 			"ability_damage", "item_damage":
 				_views[event.side].take_hit()
 				_fx.announce(_views[event.side], "-%d" % event.damage, Color(1, 1, 1), 44)
+			"weather":
+				# A battle's starting weather shows on the intro card and the HUD instead.
+				if not _replaying and int(event.tick) > 0:
+					_hud.flash_title(WEATHER_STARTS[event.weather], WEATHER_COLOURS[event.weather])
+			"weather_end":
+				if not _replaying:
+					_hud.flash_title(WEATHER_ENDS[event.weather], WEATHER_COLOURS[event.weather])
+			"weather_damage":
+				_fx.announce(_views[event.side], "-%d" % event.damage, WEATHER_COLOURS[event.weather], 44)
 			"stunned":
 				_fx.announce(_views[event.side], "Can't move!", Hud.STATUS_BADGES.par[1].lightened(0.3), 48)
 			"dodge":
@@ -687,6 +707,46 @@ func _play_events() -> void:
 				_music.draw()
 				for view in _views:
 					view.play_role("sad")
+
+
+## The weather shown last frame, its ticks left then, and the ticks it lasted in all.
+var _weather_seen := ""
+var _weather_left := 0
+var _weather_total := 1.0
+
+
+## Keeps the weather's look and the HUD's condition pills in step with the battle shown (the
+## instant replay's copy included), one video frame at a time.
+func _sync_conditions() -> void:
+	var conditions := battle.conditions
+	_arena.weather.show_weather(conditions.weather)
+	_arena.weather.next_frame()
+	var entries := []
+	if not conditions.weather.is_empty():
+		# A new weather (or a renewed one) sets the timer's full length.
+		if conditions.weather != _weather_seen or conditions.weather_ticks > _weather_left:
+			_weather_total = maxf(_weather_full(), 1.0)
+		var left := -1.0 if conditions.weather_ticks < 0 else conditions.weather_ticks / _weather_total
+		entries.append({"key": "weather", "text": ArenaConditions.display_name(conditions.weather),
+			"colour": WEATHER_COLOURS[conditions.weather], "left": left})
+	_weather_seen = conditions.weather
+	_weather_left = conditions.weather_ticks
+	_hud.set_conditions(entries)
+
+
+## Ticks the shown weather lasted when set (its "weather" event), for the pill's timer.
+func _weather_full() -> float:
+	for i in range(battle.events.size() - 1, -1, -1):
+		var event: Dictionary = battle.events[i]
+		if event.type == "weather":
+			return float(event.seconds) * Rules.TICK_RATE
+	return Rules.WEATHER_SECONDS * Rules.TICK_RATE
+
+
+## " · Rain" for a battle that starts in a weather lasting the battle (from its arena or spec).
+func _weather_subtitle() -> String:
+	var weather := str(battle.spec.get("weather", Arenas.preset(battle.arena).get("weather", "")))
+	return " · " + ArenaConditions.display_name(weather) if not weather.is_empty() else ""
 
 
 ## The planned ending's victory: the HUD's card with the winner's name, HP left and the

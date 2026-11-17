@@ -10,9 +10,10 @@ extends RefCounted
 ## - SELF_BUFF and HEAL: status moves the user aims at itself, applied on release (a heal is a
 ##   long channel that any hit cancels);
 ## - DEBUFF and STATUS: status moves fired at the opponent as projectiles, lowering its stats
-##   or inflicting a status condition or confusion.
+##   or inflicting a status condition or confusion;
+## - ARENA: arena moves (§9.11), applied on release like a self-buff, setting a weather.
 
-enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA }
+enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA, ARENA }
 
 ## Showdown targets that mean "one opponent" in a one-on-one battle.
 const SINGLE_TARGETS: Array[String] = ["normal", "any", "adjacentFoe", "randomNormal"]
@@ -64,6 +65,8 @@ var self_boosts: Dictionary = {}
 ## Major status ("brn", ...) or "" for STATUS moves; `confuses` for confusion.
 var status := ""
 var confuses := false
+## The weather an ARENA move sets ("rain", ...; ArenaConditions.WEATHERS).
+var weather := ""
 ## Shares of max HP healed (HEAL), of damage dealt healed (drain) or taken back (recoil).
 var heal_share := 0.0
 var drain_share := 0.0
@@ -194,6 +197,11 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 static func _classify_status_move(id: String, data: Dictionary, move: BattleMove) -> String:
 	if id in EXCLUDED:
 		return "%s needs move-specific code, not supported yet" % id
+	var weather := ArenaConditions.weather_of_move(data)
+	if not weather.is_empty():
+		move.kind = Kind.ARENA
+		move.weather = weather
+		return ""
 	var target: String = data.get("target", "normal")
 	var raw_boosts: Dictionary = data.get("boosts", {})
 	var boosts := _stat_changes(raw_boosts)
@@ -247,9 +255,9 @@ func is_projectile() -> bool:
 	return kind == Kind.PROJECTILE or kind == Kind.DEBUFF or kind == Kind.STATUS
 
 
-## True for kinds applied to the user.
+## True for kinds applied on release without reaching the foe (to the user or the arena).
 func is_self() -> bool:
-	return kind == Kind.SELF_BUFF or kind == Kind.HEAL
+	return kind == Kind.SELF_BUFF or kind == Kind.HEAL or kind == Kind.ARENA
 
 
 func is_damaging() -> bool:

@@ -21,6 +21,8 @@ var spec: Dictionary
 var arena := ""
 ## The arena's ground (§9.8), from its field and the seed.
 var terrain: Terrain
+## The arena conditions (§9.11): the weather, shared with both fighters.
+var conditions := ArenaConditions.new()
 ## With record_intents set (battles with a player), every tick's intents per side, as
 ## [move x, move y, use, dodge x, dodge y, feint, guard]; a ReplayController plays them back.
 var record_intents := false
@@ -40,6 +42,7 @@ var _projectile_count := 0
 
 
 ## `spec` = {"seed": int, "fighters": [{"species", "moves"?: [ids], "radius"?}, x2],
+## "arena"?: preset, "weather"?: a starting weather ("" for none, else the preset's),
 ## "rules_version"?: int, "data_versions"?: {source: SHA-256}}. Without
 ## "moves" a fighter gets its species' standard moveset (Movesets). The
 ## hitbox radius comes from the spec, else the roster, else Fighter.DEFAULT_RADIUS; with a
@@ -68,6 +71,11 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 	battle.arena = Arenas.choose(str(battle_spec.get("arena", "")), types, int(battle_spec.seed))
 	battle.terrain = Terrain.generate(Arenas.preset(battle.arena).field, SimRandom.stream(int(battle_spec.seed), Stream.TERRAIN),
 		Arenas.enclosed(battle.arena))
+	var weather := str(battle_spec.get("weather", Arenas.preset(battle.arena).get("weather", "")))
+	if not weather.is_empty() and not weather in ArenaConditions.WEATHERS:
+		return {"error": "unknown weather '%s' (one of %s)" % [weather, ArenaConditions.WEATHERS]}
+	if not weather.is_empty():
+		battle.conditions.set_weather(weather, -1)
 	for side in 2:
 		var entry: Dictionary = entries[side]
 		var species: Variant = data.species.get(entry.get("species", ""))
@@ -95,11 +103,12 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		if not ability.is_empty() and not Abilities.is_known(ability):
 			return {"error": "ability '%s' isn't supported (see %s)" % [ability, Abilities.TABLE_FILE]}
 		fighter.set_ability(ability)
-		var item := str(entry.get("item", Items.standard(species, battle_moves, data)))
+		var item := str(entry.get("item", Items.standard(species, battle_moves, data, data.standard_ability(entry.species))))
 		if not item.is_empty() and not Items.is_known(item):
 			return {"error": "item '%s' isn't supported (see %s)" % [item, Items.TABLE_FILE]}
 		fighter.set_item(item)
 		fighter.can_evolve = Items.can_evolve(species, data)
+		fighter.arena = battle.conditions
 		fighter.position = Vector2(0, (-0.5 if side == 0 else 0.5) * Rules.START_DISTANCE)
 		fighter.facing = Vector2(0, 1 if side == 0 else -1)
 		fighter.ground = battle.terrain.height_at(fighter.position)
@@ -180,10 +189,15 @@ func step() -> void:
 		intents.append(intent)
 		if record_intents:
 			intent_log[side].append(intent_to_log(intent))
+	if tick == 0:
+		_start_conditions()
 	var order := [0, 1] if tick % 2 == 0 else [1, 0]
 	for side: int in order:
 		_act(fighters[side], fighters[1 - side], intents[side])
 	_move_projectiles()
+	var ended := conditions.tick()
+	if not ended.is_empty():
+		_event("weather_end", -1, {"weather": ended})
 	if tick == Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS):
 		_event("overtime", -1, {})
 	_record_state()
@@ -221,6 +235,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 	_tick_conditions(fighter)
 	_tick_abilities(fighter, foe)
 	_tick_item(fighter)
+	_tick_weather(fighter)
 	if fighter.is_knocked_out() or fighter.is_incapacitated():
 		fighter.followups.clear()
 		if not fighter.is_knocked_out():
@@ -394,7 +409,9 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 	fighter.action_ticks = move.recovery_ticks
 	if move.is_self():
 		if move.kind == BattleMove.Kind.HEAL:
-			_heal(fighter, roundi(fighter.max_hp * move.heal_share), move.id)
+			_heal(fighter, roundi(fighter.max_hp * conditions.heal_share(fighter, move)), move.id)
+		elif move.kind == BattleMove.Kind.ARENA:
+			_set_weather(fighter, move.weather, {"move": move.id})
 		else:
 			_boost(fighter, move.boosts, move.id)
 	else:
@@ -433,7 +450,7 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> bool:
 			_projectile_count += 1
 			# Aimed along the facing, rising or falling to reach the foe's chest at its distance.
 			var start := fighter.position + fighter.facing * fighter.radius
-			var speed := move.projectile_speed / Rules.TICK_RATE
+			var speed := conditions.projectile_speed(fighter, move) / Rules.TICK_RATE
 			if move.physical:
 				speed *= float(fighter.ability_effect.get("physical_projectile_speed", 1.0))
 			var ticks_to_foe := maxf(start.distance_to(foe.position) / speed, 1.0)
@@ -700,6 +717,54 @@ func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
 				_boost(fighter, {"spe": 1}, fighter.ability)
 
 
+## The conditions a battle starts with, on its first tick: the arena's or spec's weather, then
+## weather-setting abilities, the faster fighter's first, so the slower one's weather wins
+## (a tie goes to the battle's random stream).
+func _start_conditions() -> void:
+	if not conditions.weather.is_empty():
+		_event("weather", -1, {"weather": conditions.weather, "seconds": -1})
+	var setters: Array[Fighter] = []
+	for fighter in fighters:
+		if not Abilities.sets_weather(fighter).is_empty():
+			setters.append(fighter)
+	if setters.size() == 2:
+		var a_speed := setters[0].stat("spe")
+		var b_speed := setters[1].stat("spe")
+		if a_speed < b_speed or (a_speed == b_speed and _random.chance(0.5)):
+			setters.reverse()
+	for fighter in setters:
+		_ability_event(fighter)
+		_set_weather(fighter, Abilities.sets_weather(fighter), {"ability": fighter.ability})
+
+
+## Sets a weather from `setter`'s move or ability (`source`: {"move"} or {"ability"}), for its
+## usual time or longer with the matching rock.
+func _set_weather(setter: Fighter, weather: String, source: Dictionary) -> void:
+	var ticks := ArenaConditions.weather_ticks_for(setter, weather)
+	conditions.set_weather(weather, ticks)
+	var details := {"weather": weather, "seconds": ticks / float(Rules.TICK_RATE)}
+	details.merge(source)
+	_event("weather", setter.side, details)
+
+
+## The weather's effects on a fighter, once a second: sandstorm damage, the ability's healing
+## or damage (Rain Dish, Dry Skin, Solar Power), and Hydration curing a status in rain.
+func _tick_weather(fighter: Fighter) -> void:
+	if tick % Rules.TICK_RATE != 0:
+		return
+	var weather := conditions.weather_for(fighter)
+	if weather.is_empty():
+		return
+	var change := ArenaConditions.hp_per_second(fighter.types, fighter.ability_effect, weather)
+	if change < 0.0:
+		_hurt(fighter, maxi(1, roundi(fighter.max_hp * -change)), "weather_damage", {"weather": weather})
+	elif change > 0.0:
+		_heal(fighter, maxi(1, roundi(fighter.max_hp * change)), fighter.ability, "regen")
+	if not fighter.status.is_empty() and str(fighter.ability_effect.get("weather_cures", "")) == weather and not fighter.is_knocked_out():
+		_ability_event(fighter)
+		_end_status(fighter)
+
+
 ## A debuff or status projectile reaching its target.
 func _land(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	_event("landed", attacker.side, {"move": move.id})
@@ -732,6 +797,8 @@ func _inflict(fighter: Fighter, status: String, source: Fighter = null) -> void:
 			return
 	if Abilities.status_immune(fighter, status):
 		_ability_event(fighter)
+		return
+	if conditions.blocks_status(fighter, status):
 		return
 	fighter.status = status
 	fighter.toxic_level = 0
@@ -896,7 +963,7 @@ static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove,
 	var stab := Abilities.stab(attacker) if move.type in attacker.types else 1.0
 	var main_series := Abilities.effectiveness(attacker, defender, move, data.effectiveness(move.type, defender.types))
 	var effectiveness := Rules.compressed_effectiveness(main_series)
-	var factor := stab * effectiveness * Abilities.taken_factor(defender, move, main_series) * Items.power_factor(attacker, move, main_series)
+	var factor := stab * effectiveness * Abilities.taken_factor(defender, move, main_series) * Items.power_factor(attacker, move, main_series) 		* attacker.arena.damage_factor(attacker, defender, move)
 	return {"base": base, "factor": factor,
 		"effectiveness": effectiveness}
 
@@ -917,7 +984,7 @@ func _check_end() -> void:
 
 ## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
 func _record_state() -> void:
-	_state.resize(FIGHTER_STATE_SIZE * 2 + projectiles.size() * 3)
+	_state.resize(FIGHTER_STATE_SIZE * 2 + 2 + projectiles.size() * 3)
 	var i := 0
 	for fighter in fighters:
 		_state[i] = fighter.position.x
@@ -953,6 +1020,9 @@ func _record_state() -> void:
 		_state[i + 30] = 1.0 if fighter.sturdy_used else 0.0
 		_state[i + 31] = 1.0 if fighter.item_used else 0.0
 		i += FIGHTER_STATE_SIZE
+	_state[i] = ArenaConditions.WEATHERS.find(conditions.weather)
+	_state[i + 1] = conditions.weather_ticks
+	i += 2
 	for projectile in projectiles:
 		_state[i] = projectile.position.x
 		_state[i + 1] = projectile.position.y

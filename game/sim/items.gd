@@ -55,8 +55,9 @@ static func can_evolve(species: Dictionary, data: BattleData) -> bool:
 ## (`moves`, BattleMoves), in order: Eviolite if it can evolve; Assault Vest if it's bulky and
 ## carries no status-category move; Life Orb for a frail attacker; Rocky Helmet for a
 ## physically sturdy one; Expert Belt for wide coverage; Sitrus Berry for a lot of HP; then
-## Black Sludge for Poison types and Leftovers for the rest.
-static func standard(species: Dictionary, moves: Array, data: BattleData) -> String:
+## Black Sludge for Poison types and Leftovers for the rest. A species whose standard `ability`
+## or moveset sets a weather holds that weather's rock, after Eviolite.
+static func standard(species: Dictionary, moves: Array, data: BattleData, ability := "") -> String:
 	var base: Dictionary = species.get("baseStats", {})
 	var bulk := int(base.get("hp", 0)) + int(base.get("def", 0)) + int(base.get("spd", 0))
 	var attack := maxi(int(base.get("atk", 0)), int(base.get("spa", 0)))
@@ -67,6 +68,12 @@ static func standard(species: Dictionary, moves: Array, data: BattleData) -> Str
 			attack_types[move.type] = true
 	if can_evolve(species, data):
 		return "eviolite"
+	var weather := str(Abilities.effect(ability).get("sets_weather", ""))
+	for move: BattleMove in moves:
+		if weather.is_empty() and move.kind == BattleMove.Kind.ARENA:
+			weather = move.weather
+	if not weather.is_empty():
+		return weather_rock(weather)
 	if not status_moves and bulk >= VEST_BULK:
 		return "assaultvest"
 	if attack >= ORB_ATTACK and bulk < ORB_BULK:
@@ -106,3 +113,11 @@ static func forbids(fighter: Fighter, move: BattleMove) -> bool:
 
 static func punishes_contact(fighter: Fighter) -> bool:
 	return fighter.item_effect.has("contact_damage")
+
+
+## The item that lengthens weather `weather` (Damp Rock for rain).
+static func weather_rock(weather: String) -> String:
+	for id: String in table():
+		if str(table()[id].get("weather_extends", "")) == weather:
+			return id
+	return ""

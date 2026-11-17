@@ -92,12 +92,15 @@ static func effectiveness(attacker: Fighter, defender: Fighter, move: BattleMove
 	return main_series
 
 
-## A stat's multiplier from its owner's ability: always (Huge Power), or with a status (Guts).
+## A stat's multiplier from its owner's ability: always (Huge Power), with a status (Guts), or
+## in a weather (Swift Swim, Solar Power).
 static func stat_factor(fighter: Fighter, stat: String) -> float:
 	var entry := fighter.ability_effect
 	var factor := float(entry.get("stat_factors", {}).get(stat, 1.0))
 	if not fighter.status.is_empty():
 		factor *= float(entry.get("status_stat_factors", {}).get(stat, 1.0))
+	if entry.has("weather_stats"):
+		factor *= float(entry.weather_stats.get(fighter.arena.weather_for(fighter), {}).get(stat, 1.0))
 	return factor
 
 
@@ -107,10 +110,14 @@ static func stab(attacker: Fighter) -> float:
 
 
 ## The attacker's power multiplier for `move`: the ability's constant boosts (move_factor), a
-## pinch ability's and Flash Fire's once absorbed.
+## pinch ability's, Flash Fire's once absorbed, and a weather's (Sand Force).
 static func power_factor(attacker: Fighter, move: BattleMove) -> float:
 	var entry := attacker.ability_effect
 	var factor := move_factor(entry, move)
+	if entry.has("weather_power"):
+		var weather_power: Dictionary = entry.weather_power.get(attacker.arena.weather_for(attacker), {})
+		if not weather_power.is_empty() and move.type in weather_power.types:
+			factor *= float(weather_power.factor)
 	if entry.get("pinch_type", "") == move.type and attacker.hp <= attacker.max_hp * PINCH_SHARE:
 		factor *= PINCH_FACTOR
 	if attacker.flash_fire_ticks > 0 and move.type in entry.get("immune", []):
@@ -157,9 +164,18 @@ static func secondary_chance_factor(attacker: Fighter) -> float:
 	return float(attacker.ability_effect.get("secondary_chance", 1.0))
 
 
-## Whether the fighter's ability prevents status `status` ("confusion" included).
+## Whether the fighter's ability prevents status `status` ("confusion" included), always or in
+## its weather (Leaf Guard: major status in sun).
 static func status_immune(fighter: Fighter, status: String) -> bool:
-	return status in fighter.ability_effect.get("status_immune", [])
+	var entry := fighter.ability_effect
+	if status in entry.get("status_immune", []):
+		return true
+	return status != "confusion" and entry.has("weather_status_immune") 		and str(entry.weather_status_immune) == fighter.arena.weather_for(fighter)
+
+
+## The weather the fighter's ability sets when the battle starts (Drizzle), or "".
+static func sets_weather(fighter: Fighter) -> String:
+	return str(fighter.ability_effect.get("sets_weather", ""))
 
 
 ## The stat changes from `changes` the foe can make to `fighter`, after its ability.

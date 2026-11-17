@@ -142,11 +142,22 @@ A battle with no winner: both fighters knocked out on the same tick, or time-up.
 _Avoid_: tie, stalemate
 
 **Arena move**:
-A move that changes the arena or the whole battle for a while instead of hitting a fighter, such as a weather move, Electric Terrain, Spikes or Reflect. Not in the game yet.
+A move that sets an arena condition instead of hitting a fighter: a weather move, a surge move (Electric Terrain) or a screen (Reflect). Entry hazards such as Spikes are arena moves too, but wait for team battles.
 _Avoid_: field move
 
+**Arena condition**:
+A weather, surge or screen that is up for a while and changes play.
+
 **Weather**:
-Reserved for a battle condition, set by moves, that changes play. Not in the game yet.
+The arena condition of the sky over the whole battle: rain, sun, sandstorm or snow. One at a time; a new one replaces the old.
+_Avoid_: look (the arena's sky and light, which weather changes on top of)
+
+**Surge**:
+The arena condition on the ground under the whole battle (electric, grassy, misty or psychic), set by the moves Showdown calls Electric Terrain and so on. It affects only grounded fighters.
+_Avoid_: terrain (that's the ground's shape), field effect
+
+**Screen**:
+An arena condition on one side that weakens hits taken: Reflect, Light Screen or Aurora Veil.
 
 ### AI
 

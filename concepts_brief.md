@@ -492,10 +492,10 @@ In the code, multi-hit, charge and recharge are properties of the melee, project
 - **Fixed damage** (Seismic Toss, Night Shade, Dragon Rage, Sonic Boom) deals its main-series amount, unscaled, like every other move's damage, so it keeps its balance against them.
 - **Self-destructing moves** (Explosion, Self-Destruct, Misty Explosion) knock out the user.
 
-For the 850 standard moves, 616 are playable: 243 melee, 238 projectile, 64 area, 26 self-buff, 18 debuff, 17 status and 10 heal. The rest are arena moves, special cases and moves whose power is computed in code.
+For the 850 standard moves, 621 are playable: 243 melee, 238 projectile, 64 area, 26 self-buff, 18 debuff, 17 status, 10 heal and 5 arena moves (§9.11). The rest are other arena moves, special cases and moves whose power is computed in code.
 
 **Not in the first version:**
-- 30 arena moves: weather, Pokémon's terrains, hazards and screens.
+- Arena moves other than weather (§9.11): surges and screens are planned; entry hazards wait for team battles.
 - 106 special-case moves, such as Protect, Substitute, Counter and Transform.
 
 **Phases.** Every move has a wind-up, an active window and a recovery.
@@ -654,7 +654,7 @@ Since rules version 18 (M9). Showdown implements abilities in code, so its data 
   - **Status:** Limber, Insomnia, Vital Spirit, Immunity, Water Veil, Magma Armor, Own Tempo and Oblivious (immune to one condition), Early Bird (sleep half as long), Shed Skin (a chance each second to shake off a status), Poison Heal (poison heals instead), Quick Feet (Speed ×1.5 with a status), Synchronize (passes a status back).
   - **Stat changes:** Intimidate (−1 Attack to the foe at the start, and every 12 s), Clear Body, White Smoke, Full Metal Body, Hyper Cutter and Big Pecks (the foe can't lower its stats, or one stat), Defiant and Competitive (+2 Attack or Sp. Atk when the foe lowers a stat), Justified (+1 Attack when hit by a Dark move), Weak Armor (−1 Defense, +2 Speed when hit by a physical move, at most every 3 s), Speed Boost (+1 Speed every 10 s, up to +2), Inner Focus (immune to Intimidate).
   - **Other:** Sturdy (the first knockout blow leaves 1 HP), Rock Head (no recoil), Magic Guard (no damage except from hits), Serene Grace (secondary chances ×2), Skill Link (2–5-hit moves always hit 5 times), Shield Dust (no secondary effects taken), Prankster (status moves wind up like priority moves).
-- **Left out:** weather and terrain abilities (no weather yet, §17), abilities about switching, items, accuracy, flinching or allies, and ones that would need new systems (Disguise, Imposter, Wonder Guard).
+- **Left out:** surge abilities (planned, §9.11; weather abilities are there), abilities about switching, items, accuracy, flinching or allies, and ones that would need new systems (Disguise, Imposter, Wonder Guard).
 - **Details:** Flash Fire's boost and Intimidate's repeat both run 12 s; Speed Boost raises Speed every 10 s while it's below +2, and the stage wears off like any other; Shed Skin has an 8% chance each second; Poison Heal restores 1/40 of max HP a second; Weak Armor triggers at most every 3 s; Prankster's status moves wind up like priority moves, but heals stay a channel. Fixed-damage moves ignore abilities.
 - **Battle spec:** a fighter's `"ability"` names an ability from the table, or `""` for none; without it the fighter gets its standard ability. A name outside the table is an error.
 - **AI:** expected damage includes both fighters' abilities (`Battle.damage_parts`, shared with the battle). Neither AI attacks into an absorb, throws a status move at a fighter immune to it or a stat drop at one that blocks it; the utility AI discounts melee moves against a contact punisher.
@@ -670,10 +670,56 @@ Since rules version 19 (M9). Like abilities, item effects are our own table, `ga
   - Life Orb (damage ×1.3, a small share of max HP lost per hit), Expert Belt (super-effective ×1.2), Muscle Band and Wise Glasses (physical or special ×1.1), type boosters such as Charcoal (×1.2 to one type);
   - Assault Vest (Sp. Def ×1.5, status-category moves can't be used), Eviolite (Defense and Sp. Def ×1.5 for a species that can evolve), Rocky Helmet (a melee attacker loses a share of its max HP);
   - Focus Sash (from full HP, the first knockout blow leaves 1 HP), Sitrus Berry (restores 1/4 of max HP once, at half HP or less), Lum Berry (cures the first status condition or confusion).
-- **Left out:** Choice items (locking into one move has no clear real-time reading), Mega Stones and Z-Crystals, and items about switching, accuracy or weather.
+- **Left out:** Choice items (locking into one move has no clear real-time reading), Mega Stones and Z-Crystals, and items about switching or accuracy. Weather items are in §9.11.
 - **Amounts:** Leftovers and Black Sludge move 1/80 of max HP a second (Black Sludge hurts a holder that isn't Poison); Shell Bell restores 1/8 of damage dealt; Life Orb costs 1/170 of max HP a hit (a probe found 1/60 and 1/100 left its holders no better off than without it) and Rocky Helmet takes 1/33 from a melee attacker (Magic Guard ignores both); type boosters are ×1.2. Focus Sash, Sitrus Berry and Lum Berry are used once.
 - **AI:** expected damage includes items (`Battle.damage_parts`), an Assault Vest's status moves never count as ready, and the utility AI discounts melee moves against a Rocky Helmet as against a contact-punishing ability.
 - **Presentation:** an item that takes effect or is used up shows its name over the fighter (`item` events); Life Orb's and Rocky Helmet's damage shows like recoil; the steady healing of Leftovers is a quiet `regen` event, seen only on the HP bar.
+
+### 9.11 Arena moves
+
+Arena moves set a condition on the whole arena or on one side for a while instead of hitting a fighter (`game/sim/arena_conditions.gd`). Three families, one pull request and rules version each: **weather** (rules version 20), **surges** (21) and **screens** (22). Entry hazards (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) wait for team battles (§17): they punish switching in, and a one-on-one battle has no switching, so any reading now would be replaced later.
+
+- **Playing one:** an arena move is a status-category move applied on release, like a self-buff: the same 0.4 s wind-up and recovery and the status-move cooldown, and it can't be feinted. It needs no range or line of sight.
+- **Durations:** a turn reads as about 5 s, as for per-turn effects (§9.9), so the main series' five turns become 20 s for weather and surges, and its eight with an extending item (Damp Rock, Heat Rock, Smooth Rock, Icy Rock, Terrain Extender) 32 s. Screens are shorter (below). Using a weather or surge move while the same one is up renews it.
+- **One at a time:** one weather and one surge at once, battle-wide; a new one replaces the old. Screens are per side.
+- **Readings** follow §9.9: per-turn damage and healing is a fifth of the amount per second, multipliers keep their main-series values, and the batch tunes them.
+- **Standard movesets** weigh arena moves in the utility slot (§9.6) by fit: a weather or surge by how much it helps the species' own types, attacking stat and standard ability, and a screen by its bulk. The utility threshold decides, as for buffs and heals.
+- **Standard abilities** that only work in a weather or surge are valued low, so a species keeps an ability that always works when it has one; setters are valued high.
+- **AI:** expected damage includes the weather, surge and screens (`Battle.damage_parts`), so both AIs aim with them. The utility AI values an arena move by the difference it makes: its own expected damage gained against the foe's, chip damage, and its ability's triggers, so it sets a weather that helps it, replaces one that helps the foe, and never renews a condition with more than a third of its time left. Screens are raised against a foe whose attacks are mostly of that category. The stand-in AI uses the same value with its own threshold.
+- **Presentation:** each condition shows on the field and in the HUD in both clip formats: a pill at the top centre with the condition's name and a draining timer, a callout when one starts ("It started to rain!"), and the field's look changing (below). A condition that ends fades out.
+- **Determinism:** conditions and their timers are part of the hashed state (§10). The battle spec can name a starting weather (below); saved specs keep it.
+
+**Weather** (rules version 20):
+
+| Weather | Moves | Effects |
+|---|---|---|
+| Rain | Rain Dance | Water moves ×1.5, Fire moves ×0.5; Thunder and Hurricane fly at full accuracy's speed |
+| Sun | Sunny Day | Fire moves ×1.5, Water moves ×0.5; Solar Beam and Solar Blade skip their charge; nobody freezes |
+| Sandstorm | Sandstorm | 1/80 of max HP a second to fighters that aren't Rock, Ground or Steel; Rock types' Sp. Def ×1.5 |
+| Snow | Snowscape, Chilly Reception | Ice types' Defense ×1.5; Blizzard flies at full accuracy's speed |
+
+- Morning Sun, Synthesis and Moonlight heal more in sun (2/3 of the main-series amount before the heal factor) and less in other weather (1/4).
+- **Abilities:** Drizzle, Drought, Sand Stream and Snow Warning set their weather when the battle starts, for the usual 20 s (32 s with the matching rock); if both fighters have one, the slower one's weather wins, as in the main series. Swift Swim, Chlorophyll, Sand Rush and Slush Rush double Speed in their weather. Rain Dish and Ice Body heal 1/80 of max HP a second in rain and snow; Dry Skin heals that in rain and loses it in sun; Solar Power raises Sp. Atk ×1.5 in sun and loses 1/80 a second; Sand Force powers Rock, Ground and Steel moves ×1.3 in sand. Sand Force, Overcoat and the sand types take no sandstorm damage. Hydration ends a status condition at the next second in rain; Leaf Guard blocks major status in sun.
+- **Items:** Damp Rock, Heat Rock, Smooth Rock and Icy Rock lengthen their weather from moves and abilities. Utility Umbrella keeps rain and sun off its holder (its own moves and hits taken). A species whose standard ability or moveset sets a weather gets the matching rock as its standard item, after Eviolite.
+- **Arena presets** may name a starting weather (`"weather": "rain"`), and a battle spec can too (`"weather"`, `""` for none), overriding the preset's. A starting weather lasts the whole battle unless another replaces it. None of the presets the seed picks from has one, so type-suited arenas never hand those species a free boost; it's for staging a battle on request.
+- **Look:** rain falls in streaks under a darker, cooler sky with denser fog; sun brightens and warms the sun light and the sky; a sandstorm blows sand across a tan haze; snow falls under a pale sky. Field particles reuse the presets' sand and snow, and a preset's own particles give way while a weather is up.
+
+**Surges** (rules version 21, planned): Electric, Grassy, Misty and Psychic Terrain (the moves keep Showdown's names) cover the ground and affect **grounded** fighters only: not Flying types or Levitate.
+
+| Surge | Effects on grounded fighters |
+|---|---|
+| Electric | Electric moves ×1.3; can't fall asleep |
+| Grassy | Grass moves ×1.3; heal 1/80 of max HP a second; Earthquake, Bulldoze and Magnitude deal ×0.5 to them |
+| Misty | can't get a major status or confusion; Dragon moves deal ×0.5 to them |
+| Psychic | Psychic moves ×1.3; priority moves aimed at them lose their quick wind-up |
+
+- **Abilities:** Electric Surge, Grassy Surge, Misty Surge and Psychic Surge set theirs when the battle starts; Surge Surfer doubles Speed in an electric surge; Grass Pelt raises Defense ×1.5 in a grassy one.
+- **Items:** Terrain Extender lengthens them.
+- **Look:** the field takes a glowing tint in the surge's colour with matching particles at ground level (sparks, leaves, mist, a psychic shimmer).
+
+**Screens** (rules version 22, planned): Reflect and Light Screen halve physical and special damage to the user's side; Aurora Veil halves both and can only be used in snow. A screen lasts 8 s (13 s with Light Clay), and the move's cooldown is 14 s, so a screen is up at most a little over half the time. Brick Break, Psychic Fangs and Raging Bull shatter the foe's screens before they hit. Infiltrator's attacks ignore screens. Critical hits ignore them, as in the main series. The look is a translucent pane in the screen's colour between the fighter and its foe, and a screen pill on the side's name plate.
+
+- **Left out:** entry hazards (team battles), Tailwind, Safeguard, Mist, Trick Room, Magic Room, Wonder Room, Gravity, Quick Guard, Wide Guard and Fairy Lock (special cases, §9.3); Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide and Steel Roller's surge readings; the seeds, Protosynthesis, Quark Drive and other abilities of species missing from the roster; Sand Veil and Snow Cloak (accuracy).
 
 ## 10. Simulation and determinism
 

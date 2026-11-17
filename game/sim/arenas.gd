@@ -11,6 +11,8 @@ extends RefCounted
 ##   (fighters with one of these types);
 ## - for a coliseum, an optional "crowd": {"fill": share of seats taken, "watchers": how many
 ##   watchers sit in the front row} (Crowd has the defaults).
+## - an optional starting "weather" (ArenaConditions.WEATHERS) that lasts the battle unless
+##   replaced. The presets the seed picks from leave it out, so suited types get no free boost.
 ## Adding an arena is adding a file; the choice of arena is part of the battle (its terrain).
 
 const PRESETS_DIR := "res://game/data/arenas"
@@ -85,6 +87,9 @@ static func _problem(entry: Variant) -> String:
 	for key in ["sky", "sun", "ambient", "fog"]:
 		if not entry.has(key):
 			return "missing '%s'" % key
+	var weather := str(entry.get("weather", ""))
+	if not weather.is_empty() and not weather in ArenaConditions.WEATHERS:
+		return "unknown weather '%s' (one of %s)" % [weather, ArenaConditions.WEATHERS]
 	var crowd: Variant = entry.get("crowd", {})
 	if not crowd is Dictionary:
 		return "'crowd' is not an object"

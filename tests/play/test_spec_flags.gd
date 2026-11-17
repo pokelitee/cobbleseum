@@ -42,6 +42,15 @@ func test_arena_flag_is_kept_and_passed_on() -> void:
 	assert_false(SpecFlags.to_spec({"watch": "garchomp"}).has("arena"))
 
 
+func test_weather_flag_is_kept_and_passed_on() -> void:
+	var spec := SpecFlags.to_spec({"watch": "garchomp", "weather": "rain", "seed": "2"})
+	assert_eq(spec.weather, "rain")
+	assert_eq(SpecFlags.to_spec(SpecFlags.parse(SpecFlags.from_spec(spec)).flags), spec)
+	var clear := SpecFlags.to_spec({"watch": "garchomp", "weather": "none", "seed": "2"})
+	assert_eq(clear.weather, "", "none clears an arena's starting weather")
+	assert_eq(SpecFlags.to_spec(SpecFlags.parse(SpecFlags.from_spec(clear)).flags), clear)
+
+
 
 func test_look_flags_set_shiny_and_forms() -> void:
 	var spec := SpecFlags.to_spec({"watch": "gastrodon", "vs": "vivillon", "shiny": "b", "form": "east", "vs-form": "base", "seed": "4"})

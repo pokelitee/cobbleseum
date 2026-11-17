@@ -30,5 +30,10 @@
   "blackglasses": {"name": "Black Glasses", "type_power": {"Dark": 1.2}},
   "metalcoat": {"name": "Metal Coat", "type_power": {"Steel": 1.2}},
   "silkscarf": {"name": "Silk Scarf", "type_power": {"Normal": 1.2}},
-  "fairyfeather": {"name": "Fairy Feather", "type_power": {"Fairy": 1.2}}
+  "fairyfeather": {"name": "Fairy Feather", "type_power": {"Fairy": 1.2}},
+  "damprock": {"name": "Damp Rock", "weather_extends": "rain"},
+  "heatrock": {"name": "Heat Rock", "weather_extends": "sun"},
+  "smoothrock": {"name": "Smooth Rock", "weather_extends": "sand"},
+  "icyrock": {"name": "Icy Rock", "weather_extends": "snow"},
+  "utilityumbrella": {"name": "Utility Umbrella", "umbrella": true}
 }

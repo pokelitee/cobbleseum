@@ -6,8 +6,9 @@ extends RefCounted
 ##      preferring its better attacking stat;
 ## 3.   one coverage attack, worth more for each type it hits super effectively that the
 ##      first two don't;
-## 4.   one utility move (sleep, paralysis, a buff to its attacking stat, a heal, ...) if one
-##      scores at least UTILITY_THRESHOLD after accuracy, else a third attack.
+## 4.   one utility move (sleep, paralysis, a buff to its attacking stat, a heal, a weather
+##      that suits its attacks, ...) if one scores at least UTILITY_THRESHOLD after accuracy,
+##      else a third attack.
 ## Only moves the rules can play are eligible. Ties break by move id, so the same data
 ## always gives the same moveset.
 
@@ -32,6 +33,11 @@ const HEAL_VALUE := 90.0
 const BUFF_BASE := 75.0
 const BUFF_PER_STAGE := 15.0
 const DEBUFF_VALUE := 40.0
+## Arena moves are worth this many points per share of HP their condition swings the
+## species' way (ArenaConditions.weather_gain, with the attacks picked so far). A typical foe
+## isn't sandproof this share of the time, so a sandstorm counts that much chip against it.
+const ARENA_VALUE_SCALE := 400.0
+const FOE_SAND_SHARE := 0.75
 const TYPES: Array[String] = ["Normal", "Fire", "Water", "Electric", "Grass", "Ice", "Fighting", "Poison",
 	"Ground", "Flying", "Psychic", "Bug", "Rock", "Ghost", "Dragon", "Dark", "Steel", "Fairy"]
 
@@ -46,12 +52,15 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 	var types: Array = species.get("types", ["Normal"])
 	var attacks: Array[Dictionary] = []
 	var utilities: Array[Dictionary] = []
+	var arena_moves: Array[BattleMove] = []
 	for move_id in learnable(species_id, data):
 		var converted := data.convert_move(move_id)
 		if converted.has("error"):
 			continue
 		var move: BattleMove = converted.move
-		if move.is_damaging():
+		if move.kind == BattleMove.Kind.ARENA:
+			arena_moves.append(move)
+		elif move.is_damaging():
 			attacks.append({"id": move_id, "type": move.type, "value": attack_value(move, data.moves[move_id], physical, ability)})
 		else:
 			var accuracy: Variant = data.moves[move_id].get("accuracy", 100)
@@ -75,6 +84,13 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 				gained += 1
 		return {"id": a.id, "value": a.value * (1.0 + COVERAGE_BONUS * gained)})
 	_take(picked, _best(coverage, picked))
+	var picked_moves: Array[BattleMove] = []
+	for id in picked:
+		picked_moves.append(data.convert_move(id).move)
+	for move in arena_moves:
+		var score := arena_value(move, types, Abilities.effect(ability), picked_moves)
+		if score > 0.0:
+			utilities.append({"id": move.id, "value": score})
 	var utility := _best(utilities, picked)
 	if not utility.is_empty() and utility.value >= UTILITY_THRESHOLD:
 		_take(picked, utility)
@@ -159,6 +175,17 @@ static func utility_value(move: BattleMove, physical: bool) -> float:
 		BattleMove.Kind.DEBUFF:
 			return DEBUFF_VALUE
 	return 0.0
+
+
+## How useful an arena move is to a species of `types` with ability `ability` (its table
+## entry) and attacks `attacks`: what its condition swings the species' way, plus the chip it
+## does a typical foe.
+static func arena_value(move: BattleMove, types: Array, ability: Dictionary, attacks: Array[BattleMove]) -> float:
+	var seconds := Rules.WEATHER_SECONDS
+	var gain := ArenaConditions.weather_gain(types, ability, {}, attacks, move.weather, seconds)
+	if move.weather == "sand":
+		gain += ArenaConditions.SAND_DAMAGE * seconds * FOE_SAND_SHARE
+	return gain * ARENA_VALUE_SCALE
 
 
 ## Types that at least one of `move_types` hits super effectively.

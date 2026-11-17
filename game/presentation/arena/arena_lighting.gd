@@ -25,7 +25,8 @@ const SSAO_INTENSITY := 1.6
 
 
 ## Adds the sun, the world environment and (for a preset that has them) floodlights to `arena`.
-static func add(arena: Arena, look: Dictionary) -> void:
+## Returns {"sun": DirectionalLight3D, "environment": Environment}, for the weather to change.
+static func add(arena: Arena, look: Dictionary) -> Dictionary:
 	var sun_data: Dictionary = look.sun
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = sun_data.angle
@@ -41,6 +42,7 @@ static func add(arena: Arena, look: Dictionary) -> void:
 	var floodlights: Dictionary = look.floodlights
 	if floodlights.energy > 0.0:
 		Coliseum.add_floodlights(arena, floodlights.colour, floodlights.energy)
+	return {"sun": sun, "environment": world.environment}
 
 
 static func environment(look: Dictionary) -> Environment:

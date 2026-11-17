@@ -4,13 +4,14 @@ extends RefCounted
 ## (concepts_brief.md §10). Shared by the battle view and tools/record.gd.
 ## - --play=<species>: the player against --vs, which --ai controls.
 ## - --watch=<species>: AI against AI; --ai controls it and --vs-ai (default: --ai) its foe.
-## --vs defaults to DEFAULT_FOE and --seed to one from the clock; --arena picks the arena.
+## --vs defaults to DEFAULT_FOE and --seed to one from the clock; --arena picks the arena and
+## --weather a starting weather that lasts the battle (§9.11; "none" for none).
 ## How the fighters look (Appearance, presentation only): --shiny=a|b|both|none makes them shiny or
 ## not, and --form=<form> and --vs-form=<form> pick each one's cosmetic form ("base" for its
 ## own look). What the flags leave out is rolled from the seed once the roster is loaded.
 
 const DEFAULT_FOE := "blastoise"
-const KEYS: Array[String] = ["play", "watch", "vs", "ai", "vs-ai", "seed", "arena", "shiny", "form", "vs-form"]
+const KEYS: Array[String] = ["play", "watch", "vs", "ai", "vs-ai", "seed", "arena", "weather", "shiny", "form", "vs-form"]
 ## Which sides --shiny makes shiny.
 const SHINY_SIDES := {"a": [true, false], "b": [false, true], "both": [true, true], "none": [false, false]}
 
@@ -48,6 +49,8 @@ static func to_spec(flags: Dictionary) -> Dictionary:
 	]}
 	if flags.has("arena"):
 		spec.arena = flags.arena
+	if flags.has("weather"):
+		spec.weather = "" if flags.weather == "none" else str(flags.weather)
 	if flags.has("shiny"):
 		if not SHINY_SIDES.has(flags.shiny):
 			return {"error": "--shiny must be a, b, both or none, not '%s'" % flags.shiny}
@@ -69,7 +72,9 @@ static func from_spec(spec: Dictionary) -> PackedStringArray:
 		"--vs=%s" % fighters[1].species,
 		"--ai=%s" % (fighters[1].ai if playing else fighters[0].ai),
 	] + ([] if playing else ["--vs-ai=%s" % fighters[1].ai]) + ["--seed=%d" % int(spec.seed)]
-		+ (["--arena=%s" % spec.arena] if spec.has("arena") else []) + _look_flags(fighters))
+		+ (["--arena=%s" % spec.arena] if spec.has("arena") else [])
+		+ (["--weather=%s" % (spec.weather if not str(spec.weather).is_empty() else "none")] if spec.has("weather") else [])
+		+ _look_flags(fighters))
 
 
 ## The --shiny, --form and --vs-form flags for what the fighters' specs say about their looks.
