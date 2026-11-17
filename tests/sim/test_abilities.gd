@@ -237,3 +237,13 @@ func test_ability_state_is_in_the_checksum() -> void:
 		each.fighters[1].hp = 0
 		each.step()
 	assert_true(plain.checksum() != boosted.checksum())
+
+
+func test_movesets_value_moves_the_standard_ability_boosts() -> void:
+	var weak: BattleMove = BattleMove.from_showdown("tap", {"name": "Tap", "category": "Physical", "type": "Normal", "basePower": 40,
+		"accuracy": 100, "pp": 30, "flags": {"contact": 1}, "target": "normal"}).move
+	var raw := {"accuracy": 100}
+	assert_almost_eq(Movesets.attack_value(weak, raw, true, "technician") / Movesets.attack_value(weak, raw, true), 1.5, 1e-6)
+	var jabs: BattleMove = _data().convert_move("jabs").move
+	assert_almost_eq(Movesets.attack_value(jabs, raw, true, "skilllink") / Movesets.attack_value(jabs, raw, true),
+		5.0 / jabs.expected_hits(), 1e-6, "Skill Link values a 2-5-hit move at 5 hits")

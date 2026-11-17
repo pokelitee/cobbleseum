@@ -106,12 +106,23 @@ static func stab(attacker: Fighter) -> float:
 	return float(attacker.ability_effect.get("stab", Rules.STAB))
 
 
-## The attacker's power multiplier for `move`.
+## The attacker's power multiplier for `move`: the ability's constant boosts (move_factor), a
+## pinch ability's and Flash Fire's once absorbed.
 static func power_factor(attacker: Fighter, move: BattleMove) -> float:
 	var entry := attacker.ability_effect
-	var factor := 1.0
+	var factor := move_factor(entry, move)
 	if entry.get("pinch_type", "") == move.type and attacker.hp <= attacker.max_hp * PINCH_SHARE:
 		factor *= PINCH_FACTOR
+	if attacker.flash_fire_ticks > 0 and move.type in entry.get("immune", []):
+		factor *= float(entry.get("absorb_power", 1.0))
+	return factor
+
+
+## The power multiplier an ability (its table `entry`) always gives `move`, whatever the
+## battle's state: Technician, flag boosts (Iron Fist), Reckless and Sheer Force. The moveset
+## policy values moves with it too.
+static func move_factor(entry: Dictionary, move: BattleMove) -> float:
+	var factor := 1.0
 	if entry.has("technician") and move.power <= int(entry.technician) and move.fixed_damage == 0:
 		factor *= 1.5
 	var flag_power: Dictionary = entry.get("flag_power", {})
@@ -122,8 +133,6 @@ static func power_factor(attacker: Fighter, move: BattleMove) -> float:
 		factor *= float(entry.recoil_power)
 	if entry.has("sheer_force") and not move.secondaries.is_empty():
 		factor *= float(entry.sheer_force)
-	if attacker.flash_fire_ticks > 0 and move.type in entry.get("immune", []):
-		factor *= float(entry.get("absorb_power", 1.0))
 	return factor
 
 
