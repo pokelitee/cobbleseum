@@ -116,6 +116,12 @@ Preview the HUD's fighter portraits on one sheet (opens a window; the image goes
 godot --path . --script res://tools/preview_portraits.gd -- garchomp wailord
 ```
 
+Preview the surges (Electric, Grassy, Misty and Psychic Terrain) on an arena in both formats (opens a window; images go to `cache/previews/surge_<arena>_<surge>.png`):
+
+```bash
+godot --path . --script res://tools/preview_surges.gd -- --arena=night_stadium
+```
+
 Moves with a Cobblemon-style sequence (`game/presentation/move_sequences/`) can be compared with our styles, single particle effects previewed while authoring sequences, our own pixel-art particle textures (`tools/sprites/`) checked on one sheet, and the sequences' cost per frame measured. Battles and recordings draw every move in this style when the native runtime is built; `--mesh-fx` draws our mesh styles instead:
 
 ```bash

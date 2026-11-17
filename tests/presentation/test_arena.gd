@@ -206,3 +206,17 @@ func test_only_floodlit_presets_light_the_field_from_the_roof() -> void:
 	assert_eq(_lights(day, SpotLight3D).size(), 0, "day stadiums leave them off")
 	assert_eq(day._look.exposure, 1.0, "exposure defaults to 1")
 	day.free()
+
+
+func test_a_surge_shows_its_own_pattern_on_the_field_and_fades_out() -> void:
+	var arena := Arena.create("stadium", 3)
+	arena.surge.snap("misty")
+	for surface in arena._surfaces:
+		assert_eq(surface.get_shader_parameter("SURGE_KIND"), ArenaSurge.COLOURS.keys().find("misty"))
+		assert_almost_eq((surface.get_shader_parameter("SURGE") as Color).a, 1.0, 1e-6)
+	arena.surge.show_surge("")
+	for frame in ArenaSurge.FADE_FRAMES:
+		arena.surge.next_frame()
+	for surface in arena._surfaces:
+		assert_almost_eq((surface.get_shader_parameter("SURGE") as Color).a, 0.0, 1e-6, "faded out")
+	arena.free()
