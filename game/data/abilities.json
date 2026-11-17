@@ -106,5 +106,6 @@
   "mistysurge": {"name": "Misty Surge", "value": 8, "sets_surge": "misty"},
   "psychicsurge": {"name": "Psychic Surge", "value": 8, "sets_surge": "psychic"},
   "surgesurfer": {"name": "Surge Surfer", "value": 3, "surge_stats": {"electric": {"spe": 2.0}}},
-  "grasspelt": {"name": "Grass Pelt", "value": 3, "surge_stats": {"grassy": {"def": 1.5}}}
+  "grasspelt": {"name": "Grass Pelt", "value": 3, "surge_stats": {"grassy": {"def": 1.5}}},
+  "infiltrator": {"name": "Infiltrator", "value": 3, "infiltrator": true}
 }

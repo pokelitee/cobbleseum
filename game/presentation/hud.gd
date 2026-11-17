@@ -42,6 +42,8 @@ const STATUS_BADGES := {
 	"brn": ["BRN", Color("ff7a2e")], "par": ["PAR", Color("e8c21c")], "psn": ["PSN", Color("b45ad6")],
 	"tox": ["TOX", Color("8e3fb0")], "slp": ["SLP", Color("8a8a9a")], "frz": ["FRZ", Color("5cc8e0")],
 	"confusion": ["CNF", Color("ff5f9e")],
+	"reflect": ["REFLECT", Color("e0559a")], "lightscreen": ["L. SCREEN", Color("d4a51c")],
+	"auroraveil": ["VEIL", Color("3ab8d8")],
 }
 ## The credits card; %s is the Cobblemon line (cobblemon_credit()).
 const CREDITS_TEXT := "%s\nBattle data: Pokémon Showdown\nOriginal music · Crowd and ambience: CC0, see description\nAn unaffiliated, non-commercial fan project"

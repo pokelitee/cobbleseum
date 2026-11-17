@@ -52,7 +52,7 @@ Non-goals:
 - **Left out of the first version:**
   - Terastallization, Mega Evolution and Gigantamax.
   - Abilities and held items beyond M9's first sets (§9.9, §9.10).
-  - Arena moves such as weather, Pokémon's terrains, entry hazards and screens.
+  - Arena moves such as weather, Pokémon's terrains, entry hazards and screens. Weather, surges (Pokémon's terrains) and screens came in M10 (§9.11); entry hazards wait for team battles.
 
 ## 4. Constraints
 
@@ -492,10 +492,10 @@ In the code, multi-hit, charge and recharge are properties of the melee, project
 - **Fixed damage** (Seismic Toss, Night Shade, Dragon Rage, Sonic Boom) deals its main-series amount, unscaled, like every other move's damage, so it keeps its balance against them.
 - **Self-destructing moves** (Explosion, Self-Destruct, Misty Explosion) knock out the user.
 
-For the 850 standard moves, 625 are playable: 243 melee, 238 projectile, 64 area, 26 self-buff, 18 debuff, 17 status, 10 heal and 9 arena moves (§9.11). The rest are other arena moves, special cases and moves whose power is computed in code.
+For the 850 standard moves, 628 are playable: 243 melee, 238 projectile, 64 area, 26 self-buff, 18 debuff, 17 status, 10 heal and 12 arena moves (§9.11). The rest are other arena moves, special cases and moves whose power is computed in code.
 
 **Not in the first version:**
-- Screens (§9.11) are planned; entry hazards wait for team battles.
+- Entry hazards (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) wait for team battles (§9.11), and the other side and field conditions are special cases.
 - 106 special-case moves, such as Protect, Substitute, Counter and Transform.
 
 **Phases.** Every move has a wind-up, an active window and a recovery.
@@ -603,6 +603,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 22** (screens, §9.11; 1,000 battles, seed 1): median 42.2 s (42.0 s under version 21), 10th–90th percentile 21.1–79.3 s, draws 5.3% (5.3%), side A 47.6% (47.4%). Six standard movesets carry Aurora Veil (the Snow Warning species) and none Reflect or Light Screen. The paired probe over every arena-move carrier (weather, surge or screen in its standard moveset) puts the arena move at +6 points of win rate (32.5% against 26.3%, 400 battles).
 - **Rules version 21** (surges, §9.11; 1,000 battles, seed 1): median 42.0 s (42.2 s under version 20), 10th–90th percentile 21.1–79.3 s, draws 5.3% (5.1%), side A 47.4% (47.4%). 15 standard movesets carry Grassy Terrain and none another surge move; the same paired probe puts Grassy Terrain at +1.6 points of win rate (32.1% against 30.5%, 400 battles). Surges mostly come from the surge abilities.
 - **Rules version 20** (weather, §9.11; 1,000 battles, seed 1, against a version 19 batch run the same day on the same machine): median 42.2 s (42.0 s), 10th–90th percentile 21.0–78.1 s, draws 5.1% (5.1%), side A 47.4% (46.9%), hits 52.5 a battle (52.1). Few standard movesets carry a weather move (8 Rain Dance, 2 Snowscape, 1 Sandstorm), so weather comes up 0.1 times a battle, mostly from abilities. A paired probe (400 battles whose side A carries a weather move, each played again with it swapped for its best other attack) puts the move at +9 points of win rate (24.6% against 15.3%; the carriers are mostly weak Water types). Before the arena moves' 30 s cooldown and the halved chip, the same probe gave +23 points, with Sandstorm in 87 movesets and kept up all battle.
 - **Rules version 19** (held items, §9.10; 1,000 battles, same seed as the version 18 batch). With the HP multiplier left at 22, items stretched battles to a median of 47.1 s with 6.4% draws: Eviolite, the standard item of 470 roster entries, makes unevolved species half again as bulky. The multiplier went to 19, which gives a median of 42.5 s (41.3 s under version 18), 10th–90th percentile 21.6–78.6 s, draws 4.5% (2.9%), side A 49.9%, hits 53.0 a battle. Hard against ranked: median 48.8 s, draws 7.3% (4.8%), hard wins 54.5%; its draws gather where Eviolite is (7–8% of battles in which either side holds one, 5% otherwise). Standard items: Eviolite 470, Expert Belt 208, Life Orb 124, Leftovers 92, Rocky Helmet 54, Sitrus Berry 29, Assault Vest 22, Black Sludge 2. A paired probe (400 random matchups, side A's item on and off) puts an item at about 10 points of win rate (42.0% to 51.9%), Eviolite and Leftovers most.
@@ -679,13 +680,13 @@ Since rules version 19 (M9). Like abilities, item effects are our own table, `ga
 
 ### 9.11 Arena moves
 
-Arena moves set a condition on the whole arena or on one side for a while instead of hitting a fighter (`game/sim/arena_conditions.gd`). Three families, one pull request and rules version each: **weather** (rules version 20, done), **surges** (21, done) and **screens** (22). Entry hazards (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) wait for team battles (§17): they punish switching in, and a one-on-one battle has no switching, so any reading now would be replaced later.
+Arena moves set a condition on the whole arena or on one side for a while instead of hitting a fighter (`game/sim/arena_conditions.gd`). Three families, one pull request and rules version each: **weather** (rules version 20), **surges** (21) and **screens** (22), all done in M10. Entry hazards (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) wait for team battles (§17): they punish switching in, and a one-on-one battle has no switching, so any reading now would be replaced later.
 
 - **Playing one:** an arena move is a status-category move applied on release, like a self-buff: the same 0.4 s wind-up and recovery, and it can't be feinted. It needs no range or line of sight. Its cooldown is 30 s, longer than its condition lasts: casting costs under a second, so with a status move's cooldown a weather stayed up all battle, and a paired probe put carrying one at +23 points of win rate.
 - **Durations:** a turn reads as about 5 s, as for per-turn effects (§9.9), so the main series' five turns become 20 s for weather and surges, and its eight with an extending item (Damp Rock, Heat Rock, Smooth Rock, Icy Rock, Terrain Extender) 32 s. Screens are shorter (below). Using a weather or surge move while the same one is up renews it.
 - **One at a time:** one weather and one surge at once, battle-wide; a new one replaces the old. Screens are per side.
 - **Readings** follow §9.9, except that per-turn damage and healing is a tenth of the amount per second (1/160 of max HP for the main series' 1/16), half Leftovers' rate, since it comes on top of a held item. Multipliers keep their main-series values.
-- **Standard movesets** weigh arena moves in the utility slot (§9.6) by fit: a weather or surge by how much it helps the species' own types, attacking stat and standard ability, and a screen by its bulk. The utility threshold decides, as for buffs and heals.
+- **Standard movesets** weigh arena moves in the utility slot (§9.6) by fit: a weather or surge by how much it helps the species' own types, attacking stat and standard ability, and a screen by the share of a typical foe's hits it softens over a battle at its uptime (so a single screen rarely makes the cut; Aurora Veil does for species that bring their own snow). The utility threshold decides, as for buffs and heals.
 - **Standard abilities** that only work in a weather or surge are valued low, so a species keeps an ability that always works when it has one; setters are valued high.
 - **AI:** expected damage includes the weather, surge and screens (`Battle.damage_parts`), so both AIs aim with them. The utility AI values an arena move by the difference it makes: its own expected damage gained against the foe's, chip damage, and its ability's triggers, so it sets a weather that helps it, replaces one that helps the foe, and never renews a condition with more than a third of its time left. Screens are raised against a foe whose attacks are mostly of that category. The stand-in AI uses the same value with its own threshold.
 - **Presentation:** each condition shows on the field and in the HUD in both clip formats: a pill at the top centre with the condition's name and a draining timer, a callout when one starts ("It started to rain!"), and the field's look changing (below). A condition that ends fades out.
@@ -720,7 +721,7 @@ Arena moves set a condition on the whole arena or on one side for a while instea
 - **Starting:** if both fighters set a weather or surge at the start, the slower one's goes last, as for weather. A surge and a weather can be up together; one surge at a time.
 - **Look** (`ArenaSurge`): the field inside the wall takes the surge's colour, with quarter-metre pixel cells glowing on and off (the arena's surface shader), and particles drift low over the ground: bright sparks, leaves, pink mist or a violet shimmer. The HUD shows a second pill under the weather's, and callouts announce it starting and ending.
 
-**Screens** (rules version 22, planned): Reflect and Light Screen halve physical and special damage to the user's side; Aurora Veil halves both and can only be used in snow. A screen lasts 8 s (13 s with Light Clay), and the move's cooldown is 14 s, so a screen is up at most a little over half the time. Brick Break, Psychic Fangs and Raging Bull shatter the foe's screens before they hit. Infiltrator's attacks ignore screens. Critical hits ignore them, as in the main series. The look is a translucent pane in the screen's colour between the fighter and its foe, and a screen pill on the side's name plate.
+**Screens** (rules version 22): Reflect and Light Screen halve physical and special damage to the user's side; Aurora Veil halves both and can only be used in snow. A screen lasts 8 s (13 s with Light Clay), and the move's cooldown is 14 s, so a screen is up at most a little over half the time. Brick Break, Psychic Fangs and Raging Bull shatter the foe's screens before they hit. Infiltrator's attacks ignore screens. Critical hits ignore them, as in the main series. The look (`ScreenPanes`) is a translucent pane with a pixel-art border in the screen's colour (pink Reflect, gold Light Screen, cyan Aurora Veil) between the fighter and its foe, and a badge on the side's name plate; a shattered screen gets a callout. A species carrying a screen holds Light Clay as its standard item.
 
 - **Left out:** entry hazards (team battles), Tailwind, Safeguard, Mist, Trick Room, Magic Room, Wonder Room, Gravity, Quick Guard, Wide Guard and Fairy Lock (special cases, §9.3); Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide and Steel Roller's surge readings; the seeds, Protosynthesis, Quark Drive and other abilities of species missing from the roster; Sand Veil and Snow Cloak (accuracy).
 
@@ -1204,6 +1205,8 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - Music and crowd sound. Done (§12.5, §12.7): three original tracks rendered from scores with General MIDI instruments, picked by the seed with variants, a victory sting and overtime's climax layer; the crowd's murmur, cheers and roar in coliseums and each field's ambience in the open.
 - For clips, title cards, captions and an instant replay of the knockout. Done (§12.3, §12.5): the intro card names the arena (and overtime), "COMEBACK!" and "FINAL BLOW" captions, and an instant replay of the knockout from new angles before the victory.
 
+**M10: arena moves. Done (2026-11-17).** The last planned rules change (§9.11), one pull request and rules version each: weather (20), surges (21) and screens (22), with their abilities and items, the moveset policy and both AIs taught to use them, tests, balance batches and paired probes, and presentation in both clip formats (the sky, field and particles, HUD pills and badges, callouts). Left out on purpose: entry hazards (until team battles have switching), Tailwind, Safeguard, Mist, the rooms, Gravity, Quick Guard, Wide Guard and Fairy Lock, and the moves whose power or type follows a condition (Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide, Steel Roller). A fresh ranking (§13) under rules version 22 is still to be run.
+
 **M9: abilities, items and guarding. Done (2026-11-17).** The rules items from "Later" that need no arena moves (§9.2, §9.9, §9.10), one pull request and rules version each, with the AIs taught to use them, tests, a balance batch, and presentation in both clip formats. A fresh ranking (§13) under rules version 19 is still to be run.
 
 - Guarding: a timed parry with a cooldown, which feints can bait. Done (rules version 17, §9.2, §11).
@@ -1212,7 +1215,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 
 **Later:**
 
-- Arena moves and weather.
+- Arena moves and weather. Done in M10 (§9.11): weather, surges and screens; entry hazards wait for team battles.
 - Tournament mode seeded from the ranking.
 - Team battles (2v2 and up).
 - Shiny and form variants in clips. Done (§12.8): cosmetic forms and shinies, rolled from the seed or set by flags, with a sparkle on entry and on the name plate.

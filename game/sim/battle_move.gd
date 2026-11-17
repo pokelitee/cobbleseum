@@ -11,8 +11,8 @@ extends RefCounted
 ##   long channel that any hit cancels);
 ## - DEBUFF and STATUS: status moves fired at the opponent as projectiles, lowering its stats
 ##   or inflicting a status condition or confusion;
-## - ARENA: arena moves (§9.11), applied on release like a self-buff, setting a weather or a
-##   surge.
+## - ARENA: arena moves (§9.11), applied on release like a self-buff, setting a weather, a
+##   surge or a screen on the user's side.
 
 enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA, ARENA }
 
@@ -69,6 +69,7 @@ var confuses := false
 ## The weather or surge an ARENA move sets ("rain", ...; ArenaConditions.WEATHERS and SURGES).
 var weather := ""
 var surge := ""
+var screen := ""
 ## Showdown's priority: above 0 winds up faster (Rules.PRIORITY_WINDUP_FACTOR).
 var priority := 0
 ## Shares of max HP healed (HEAL), of damage dealt healed (drain) or taken back (recoil).
@@ -125,8 +126,10 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 			move.heal_share *= Rules.HEAL_FACTOR
 		move.windup_ticks = Rules.seconds_to_ticks(windup)
 		move.recovery_ticks = Rules.seconds_to_ticks(Rules.STATUS_MOVE_RECOVERY)
-		move.cooldown_ticks = Rules.seconds_to_ticks(Rules.ARENA_MOVE_COOLDOWN if move.kind == Kind.ARENA
-			else Rules.status_move_cooldown_seconds(pp))
+		var cooldown := Rules.status_move_cooldown_seconds(pp)
+		if move.kind == Kind.ARENA:
+			cooldown = Rules.SCREEN_COOLDOWN if not move.screen.is_empty() else Rules.ARENA_MOVE_COOLDOWN
+		move.cooldown_ticks = Rules.seconds_to_ticks(cooldown)
 		move.projectile_speed = Rules.projectile_speed(data.get("accuracy", 100))
 		return {"move": move}
 
@@ -205,10 +208,12 @@ static func _classify_status_move(id: String, data: Dictionary, move: BattleMove
 		return "%s needs move-specific code, not supported yet" % id
 	var weather := ArenaConditions.weather_of_move(data)
 	var surge := ArenaConditions.surge_of_move(data)
-	if not weather.is_empty() or not surge.is_empty():
+	var screen := str(data.get("sideCondition", ""))
+	if not weather.is_empty() or not surge.is_empty() or screen in ArenaConditions.SCREENS:
 		move.kind = Kind.ARENA
 		move.weather = weather
 		move.surge = surge
+		move.screen = screen if screen in ArenaConditions.SCREENS else ""
 		return ""
 	var target: String = data.get("target", "normal")
 	var raw_boosts: Dictionary = data.get("boosts", {})

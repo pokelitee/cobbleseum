@@ -21,7 +21,7 @@ var spec: Dictionary
 var arena := ""
 ## The arena's ground (§9.8), from its field and the seed.
 var terrain: Terrain
-## The arena conditions (§9.11): the weather and surge, shared with both fighters.
+## The arena conditions (§9.11): the weather, surge and screens, shared with both fighters.
 var conditions := ArenaConditions.new()
 ## With record_intents set (battles with a player), every tick's intents per side, as
 ## [move x, move y, use, dodge x, dodge y, feint, guard]; a ReplayController plays them back.
@@ -196,7 +196,10 @@ func step() -> void:
 		_act(fighters[side], fighters[1 - side], intents[side])
 	_move_projectiles()
 	for ended in conditions.tick():
-		_event("weather_end" if ended.has("weather") else "surge_end", -1, ended)
+		if ended.has("screen"):
+			_event("screen_end", int(ended.side), {"screen": ended.screen})
+		else:
+			_event("weather_end" if ended.has("weather") else "surge_end", -1, ended)
 	if tick == Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS):
 		_event("overtime", -1, {})
 	_record_state()
@@ -410,6 +413,10 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 	if move.is_self():
 		if move.kind == BattleMove.Kind.HEAL:
 			_heal(fighter, roundi(fighter.max_hp * conditions.heal_share(fighter, move)), move.id)
+		elif move.kind == BattleMove.Kind.ARENA and not move.screen.is_empty():
+			var ticks := ArenaConditions.screen_ticks_for(fighter)
+			conditions.set_screen(fighter.side, move.screen, ticks)
+			_event("screen", fighter.side, {"screen": move.screen, "move": move.id, "seconds": ticks / float(Rules.TICK_RATE)})
 		elif move.kind == BattleMove.Kind.ARENA and not move.surge.is_empty():
 			_set_surge(fighter, move.surge, {"move": move.id})
 		elif move.kind == BattleMove.Kind.ARENA:
@@ -523,6 +530,10 @@ func _move_projectiles() -> void:
 
 
 func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
+	if move.id in ArenaConditions.SCREEN_BREAKERS:
+		for screen: String in conditions.screens[defender.side].keys():
+			conditions.screens[defender.side].erase(screen)
+			_event("screen_end", defender.side, {"screen": screen, "shattered": true})
 	var outcome := damage(attacker, defender, move, _data, _random)
 	outcome.damage = maxi(1, floori(outcome.damage * Rules.overtime_factor(tick)))
 	var immune := Abilities.immune(defender, move)
@@ -974,13 +985,15 @@ static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data:
 	var parts := damage_parts(attacker, defender, move, data)
 	var crit := random.chance(Rules.CRIT_CHANCE)
 	var roll := random.range_float(Rules.ROLL_MIN, Rules.ROLL_MAX)
-	var total: float = parts.base * parts.factor * (Rules.CRIT_MULTIPLIER if crit else 1.0) * roll
+	# Critical hits get through screens.
+	var total: float = parts.base * parts.factor * (Rules.CRIT_MULTIPLIER if crit else parts.screen) * roll
 	return {"damage": maxi(1, floori(total)), "crit": crit, "effectiveness": parts.effectiveness}
 
 
 ## A hit's damage before luck, shared with the AI's estimates: the formula's base (power after
-## abilities, stats after stages), the multipliers on it (STAB, type, the defender's ability)
-## and the compressed effectiveness. An ability immunity counts as a type immunity (§9.9).
+## abilities, stats after stages), the multipliers on it (STAB, type, the defender's ability,
+## items, weather and surge), the screens' multiplier (which a critical hit ignores) and the
+## compressed effectiveness. An ability immunity counts as a type immunity (§9.9).
 static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData) -> Dictionary:
 	var attack := move.attack_stat(attacker, defender)
 	var defense := defender.stat(move.defensive_stat)
@@ -990,7 +1003,7 @@ static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove,
 	var main_series := Abilities.effectiveness(attacker, defender, move, data.effectiveness(move.type, defender.types))
 	var effectiveness := Rules.compressed_effectiveness(main_series)
 	var factor := stab * effectiveness * Abilities.taken_factor(defender, move, main_series) * Items.power_factor(attacker, move, main_series) 		* attacker.arena.damage_factor(attacker, defender, move)
-	return {"base": base, "factor": factor,
+	return {"base": base, "factor": factor, "screen": attacker.arena.screen_factor(attacker, defender, move),
 		"effectiveness": effectiveness}
 
 
@@ -1010,7 +1023,7 @@ func _check_end() -> void:
 
 ## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
 func _record_state() -> void:
-	_state.resize(FIGHTER_STATE_SIZE * 2 + 4 + projectiles.size() * 3)
+	_state.resize(FIGHTER_STATE_SIZE * 2 + 4 + 2 * ArenaConditions.SCREENS.size() + projectiles.size() * 3)
 	var i := 0
 	for fighter in fighters:
 		_state[i] = fighter.position.x
@@ -1051,6 +1064,10 @@ func _record_state() -> void:
 	_state[i + 2] = ArenaConditions.SURGES.find(conditions.surge)
 	_state[i + 3] = conditions.surge_ticks
 	i += 4
+	for side in 2:
+		for screen in ArenaConditions.SCREENS:
+			_state[i] = conditions.screens[side].get(screen, 0)
+			i += 1
 	for projectile in projectiles:
 		_state[i] = projectile.position.x
 		_state[i + 1] = projectile.position.y

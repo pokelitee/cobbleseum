@@ -682,6 +682,9 @@ func _play_events() -> void:
 			"surge_end":
 				if not _replaying:
 					_hud.flash_title(SURGE_ENDS[event.surge], ArenaSurge.COLOURS[event.surge])
+			"screen_end":
+				if event.get("shattered", false):
+					_fx.announce(_views[event.side], "Shattered!", ScreenPanes.COLOURS[event.screen], 56)
 			"weather_damage":
 				_fx.announce(_views[event.side], "-%d" % event.damage, WEATHER_COLOURS[event.weather], 44)
 			"stunned":
@@ -727,6 +730,9 @@ func _play_events() -> void:
 
 ## The weather and surge shown last frame, their ticks left then, and the ticks they lasted in
 ## all (for the HUD's timers).
+## Screen panes in front of shielded fighters, and the screens each side's plate shows.
+var _screen_panes: ScreenPanes
+var _screen_badges := [{}, {}]
 var _weather_seen := ""
 var _weather_left := 0
 var _weather_total := 1.0
@@ -743,6 +749,19 @@ func _sync_conditions() -> void:
 	_arena.weather.next_frame()
 	_arena.surge.show_surge(conditions.surge)
 	_arena.surge.next_frame()
+	if _screen_panes == null:
+		_screen_panes = ScreenPanes.new()
+		add_child(_screen_panes)
+	_screen_panes.sync(conditions.screens, _views, [battle.fighters[0].radius, battle.fighters[1].radius])
+	for side in 2:
+		for screen: String in ArenaConditions.SCREENS:
+			var up: bool = conditions.screens[side].has(screen)
+			if up != _screen_badges[side].has(screen):
+				_hud.set_status(side, screen, up)
+				if up:
+					_screen_badges[side][screen] = true
+				else:
+					_screen_badges[side].erase(screen)
 	var entries := []
 	if not conditions.weather.is_empty():
 		# A new weather (or a renewed one) sets the timer's full length.

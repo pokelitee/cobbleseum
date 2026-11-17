@@ -150,7 +150,9 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 static func arena_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 	var arena := me.arena
 	var value := 0.0
-	if not move.surge.is_empty():
+	if not move.screen.is_empty():
+		value = arena.screen_value(me, foe, move.screen)
+	elif not move.surge.is_empty():
 		var full := ArenaConditions.surge_ticks_for(me) / float(Rules.TICK_RATE)
 		if arena.surge == move.surge and arena.surge_seconds_left() > full * RENEW_SHARE:
 			return 0.0
