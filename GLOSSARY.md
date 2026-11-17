@@ -180,6 +180,14 @@ _Avoid_: difficulty, level, skill
 The simpler AI from before the utility AI, still selectable for a side. It is not an AI profile.
 _Avoid_: simple profile
 
+**Melee lean**:
+How much of a fighter's damage comes from close range, from 0 to 1: its melee and area moves' share of the damage per second its whole moveset would deal the foe. It sets the utility AI's spacing: a **kiter** (under 0.5) keeps its range, a **brawler** presses in.
+_Avoid_: style score, aggression
+
+**Opening**:
+A moment a kiter goes in for a melee strike: the foe recovering, asleep, frozen, stunned, or out of dodges with its guard on cooldown, or a feint about to be thrown.
+_Avoid_: window (alone), chance
+
 ### Arenas
 
 **Arena**:
