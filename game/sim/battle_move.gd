@@ -120,7 +120,8 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 			move.heal_share *= Rules.HEAL_FACTOR
 		move.windup_ticks = Rules.seconds_to_ticks(windup)
 		move.recovery_ticks = Rules.seconds_to_ticks(Rules.STATUS_MOVE_RECOVERY)
-		move.cooldown_ticks = Rules.seconds_to_ticks(Rules.status_move_cooldown_seconds(pp))
+		move.cooldown_ticks = Rules.seconds_to_ticks(Rules.ARENA_MOVE_COOLDOWN if move.kind == Kind.ARENA
+			else Rules.status_move_cooldown_seconds(pp))
 		move.projectile_speed = Rules.projectile_speed(data.get("accuracy", 100))
 		return {"move": move}
 

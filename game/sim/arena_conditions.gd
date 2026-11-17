@@ -15,8 +15,9 @@ const BOOSTED := {"rain": "Water", "sun": "Fire"}
 const WEAKENED := {"rain": "Fire", "sun": "Water"}
 const BOOST := 1.5
 const WEAKEN := 0.5
-## A sandstorm hurts every fighter but these types once a second.
-const SAND_DAMAGE := 1.0 / 80.0
+## A sandstorm hurts every fighter but these types once a second: half Leftovers' rate, since
+## it comes on top of a held item.
+const SAND_DAMAGE := 1.0 / 160.0
 const SAND_PROOF_TYPES: Array[String] = ["Rock", "Ground", "Steel"]
 ## Sand and snow raise one type's defence.
 const DEFENSE_BOOSTS := {"sand": {"type": "Rock", "stat": "spd"}, "snow": {"type": "Ice", "stat": "def"}}

@@ -86,6 +86,7 @@ func test_weather_moves_are_arena_moves() -> void:
 		assert_eq(move.weather, case[1], case[0])
 		assert_true(move.is_self(), "applied on release without reaching the foe")
 		assert_false(move.can_feint())
+		assert_eq(move.cooldown_ticks, Rules.seconds_to_ticks(Rules.ARENA_MOVE_COOLDOWN), "longer than the weather lasts")
 
 
 func test_a_weather_move_sets_the_weather_for_its_time() -> void:
@@ -154,6 +155,9 @@ func test_a_starting_weather_lasts_the_battle() -> void:
 	assert_eq(_events(battle, "weather")[0].seconds, -1)
 	var spec := {"seed": 1, "arena": "stadium", "weather": "hail", "fighters": [{"species": "plain", "moves": ["tackle"]}, {"species": "plain", "moves": ["tackle"]}]}
 	assert_true(Battle.create(spec, _data(), [Scripted.new(), Scripted.new()]).has("error"), "an unknown weather is an error")
+	var drought := _battle(["blaze", "plain"], [["ember"], ["tackle"]], {}, [{"ability": "drought"}, {}], {"weather": "sun"})
+	_run(drought, Rules.seconds_to_ticks(Rules.WEATHER_EXTENDED_SECONDS) + 30)
+	assert_eq(drought.conditions.weather, "sun", "a setter renewing a battle-long weather doesn't shorten it")
 
 
 func test_setting_abilities_start_the_battle_and_the_slower_wins() -> void:

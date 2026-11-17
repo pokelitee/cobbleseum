@@ -59,6 +59,8 @@ const ITEM_CALLOUT := Color(0.75, 1.0, 0.7)
 ## and ends.
 const WEATHER_COLOURS := {"rain": Color(0.4, 0.65, 1.0), "sun": Color(1.0, 0.68, 0.25),
 	"sand": Color(0.85, 0.7, 0.45), "snow": Color(0.78, 0.9, 1.0)}
+## The HUD pill's short name for each weather.
+const WEATHER_PILLS := {"rain": "Rain", "sun": "Sun", "sand": "Sand", "snow": "Snow"}
 const WEATHER_STARTS := {"rain": "It started to rain!", "sun": "The sunlight turned harsh!",
 	"sand": "A sandstorm kicked up!", "snow": "It started to snow!"}
 const WEATHER_ENDS := {"rain": "The rain stopped.", "sun": "The sunlight faded.",
@@ -728,7 +730,7 @@ func _sync_conditions() -> void:
 		if conditions.weather != _weather_seen or conditions.weather_ticks > _weather_left:
 			_weather_total = maxf(_weather_full(), 1.0)
 		var left := -1.0 if conditions.weather_ticks < 0 else conditions.weather_ticks / _weather_total
-		entries.append({"key": "weather", "text": ArenaConditions.display_name(conditions.weather),
+		entries.append({"key": "weather", "text": WEATHER_PILLS[conditions.weather],
 			"colour": WEATHER_COLOURS[conditions.weather], "left": left})
 	_weather_seen = conditions.weather
 	_weather_left = conditions.weather_ticks

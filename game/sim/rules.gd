@@ -134,6 +134,10 @@ const HEAL_FACTOR := 0.5
 ## item that extends it (Damp Rock). A starting weather from the arena or spec lasts the battle.
 const WEATHER_SECONDS := 20.0
 const WEATHER_EXTENDED_SECONDS := 32.0
+## An arena move cools down this long, longer than its condition lasts: casting one costs under
+## a second, so with a status move's cooldown a weather stayed up all battle (a paired probe put
+## carrying one at +23 points of win rate).
+const ARENA_MOVE_COOLDOWN := 30.0
 
 ## Stat stages run from -6 to +6 with the main-series multipliers (§9.5). They wear off:
 ## every STAGE_DECAY_SECONDS without a change, each stage moves one step back toward 0.

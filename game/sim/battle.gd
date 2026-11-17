@@ -742,8 +742,11 @@ func _start_conditions() -> void:
 func _set_weather(setter: Fighter, weather: String, source: Dictionary) -> void:
 	var ticks := ArenaConditions.weather_ticks_for(setter, weather)
 	var renewed := conditions.weather == weather
+	# Renewing never shortens a weather: a battle-long one stays, a longer one keeps its time.
+	if renewed and (conditions.weather_ticks < 0 or conditions.weather_ticks > ticks):
+		ticks = conditions.weather_ticks
 	conditions.set_weather(weather, ticks)
-	var details := {"weather": weather, "seconds": ticks / float(Rules.TICK_RATE), "renewed": renewed}
+	var details := {"weather": weather, "seconds": -1.0 if ticks < 0 else ticks / float(Rules.TICK_RATE), "renewed": renewed}
 	details.merge(source)
 	_event("weather", setter.side, details)
 

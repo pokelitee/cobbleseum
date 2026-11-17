@@ -104,7 +104,7 @@ var _replay_dot: Control
 var _replay_age := -1
 ## Arena conditions shown at the top centre (set_conditions): key -> {"pill", "bar", "width"}.
 var _conditions := {}
-var _condition_row: HBoxContainer
+var _condition_row: BoxContainer
 ## Whether the battle draws Cobblemon's move effects, which the credits then name too. Set
 ## before setup().
 var move_effects_credit := false
@@ -220,8 +220,12 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 	add_child(_winner)
 	_credits = _card(CREDITS_TEXT % cobblemon_credit(move_effects_credit), 44, 0.85)
 	_credits.visible = false
-	_condition_row = HBoxContainer.new()
-	_condition_row.add_theme_constant_override("separation", roundi(12 * _scale))
+	# Side by side above the top plate in portrait; stacked in the narrow gap between the
+	# landscape plates.
+	_condition_row = BoxContainer.new()
+	_condition_row.vertical = not _portrait
+	_condition_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_condition_row.add_theme_constant_override("separation", roundi(8 * _scale))
 	_condition_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_condition_row)
 
