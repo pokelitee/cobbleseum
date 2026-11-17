@@ -61,6 +61,35 @@ func test_faint_tips_over_sinks_and_stays() -> void:
 	assert_true(motion.transform().is_equal_approx(settled), "no actions after fainting")
 
 
+func test_a_fainted_body_rests_on_the_ground_rather_than_through_it() -> void:
+	# A body 2 m tall and 1.2 m wide, standing on its feet.
+	var body := PackedVector2Array([Vector2(-0.6, 0), Vector2(0.6, 0), Vector2(0.6, 2), Vector2(-0.6, 2), Vector2(0, 1)])
+	var motion := ProceduralMotion.new(2.0, false)
+	motion.faint(body)
+	for frame in ProceduralMotion.FAINT_FRAMES * 2:
+		motion.next_frame()
+		var lowest := INF
+		for point in body:
+			lowest = minf(lowest, (motion.transform() * Vector3(point.x, point.y, 0)).y)
+		assert_true(lowest > -2.0 * ProceduralMotion.FAINT_SINK - 1e-4, "frame %d: no deeper than it settles (%f)" % [frame, lowest])
+	var settled := INF
+	for point in body:
+		settled = minf(settled, (motion.transform() * Vector3(point.x, point.y, 0)).y)
+	assert_almost_eq(settled, -2.0 * ProceduralMotion.FAINT_SINK, 1e-4, "lying on its side, just settled into the ground")
+
+
+func test_a_faint_animation_drops_a_flier_and_is_lifted_out_of_the_ground() -> void:
+	var motion := ProceduralMotion.new(2.0, true)
+	motion.fall()
+	motion.ground_lift = 0.3
+	_advance(motion, ProceduralMotion.FAINT_FRAMES * 2)
+	var settled := motion.transform()
+	assert_almost_eq(settled.origin.y, 0.3, 1e-4, "out of the hover, raised by the lift")
+	assert_almost_eq(settled.basis.get_euler().z, 0.0, 1e-4, "the animation lays it down, not a tip-over")
+	motion.revive()
+	assert_eq(motion.ground_lift, 0.0)
+
+
 func test_leans_into_movement_and_fliers_bank_more() -> void:
 	var walker := ProceduralMotion.new(2.0, false)
 	walker.velocity = Vector2(0, 4)
