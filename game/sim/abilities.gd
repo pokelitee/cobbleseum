@@ -93,7 +93,7 @@ static func effectiveness(attacker: Fighter, defender: Fighter, move: BattleMove
 
 
 ## A stat's multiplier from its owner's ability: always (Huge Power), with a status (Guts), or
-## in a weather (Swift Swim, Solar Power).
+## in a weather or surge (Swift Swim, Solar Power, Surge Surfer, Grass Pelt).
 static func stat_factor(fighter: Fighter, stat: String) -> float:
 	var entry := fighter.ability_effect
 	var factor := float(entry.get("stat_factors", {}).get(stat, 1.0))
@@ -101,6 +101,8 @@ static func stat_factor(fighter: Fighter, stat: String) -> float:
 		factor *= float(entry.get("status_stat_factors", {}).get(stat, 1.0))
 	if entry.has("weather_stats"):
 		factor *= float(entry.weather_stats.get(fighter.arena.weather_for(fighter), {}).get(stat, 1.0))
+	if entry.has("surge_stats"):
+		factor *= float(entry.surge_stats.get(fighter.arena.surge, {}).get(stat, 1.0))
 	return factor
 
 
@@ -176,6 +178,11 @@ static func status_immune(fighter: Fighter, status: String) -> bool:
 ## The weather the fighter's ability sets when the battle starts (Drizzle), or "".
 static func sets_weather(fighter: Fighter) -> String:
 	return str(fighter.ability_effect.get("sets_weather", ""))
+
+
+## The surge the fighter's ability sets when the battle starts (Electric Surge), or "".
+static func sets_surge(fighter: Fighter) -> String:
+	return str(fighter.ability_effect.get("sets_surge", ""))
 
 
 ## The stat changes from `changes` the foe can make to `fighter`, after its ability.

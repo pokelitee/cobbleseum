@@ -11,7 +11,8 @@ extends RefCounted
 ##   long channel that any hit cancels);
 ## - DEBUFF and STATUS: status moves fired at the opponent as projectiles, lowering its stats
 ##   or inflicting a status condition or confusion;
-## - ARENA: arena moves (§9.11), applied on release like a self-buff, setting a weather.
+## - ARENA: arena moves (§9.11), applied on release like a self-buff, setting a weather or a
+##   surge.
 
 enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA, ARENA }
 
@@ -65,8 +66,11 @@ var self_boosts: Dictionary = {}
 ## Major status ("brn", ...) or "" for STATUS moves; `confuses` for confusion.
 var status := ""
 var confuses := false
-## The weather an ARENA move sets ("rain", ...; ArenaConditions.WEATHERS).
+## The weather or surge an ARENA move sets ("rain", ...; ArenaConditions.WEATHERS and SURGES).
 var weather := ""
+var surge := ""
+## Showdown's priority: above 0 winds up faster (Rules.PRIORITY_WINDUP_FACTOR).
+var priority := 0
 ## Shares of max HP healed (HEAL), of damage dealt healed (drain) or taken back (recoil).
 var heal_share := 0.0
 var drain_share := 0.0
@@ -109,6 +113,7 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 	var flags: Dictionary = data.get("flags", {})
 	move.flags = flags
 	var priority := int(data.get("priority", 0))
+	move.priority = priority
 	var pp := int(data.get("pp", 10))
 	if data.get("category", "Status") == "Status":
 		var classified := _classify_status_move(id, data, move)
@@ -199,9 +204,11 @@ static func _classify_status_move(id: String, data: Dictionary, move: BattleMove
 	if id in EXCLUDED:
 		return "%s needs move-specific code, not supported yet" % id
 	var weather := ArenaConditions.weather_of_move(data)
-	if not weather.is_empty():
+	var surge := ArenaConditions.surge_of_move(data)
+	if not weather.is_empty() or not surge.is_empty():
 		move.kind = Kind.ARENA
 		move.weather = weather
+		move.surge = surge
 		return ""
 	var target: String = data.get("target", "normal")
 	var raw_boosts: Dictionary = data.get("boosts", {})

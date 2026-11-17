@@ -5,6 +5,8 @@
 // - grime toward the ground on upright faces, and moss in their lower part if MOSS > 0.
 // - see-through: anything between the camera and a fighter (above that fighter's ground)
 //   dissolves with a screen-door dither, so cover never hides the battle.
+// - a surge (§9.11) on the field: upward faces inside SURGE_RADIUS take its colour, and pixel
+//   cells glow on and off with SURGE_PHASE (set per video frame, so renders repeat).
 // Blocks come two ways: MultiMesh boxes (a unit cube scaled per instance; the face's metres
 // come from the vertex and the instance's scale) and ring segments built as meshes (UV holds
 // the face's metres; FACE_UV is set).
@@ -24,6 +26,10 @@ uniform vec3 SIGHT_B = vec3(0.0);
 uniform float SIGHT_GROUND_A = 0.0;
 uniform float SIGHT_GROUND_B = 0.0;
 uniform float SIGHT_RADIUS = 1.3;
+// The surge's colour, and in alpha how far it's faded in (0 for none).
+uniform vec4 SURGE = vec4(0.0);
+uniform float SURGE_RADIUS = 14.5;
+uniform float SURGE_PHASE = 0.0;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -88,6 +94,17 @@ void fragment() {
 	colour *= 1.0 - GRIME * upright * low;
 	float moss = MOSS * upright * low * step(0.55, hash(vec3(floor(face_metres * 4.0), side)));
 	colour = mix(colour, MOSS_COLOUR * (1.0 + grain * GRAIN), moss);
+	if (SURGE.a > 0.0) {
+		float up = smoothstep(0.5, 0.9, world_normal.y);
+		float inside = 1.0 - smoothstep(SURGE_RADIUS - 1.5, SURGE_RADIUS, length(world_position.xz));
+		float amount = SURGE.a * up * inside;
+		// Quarter-metre cells, each lit for a slice of its own cycle.
+		vec2 cell = floor(world_position.xz * 4.0);
+		float cycle = fract(hash(vec3(cell, 7.0)) + SURGE_PHASE * (0.6 + hash(vec3(cell, 3.0))));
+		float lit = step(0.85, cycle);
+		colour = mix(colour, SURGE.rgb, amount * 0.3);
+		EMISSION = SURGE.rgb * amount * (0.06 + 1.2 * lit);
+	}
 	ALBEDO = colour;
 	ROUGHNESS = 0.92;
 }

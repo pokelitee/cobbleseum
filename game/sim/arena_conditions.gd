@@ -1,9 +1,9 @@
 class_name ArenaConditions
 extends RefCounted
-## Arena conditions (concepts_brief.md §9.11): the weather over the whole battle. The battle
-## owns one and both fighters share it, so stats and damage read it wherever they're worked
-## out; a Fighter made on its own gets an empty one. Every rule about what a weather does
-## lives here or in the ability and item tables.
+## Arena conditions (concepts_brief.md §9.11): the weather over the whole battle and the surge
+## on its ground. The battle owns one and both fighters share it, so stats and damage read it
+## wherever they're worked out; a Fighter made on its own gets an empty one. Every rule about
+## what a condition does lives here or in the ability and item tables.
 
 const WEATHERS: Array[String] = ["rain", "sun", "sand", "snow"]
 ## Showdown's `weather` values on moves (lower-cased) -> weathers.
@@ -31,6 +31,23 @@ const WEATHER_HEALS := {"morningsun": "sun", "synthesis": "sun", "moonlight": "s
 const FAVOURED_HEAL := 2.0 / 3.0
 const UNFAVOURED_HEAL := 0.25
 const ONLY_GAINS: Array[String] = ["shoreup"]
+## Surges, from Showdown's `terrain` values on moves. They act on grounded fighters only (not
+## Flying types or Levitate): one move type powered up for a grounded attacker, Grassy
+## healing, and protection from some statuses and moves for a grounded defender.
+const SURGES: Array[String] = ["electric", "grassy", "misty", "psychic"]
+const SHOWDOWN_SURGES := {"electricterrain": "electric", "grassyterrain": "grassy", "mistyterrain": "misty",
+	"psychicterrain": "psychic"}
+const SURGE_NAMES := {"electric": "Electric surge", "grassy": "Grassy surge", "misty": "Misty surge", "psychic": "Psychic surge"}
+const SURGE_TYPES := {"electric": "Electric", "grassy": "Grass", "psychic": "Psychic"}
+const SURGE_BOOST := 1.3
+## Grassy healing runs at half Leftovers' rate, like weather healing.
+const GRASSY_HEAL := 1.0 / 160.0
+## Grassy ground softens these moves, and misty ground Dragon moves, against grounded fighters.
+const GRASSY_SOFTENS: Array[String] = ["earthquake", "bulldoze", "magnitude"]
+const SOFTENED := 0.5
+## Valuing a surge's protection: Electric's from sleep, Misty's from every status, as a share of
+## HP a second.
+const SURGE_SHIELD := {"electric": 0.0005, "misty": 0.002}
 ## Valuing a weather (weather_gain): a fighter deals about its foe's whole HP in a battle of
 ## this many seconds, so a damage factor is worth that rate over the weather's time; doubling
 ## walking speed is worth this share of HP a second.
@@ -40,6 +57,8 @@ const SPEED_GAIN := 0.005
 var weather := ""
 ## Ticks the weather has left; -1 for one that lasts the battle (an arena's starting weather).
 var weather_ticks := 0
+var surge := ""
+var surge_ticks := 0
 
 
 ## The weather a Showdown move sets ("" for none).
@@ -48,7 +67,12 @@ static func weather_of_move(data: Dictionary) -> String:
 
 
 static func display_name(name: String) -> String:
-	return str(NAMES.get(name, name))
+	return str(NAMES.get(name, SURGE_NAMES.get(name, name)))
+
+
+## The surge a Showdown move sets ("" for none).
+static func surge_of_move(data: Dictionary) -> String:
+	return SHOWDOWN_SURGES.get(str(data.get("terrain", "")).to_lower(), "")
 
 
 ## Sets the weather for `ticks` (-1: the rest of the battle).
@@ -57,16 +81,25 @@ func set_weather(name: String, ticks: int) -> void:
 	weather_ticks = ticks
 
 
-## Counts the weather down a tick. Returns the weather that just ended, or "".
-func tick() -> String:
-	if weather.is_empty() or weather_ticks < 0:
-		return ""
-	weather_ticks -= 1
-	if weather_ticks > 0:
-		return ""
-	var ended := weather
-	weather = ""
-	weather_ticks = 0
+func set_surge(name: String, ticks: int) -> void:
+	surge = name
+	surge_ticks = ticks
+
+
+## Counts the conditions down a tick. Returns those that just ended, as {"weather": name} or
+## {"surge": name}.
+func tick() -> Array[Dictionary]:
+	var ended: Array[Dictionary] = []
+	if not weather.is_empty() and weather_ticks > 0:
+		weather_ticks -= 1
+		if weather_ticks == 0:
+			ended.append({"weather": weather})
+			weather = ""
+	if not surge.is_empty() and surge_ticks > 0:
+		surge_ticks -= 1
+		if surge_ticks == 0:
+			ended.append({"surge": surge})
+			surge = ""
 	return ended
 
 
@@ -74,6 +107,26 @@ func tick() -> String:
 static func weather_ticks_for(setter: Fighter, name: String) -> int:
 	var extended := str(setter.item_effect.get("weather_extends", "")) == name
 	return Rules.seconds_to_ticks(Rules.WEATHER_EXTENDED_SECONDS if extended else Rules.WEATHER_SECONDS)
+
+
+## Ticks a surge set by `setter` lasts: longer with a Terrain Extender.
+static func surge_ticks_for(setter: Fighter) -> int:
+	var extended: bool = setter.item_effect.get("surge_extends", false)
+	return Rules.seconds_to_ticks(Rules.WEATHER_EXTENDED_SECONDS if extended else Rules.WEATHER_SECONDS)
+
+
+## Whether a surge reaches `fighter`: not a Flying type or a Levitate user.
+static func grounded(fighter: Fighter) -> bool:
+	return _grounded(fighter.types, fighter.ability)
+
+
+static func _grounded(types: Array, ability_id: String) -> bool:
+	return not "Flying" in types and ability_id != "levitate"
+
+
+## The surge acting on `fighter`, or "" if there's none or it isn't grounded.
+func surge_for(fighter: Fighter) -> String:
+	return surge if grounded(fighter) else ""
 
 
 ## The weather that acts on `fighter`: a Utility Umbrella keeps rain and sun off its holder.
@@ -87,12 +140,28 @@ static func _effective(name: String, item: Dictionary) -> String:
 	return name
 
 
-## The weather's damage multiplier on a hit of `move` (rain and sun on Water and Fire).
+## The conditions' damage multiplier on a hit of `move`: rain and sun on Water and Fire, a
+## surge powering its type for a grounded attacker, and grassy or misty ground softening hits on
+## a grounded defender.
 func damage_factor(attacker: Fighter, defender: Fighter, move: BattleMove) -> float:
+	var factor := 1.0
 	var name := weather_for(attacker)
-	if name.is_empty() or weather_for(defender).is_empty():
-		return 1.0
-	return type_factor(name, move.type)
+	if not name.is_empty() and not weather_for(defender).is_empty():
+		factor *= type_factor(name, move.type)
+	if not surge.is_empty():
+		factor *= surge_factor(surge, move, grounded(attacker), grounded(defender))
+	return factor
+
+
+## Surge `name`'s multiplier on `move` from an attacker and onto a defender that are or aren't
+## grounded.
+static func surge_factor(name: String, move: BattleMove, attacker_grounded: bool, defender_grounded: bool) -> float:
+	var factor := 1.0
+	if attacker_grounded and SURGE_TYPES.get(name, "") == move.type:
+		factor *= SURGE_BOOST
+	if defender_grounded and ((name == "grassy" and move.id in GRASSY_SOFTENS) or (name == "misty" and move.type == "Dragon")):
+		factor *= SOFTENED
+	return factor
 
 
 static func type_factor(name: String, move_type: String) -> float:
@@ -138,9 +207,22 @@ func heal_share(fighter: Fighter, move: BattleMove) -> float:
 	return move.heal_share
 
 
-## Whether the weather stops `fighter` getting `status` (nobody freezes in sun).
+## Whether the conditions stop `fighter` getting `status` ("confusion" included): nobody freezes
+## in sun, grounded fighters don't fall asleep on electric ground or get any status on misty
+## ground.
 func blocks_status(fighter: Fighter, status: String) -> bool:
-	return status == "frz" and weather_for(fighter) == "sun"
+	if status == "frz" and weather_for(fighter) == "sun":
+		return true
+	var ground := surge_for(fighter)
+	return ground == "misty" or (ground == "electric" and status == "slp")
+
+
+## Ticks `fighter` winds `move` up for against `foe`, from its usual wind-up: a priority move
+## aimed at a grounded foe on psychic ground loses its quick wind-up.
+func windup_against(foe: Fighter, move: BattleMove, ticks: int) -> int:
+	if surge == "psychic" and move.priority > 0 and not move.is_self() and grounded(foe):
+		return maxi(ticks, roundi(ticks / Rules.PRIORITY_WINDUP_FACTOR))
+	return ticks
 
 
 ## The share of max HP a fighter of `types` with ability `ability` (an Abilities entry) gains
@@ -195,6 +277,56 @@ static func weather_gain(types: Array, ability: Dictionary, item: Dictionary, at
 
 static func fighter_gain(fighter: Fighter, name: String, seconds: float) -> float:
 	return weather_gain(fighter.types, fighter.ability_effect, fighter.item_effect, fighter.moves, name, seconds)
+
+
+## What surge `name` is worth to a fighter (or a species choosing its moveset) of `types` with
+## ability `ability_id` and `attacks`, over `seconds`, as a share of HP swung its way: its
+## attacks on a foe that is or isn't `foe_grounded`, Grassy healing, protection from statuses,
+## and its ability's surge stats. Hits it takes are the foe's gain.
+static func surge_gain(types: Array, ability_id: String, attacks: Array, name: String, seconds: float, foe_grounded: bool) -> float:
+	var ability := Abilities.effect(ability_id)
+	var on_ground := _grounded(types, ability_id)
+	var gain := 0.0
+	var total := 0.0
+	var boosted := 0.0
+	for move: BattleMove in attacks:
+		if not move.is_damaging():
+			continue
+		var weight := (move.power if move.fixed_damage == 0 else Rules.FIXED_DAMAGE_POWER) * move.expected_hits()
+		total += weight
+		boosted += weight * (surge_factor(name, move, on_ground, foe_grounded) if move.fixed_damage == 0 else 1.0)
+	if total > 0.0:
+		gain += (boosted / total - 1.0) * seconds / DAMAGE_SECONDS
+	if on_ground:
+		if name == "grassy":
+			gain += GRASSY_HEAL * seconds
+		gain += float(SURGE_SHIELD.get(name, 0.0)) * seconds
+	var stats: Dictionary = ability.get("surge_stats", {}).get(name, {})
+	if stats.has("spe"):
+		gain += SPEED_GAIN * seconds
+	if stats.has("def"):
+		gain += (1.0 - 1.0 / float(stats.def)) * 0.5 * seconds / DAMAGE_SECONDS
+	return gain
+
+
+## What setting surge `name` now would swing toward `me` against `foe`, as a share of HP: the
+## new surge for its full time, less what the current one would still have given.
+func surge_value(me: Fighter, foe: Fighter, name: String) -> float:
+	var seconds := surge_ticks_for(me) / float(Rules.TICK_RATE)
+	var value := _surge_net(me, foe, name, seconds)
+	if not surge.is_empty():
+		value -= _surge_net(me, foe, surge, surge_ticks / float(Rules.TICK_RATE))
+	return value
+
+
+static func _surge_net(me: Fighter, foe: Fighter, name: String, seconds: float) -> float:
+	return surge_gain(me.types, me.ability, me.moves, name, seconds, grounded(foe)) \
+		- surge_gain(foe.types, foe.ability, foe.moves, name, seconds, grounded(me))
+
+
+## Seconds the surge has left (0 for none).
+func surge_seconds_left() -> float:
+	return surge_ticks / float(Rules.TICK_RATE) if not surge.is_empty() else 0.0
 
 
 ## What setting weather `name` now would swing toward `me` against `foe`, as a share of HP: the

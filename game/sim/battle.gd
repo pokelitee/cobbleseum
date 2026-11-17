@@ -21,7 +21,7 @@ var spec: Dictionary
 var arena := ""
 ## The arena's ground (§9.8), from its field and the seed.
 var terrain: Terrain
-## The arena conditions (§9.11): the weather, shared with both fighters.
+## The arena conditions (§9.11): the weather and surge, shared with both fighters.
 var conditions := ArenaConditions.new()
 ## With record_intents set (battles with a player), every tick's intents per side, as
 ## [move x, move y, use, dodge x, dodge y, feint, guard]; a ReplayController plays them back.
@@ -195,9 +195,8 @@ func step() -> void:
 	for side: int in order:
 		_act(fighters[side], fighters[1 - side], intents[side])
 	_move_projectiles()
-	var ended := conditions.tick()
-	if not ended.is_empty():
-		_event("weather_end", -1, {"weather": ended})
+	for ended in conditions.tick():
+		_event("weather_end" if ended.has("weather") else "surge_end", -1, ended)
 	if tick == Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS):
 		_event("overtime", -1, {})
 	_record_state()
@@ -236,6 +235,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 	_tick_abilities(fighter, foe)
 	_tick_item(fighter)
 	_tick_weather(fighter)
+	_tick_surge(fighter)
 	if fighter.is_knocked_out() or fighter.is_incapacitated():
 		fighter.followups.clear()
 		if not fighter.is_knocked_out():
@@ -314,7 +314,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 					_hurt_in_confusion(fighter)
 					return
 				fighter.action = Fighter.Action.WINDUP
-				fighter.action_ticks = fighter.windup_ticks(move)
+				fighter.action_ticks = conditions.windup_against(foe, move, fighter.windup_ticks(move))
 				fighter.action_move = use
 				fighter.cooldowns[use] = move.cooldown_ticks
 				_event("windup", fighter.side, {"move": move.id})
@@ -410,6 +410,8 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 	if move.is_self():
 		if move.kind == BattleMove.Kind.HEAL:
 			_heal(fighter, roundi(fighter.max_hp * conditions.heal_share(fighter, move)), move.id)
+		elif move.kind == BattleMove.Kind.ARENA and not move.surge.is_empty():
+			_set_surge(fighter, move.surge, {"move": move.id})
 		elif move.kind == BattleMove.Kind.ARENA:
 			_set_weather(fighter, move.weather, {"move": move.id})
 		else:
@@ -718,14 +720,14 @@ func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
 
 
 ## The conditions a battle starts with, on its first tick: the arena's or spec's weather, then
-## weather-setting abilities, the faster fighter's first, so the slower one's weather wins
+## weather- and surge-setting abilities, the faster fighter's first, so the slower one's wins
 ## (a tie goes to the battle's random stream).
 func _start_conditions() -> void:
 	if not conditions.weather.is_empty():
 		_event("weather", -1, {"weather": conditions.weather, "seconds": -1})
 	var setters: Array[Fighter] = []
 	for fighter in fighters:
-		if not Abilities.sets_weather(fighter).is_empty():
+		if not Abilities.sets_weather(fighter).is_empty() or not Abilities.sets_surge(fighter).is_empty():
 			setters.append(fighter)
 	if setters.size() == 2:
 		var a_speed := setters[0].stat("spe")
@@ -734,7 +736,10 @@ func _start_conditions() -> void:
 			setters.reverse()
 	for fighter in setters:
 		_ability_event(fighter)
-		_set_weather(fighter, Abilities.sets_weather(fighter), {"ability": fighter.ability})
+		if not Abilities.sets_weather(fighter).is_empty():
+			_set_weather(fighter, Abilities.sets_weather(fighter), {"ability": fighter.ability})
+		else:
+			_set_surge(fighter, Abilities.sets_surge(fighter), {"ability": fighter.ability})
 
 
 ## Sets a weather from `setter`'s move or ability (`source`: {"move"} or {"ability"}), for its
@@ -749,6 +754,23 @@ func _set_weather(setter: Fighter, weather: String, source: Dictionary) -> void:
 	var details := {"weather": weather, "seconds": -1.0 if ticks < 0 else ticks / float(Rules.TICK_RATE), "renewed": renewed}
 	details.merge(source)
 	_event("weather", setter.side, details)
+
+
+## Sets a surge from `setter`'s move or ability (`source`), for its usual time or longer with a
+## Terrain Extender.
+func _set_surge(setter: Fighter, surge: String, source: Dictionary) -> void:
+	var ticks := ArenaConditions.surge_ticks_for(setter)
+	var renewed := conditions.surge == surge
+	conditions.set_surge(surge, ticks)
+	var details := {"surge": surge, "seconds": ticks / float(Rules.TICK_RATE), "renewed": renewed}
+	details.merge(source)
+	_event("surge", setter.side, details)
+
+
+## Grassy ground healing a grounded fighter, once a second.
+func _tick_surge(fighter: Fighter) -> void:
+	if tick % Rules.TICK_RATE == 0 and conditions.surge_for(fighter) == "grassy" and not fighter.is_knocked_out():
+		_heal(fighter, maxi(1, roundi(fighter.max_hp * ArenaConditions.GRASSY_HEAL)), "grassyterrain", "regen")
 
 
 ## The weather's effects on a fighter, once a second: sandstorm damage, the ability's healing
@@ -781,7 +803,7 @@ func _apply_effect(attacker: Fighter, defender: Fighter, effect: Dictionary, mov
 	if effect.get("confuses", false) and defender.confusion_ticks == 0:
 		if Abilities.status_immune(defender, "confusion"):
 			_ability_event(defender)
-		else:
+		elif not conditions.blocks_status(defender, "confusion"):
 			defender.confusion_ticks = Rules.seconds_to_ticks(Rules.CONFUSION_SECONDS)
 			_event("status", defender.side, {"status": "confusion"})
 			_check_lum(defender)
@@ -988,7 +1010,7 @@ func _check_end() -> void:
 
 ## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
 func _record_state() -> void:
-	_state.resize(FIGHTER_STATE_SIZE * 2 + 2 + projectiles.size() * 3)
+	_state.resize(FIGHTER_STATE_SIZE * 2 + 4 + projectiles.size() * 3)
 	var i := 0
 	for fighter in fighters:
 		_state[i] = fighter.position.x
@@ -1026,7 +1048,9 @@ func _record_state() -> void:
 		i += FIGHTER_STATE_SIZE
 	_state[i] = ArenaConditions.WEATHERS.find(conditions.weather)
 	_state[i + 1] = conditions.weather_ticks
-	i += 2
+	_state[i + 2] = ArenaConditions.SURGES.find(conditions.surge)
+	_state[i + 3] = conditions.surge_ticks
+	i += 4
 	for projectile in projectiles:
 		_state[i] = projectile.position.x
 		_state[i + 1] = projectile.position.y

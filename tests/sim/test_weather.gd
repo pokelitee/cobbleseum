@@ -226,11 +226,10 @@ func test_movesets_value_a_weather_that_suits_the_species() -> void:
 	var rain := _move("raindance")
 	var sun := _move("sunnyday")
 	var water: Array[BattleMove] = [_move("jet"), _move("jet"), _move("tackle")]
-	var swift := Abilities.effect("swiftswim")
-	assert_true(Movesets.arena_value(rain, ["Water"], swift, water) > Movesets.arena_value(rain, ["Water"], {}, water), "Swift Swim adds to rain")
-	assert_true(Movesets.arena_value(sun, ["Water"], {}, water) <= 0.0, "sun only hurts a Water attacker")
+	assert_true(Movesets.arena_value(rain, ["Water"], "swiftswim", water) > Movesets.arena_value(rain, ["Water"], "", water), "Swift Swim adds to rain")
+	assert_true(Movesets.arena_value(sun, ["Water"], "", water) <= 0.0, "sun only hurts a Water attacker")
 	var rock: Array[BattleMove] = [_move("rockthrow")]
-	assert_true(Movesets.arena_value(_move("sandstorm"), ["Rock"], {}, rock) > Movesets.arena_value(_move("sandstorm"), ["Normal"], {}, rock))
+	assert_true(Movesets.arena_value(_move("sandstorm"), ["Rock"], "", rock) > Movesets.arena_value(_move("sandstorm"), ["Normal"], "", rock))
 
 
 func test_the_ais_set_a_weather_that_helps_and_leave_one_with_time_left() -> void:
