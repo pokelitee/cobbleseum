@@ -57,6 +57,16 @@ var toxic_level := 0
 var confusion_ticks := 0
 ## Paralysis stuns.
 var stun_ticks := 0
+## The ability's Showdown ID ("" for none) and its entry in Abilities' table.
+var ability := ""
+var ability_effect := {}
+## Ability state: ticks left on Flash Fire's boost, until Intimidate strikes again, until
+## Speed Boost's next raise and until Weak Armor can trigger again; whether Sturdy is spent.
+var flash_fire_ticks := 0
+var intimidate_ticks := 0
+var speed_boost_ticks := 0
+var weak_armor_ticks := 0
+var sturdy_used := false
 ## Multi-hit strikes still to come: {"ticks": int, "move": index, "last": bool}.
 var followups: Array[Dictionary] = []
 
@@ -94,18 +104,19 @@ func can_act() -> bool:
 	return action == Action.READY and not is_knocked_out() and not is_incapacitated()
 
 
-## A stat after stat stages (and burn for Attack).
+## A stat after stat stages, the ability, and burn for Attack.
 func stat(name: String) -> float:
-	var value: float = stats[name] * Rules.stage_multiplier(boosts[name])
-	if name == "atk" and status == "brn":
+	var value: float = stats[name] * Rules.stage_multiplier(boosts[name]) * Abilities.stat_factor(self, name)
+	if name == "atk" and status == "brn" and not ability_effect.get("ignores_burn", false):
 		value *= Rules.BURN_ATTACK_FACTOR
 	return value
 
 
-## Walking speed after Speed stages and paralysis.
+## Walking speed after Speed stages, the ability and paralysis.
 func current_move_speed() -> float:
-	var speed := move_speed * Rules.stage_multiplier(boosts.spe)
-	return speed * (Rules.PARALYSIS_SPEED_FACTOR if status == "par" else 1.0)
+	var speed := move_speed * Rules.stage_multiplier(boosts.spe) * Abilities.stat_factor(self, "spe")
+	var slowed: bool = status == "par" and not ability_effect.get("ignores_paralysis", false)
+	return speed * (Rules.PARALYSIS_SPEED_FACTOR if slowed else 1.0)
 
 
 ## Asleep, frozen or stunned: can't act or move.
@@ -144,3 +155,17 @@ func is_guarding() -> bool:
 ## meets the guard.
 func guards_against(direction: Vector2) -> bool:
 	return is_guarding() and facing.dot(direction.normalized()) >= cos(deg_to_rad(Rules.GUARD_ARC)) - 1e-6
+
+
+## Gives the fighter an ability (a Showdown ID in Abilities' table, or "" for none).
+func set_ability(id: String) -> void:
+	ability = id
+	ability_effect = Abilities.effect(id)
+
+
+## Ticks to wind up `move`: Prankster speeds up status moves like priority (heals stay a
+## channel).
+func windup_ticks(move: BattleMove) -> int:
+	if ability_effect.get("prankster", false) and not move.is_damaging() and move.kind != BattleMove.Kind.HEAL:
+		return Rules.seconds_to_ticks(Rules.STATUS_MOVE_WINDUP * Rules.PRIORITY_WINDUP_FACTOR)
+	return move.windup_ticks

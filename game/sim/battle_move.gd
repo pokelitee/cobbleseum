@@ -50,6 +50,8 @@ var physical: bool
 var offensive_stat := "atk"
 var defensive_stat := "def"
 var target_attacks := false
+## Showdown's flags for the move (contact, punch, bite, sound, bullet, ...), for abilities.
+var flags: Dictionary = {}
 var power: int
 var windup_ticks: int
 var recovery_ticks: int
@@ -102,6 +104,7 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 	move.power = int(data.get("basePower", 0))
 	var target: String = data.get("target", "normal")
 	var flags: Dictionary = data.get("flags", {})
+	move.flags = flags
 	var priority := int(data.get("priority", 0))
 	var pp := int(data.get("pp", 10))
 	if data.get("category", "Status") == "Status":

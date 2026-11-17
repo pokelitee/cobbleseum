@@ -48,6 +48,8 @@ const DROP_COLOUR := Color(0.4, 0.6, 1.0)
 const HEAL_COLOUR := Color(0.45, 1.0, 0.55)
 ## The "Blocked!" and "Parried!" callouts over a fighter whose guard stopped a hit.
 const GUARD_CALLOUT := Color(0.6, 0.85, 1.0)
+## An ability's name over the fighter when it takes effect.
+const ABILITY_CALLOUT := Color(1.0, 0.85, 0.45)
 ## Metres a fighter must move in a tick to play its walk animation.
 const WALK_THRESHOLD := 0.01
 ## Hits taking at least this share of the defender's HP (or big ones) make the crowd cheer;
@@ -620,6 +622,11 @@ func _play_events() -> void:
 				_views[event.side].take_hit()
 				_fx.announce(_views[event.side], "-%d" % event.damage if event.type == "recoil" else "It hurt itself in confusion!",
 					Color(1, 1, 1) if event.type == "recoil" else Hud.STATUS_BADGES.confusion[1].lightened(0.3), 48)
+			"ability":
+				_fx.announce(_views[event.side], str(event.name), ABILITY_CALLOUT, 52)
+			"ability_damage":
+				_views[event.side].take_hit()
+				_fx.announce(_views[event.side], "-%d" % event.damage, Color(1, 1, 1), 44)
 			"stunned":
 				_fx.announce(_views[event.side], "Can't move!", Hud.STATUS_BADGES.par[1].lightened(0.3), 48)
 			"dodge":

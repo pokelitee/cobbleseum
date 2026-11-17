@@ -69,6 +69,8 @@ const GUARD_LATE_MARGIN := 3
 const GUARD_OFF_TIMING := 0.6
 ## A move that would land while the foe it sees is still guarding scores this much.
 const INTO_GUARD := 0.1
+## A melee move into a foe whose ability punishes contact (Static, Rough Skin) scores this much.
+const CONTACT_COST := 0.85
 
 var profile: AIProfile
 var random: SimRandom
@@ -179,6 +181,8 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			# the damage curve's floor would otherwise turn it into a usable score.
 			considerations.damage = _sample("damage", expected * adjusted / maxf(foe.max_hp, 1.0)) if adjusted > 0.0 else 0.0
 			considerations.finisher = _sample("finisher", expected / maxf(foe.hp, 1.0))
+			if move.kind == BattleMove.Kind.MELEE and Abilities.punishes_contact(foe):
+				considerations.contact_cost = CONTACT_COST
 			if move.own_stat_drop() < 0 and _other_attack_on(me, i):
 				considerations.stage_cost = stage_cost(me, move)
 		else:
@@ -404,16 +408,12 @@ func _guarded_when_landing(me: Fighter, seen: Dictionary, gap: float, move: Batt
 	return up > lands
 
 
-## Damage `move` would do on average (no crit, mean roll), for scoring.
+## Damage `move` would do on average (no crit, mean roll, abilities included), for scoring.
 static func expected_damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData) -> float:
 	if move.fixed_damage > 0:
 		return move.fixed_damage * move.expected_hits()
-	var attack := move.attack_stat(attacker, defender)
-	var defense := defender.stat(move.defensive_stat)
-	var base := floorf(floorf(floorf(2.0 * Rules.LEVEL / 5.0 + 2.0) * move.power * attack / defense) / 50.0) + 2.0
-	var stab := Rules.STAB if move.type in attacker.types else 1.0
-	var effectiveness := Rules.compressed_effectiveness(data.effectiveness(move.type, defender.types))
-	return base * stab * effectiveness * (Rules.ROLL_MIN + Rules.ROLL_MAX) * 0.5 * move.expected_hits()
+	var parts := Battle.damage_parts(attacker, defender, move, data)
+	return parts.base * parts.factor * (Rules.ROLL_MIN + Rules.ROLL_MAX) * 0.5 * move.expected_hits()
 
 
 ## Response curves, built once: input -> 0-1.

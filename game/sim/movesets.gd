@@ -42,6 +42,7 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 	if species.is_empty():
 		return {"error": "unknown species '%s'" % species_id}
 	var physical := int(species.baseStats.atk) >= int(species.baseStats.spa)
+	var ability := data.standard_ability(species_id)
 	var types: Array = species.get("types", ["Normal"])
 	var attacks: Array[Dictionary] = []
 	var utilities: Array[Dictionary] = []
@@ -51,7 +52,7 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 			continue
 		var move: BattleMove = converted.move
 		if move.is_damaging():
-			attacks.append({"id": move_id, "type": move.type, "value": attack_value(move, data.moves[move_id], physical)})
+			attacks.append({"id": move_id, "type": move.type, "value": attack_value(move, data.moves[move_id], physical, ability)})
 		else:
 			var accuracy: Variant = data.moves[move_id].get("accuracy", 100)
 			var score := utility_value(move, physical) * (1.0 if accuracy is bool else float(accuracy) / 100.0)
@@ -111,9 +112,12 @@ static func learnable(species_id: String, data: BattleData) -> Array[String]:
 	return ids
 
 
-## Expected value of an attack for a species attacking with `physical` stats.
-static func attack_value(move: BattleMove, raw: Dictionary, physical: bool) -> float:
-	var value := FIXED_DAMAGE_VALUE if move.fixed_damage > 0 else move.power * move.expected_hits()
+## Expected value of an attack for a species attacking with `physical` stats, with its
+## standard `ability`'s boosts to that move (Technician, Iron Fist, Skill Link...) counted in.
+static func attack_value(move: BattleMove, raw: Dictionary, physical: bool, ability := "") -> float:
+	var entry := Abilities.effect(ability)
+	var hits := float(move.hits_max) if entry.get("skill_link", false) else move.expected_hits()
+	var value := FIXED_DAMAGE_VALUE if move.fixed_damage > 0 else move.power * hits * Abilities.move_factor(entry, move)
 	var accuracy: Variant = raw.get("accuracy", 100)
 	value *= 1.0 if accuracy is bool else float(accuracy) / 100.0
 	if move.fixed_damage == 0 and move.physical != physical:
@@ -122,7 +126,7 @@ static func attack_value(move: BattleMove, raw: Dictionary, physical: bool) -> f
 		value *= CHARGE_FACTOR
 	if move.recharges:
 		value *= RECHARGE_FACTOR
-	if move.recoil_share > 0.0:
+	if move.recoil_share > 0.0 and not entry.get("no_recoil", false) and not entry.get("magic_guard", false):
 		value *= RECOIL_FACTOR
 	if move.self_destructs:
 		value *= SELF_DESTRUCT_FACTOR

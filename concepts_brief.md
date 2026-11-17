@@ -564,13 +564,13 @@ Every species gets one deterministic standard moveset, generated from its learns
 Only playable moves are eligible. Details (`game/sim/movesets.gd`, report via `tools/movesets.gd`):
 
 - **Learnable moves:** the species' learnset in every generation, plus its pre-evolutions', plus its base species' for forms with fewer than 25 moves of their own (Rotom's appliances, cosmetic forms).
-- **Attack value:** power × expected hits × accuracy. Using the weaker attacking stat costs 40%; charge, recharge, recoil and self-destruct are discounted; fixed damage counts as 80 power. A drop to the stat the move attacks with is charged twice at the stage multiplier (Superpower's −1 halves the value, Draco Meteor's −2 leaves a third): with no switching, the drop weakens every later attack on that stat until it wears off. Probes showed species carrying Draco Meteor, Overheat or Superpower winning 17–30 points less than with the next-best pick.
+- **Attack value:** power × expected hits × accuracy, times what the standard ability (§9.9) always adds to that move (Technician, Iron Fist, Sheer Force, Skill Link's five hits; Rock Head and Magic Guard drop the recoil discount). Using the weaker attacking stat costs 40%; charge, recharge, recoil and self-destruct are discounted; fixed damage counts as 80 power. A drop to the stat the move attacks with is charged twice at the stage multiplier (Superpower's −1 halves the value, Draco Meteor's −2 leaves a third): with no switching, the drop weakens every later attack on that stat until it wears off. Probes showed species carrying Draco Meteor, Overheat or Superpower winning 17–30 points less than with the next-best pick.
 - **Coverage:** an attack of another type gains 25% for each type it hits super effectively that the first two don't.
 - **Utility:** sleep, paralysis, burn, poison, a buff to the species' attacking stat (more for more stages, Speed included), a heal, confusion or a debuff, scaled by accuracy. It's used if it scores at least 80, otherwise a third attack.
 - **Ties** break by move ID, so the same data always gives the same moveset.
 - A battle spec without `moves` uses the species' standard moveset.
 
-Results for 1.8.4 and Showdown 0.11.11: 1,001 of the 1,005 roster entries get a moveset. Ditto, Wobbuffet, Wynaut and Pyukumuku learn no playable attack, and Magikarp and Unown get fewer than four moves. For the 381 species that have random-battle sets, 47% of the generated moves appear in those sets' movepools.
+Results for 1.8.4 and Showdown 0.11.11: 1,001 of the 1,005 roster entries get a moveset. Ditto, Wobbuffet, Wynaut and Pyukumuku learn no playable attack, and Magikarp and Unown get fewer than four moves. For the 381 species that have random-battle sets, 48% of the generated moves appear in those sets' movepools (47% before movesets weighed abilities).
 
 Using one policy for every species keeps rankings comparable. Showdown's Gen 9 random-battle sets cover only 338 of the 905 roster species, so they serve as a sanity check, not the source.
 
@@ -600,6 +600,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 18** (abilities, §9.9; movesets now weigh the standard ability, §9.6; 1,000 battles, same seed as the version 17 batch): median 41.3 s (41.2 s), 10th–90th percentile 20.7–74.7 s, draws 2.9% (2.5%), side A 48.5% (48.2%), hits 51.4 a battle (51.3); abilities announce themselves 0.9 times a battle (most act quietly on damage). Hard against ranked: hard wins 54.4% (55.3%). A paired probe (400 random matchups whose side A has an ability, each played with and without it, same seeds) puts an ability at about 2 points of win rate (48.1% to 50.1%); Overgrow, Flash Fire and Thick Fat moved most, while most matchups end the same either way.
 - **Rules version 17** (guarding, §9.2; 1,000 battles, same seed as a version 16 batch): median 41.2 s (41.8 s under version 16), 10th–90th percentile 22.1–73.6 s, draws 2.5% (2.9%), side A 48.2% (49.3%), hits 51.3 a battle (51.4), dodges 8.4 (8.8). The ranked AI guards 0.6 times a battle, blocking 0.5 hits, 0.1 of them parries; its reaction delay leaves it too late for most melee strikes, so it mostly guards projectiles and area moves. Hard against ranked (1,000 battles): hard wins 55.3% of decided battles (53.9%), guarding 1.7 times a battle with 0.5 parries, and a fifth of its foe's feints now draw a guard. Guarding adds a visible answer without moving balance.
 - **Rules version 16** (feints, §9.2; 1,000 battles, same seed as a version 15 batch): median 41.1 s (40.0 s under version 15), 10th–90th percentile 21.2–75.3 s, draws 2.4% (2.8%), side A 48.2% (50.3%), hits 50.8 a battle (50.3), dodges 8.5 (8.5). The ranked AI feints 0.54 times a battle. 20% of feints draw a dodge, and half of those dodges are punished by a hit. Openings are rare: the foe has to be down to its last dodge charge while a melee or area move is ready and in reach. Hard against ranked (1,000 battles): hard wins 58.6% of decided battles, against 58.3% under version 15, with 1.1 feints a battle. Feints add a tactic you can see without moving results.
 - **Rules version 15** (arena presets): three new arenas join the seed's choice, so a seed can land in a different arena; fields play as before, and coliseums around terrain flatten at the wall. No new batch.
@@ -631,16 +632,17 @@ Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.g
 
 ### 9.9 Abilities
 
-Planned for rules version 18 (M9). Showdown implements abilities in code, so its data gives only each species' list of abilities (1–3, 264 across the roster). The effects are our own table in `game/data/`, keyed by Showdown's ability IDs, and only effects with a clear real-time reading are in it.
+Since rules version 18 (M9). Showdown implements abilities in code, so its data gives only each species' list of abilities (1–3, 264 across the roster). The effects are our own table, `game/data/abilities.json`, keyed by Showdown's ability IDs: each entry lists its effects as keys that `Abilities` (`game/sim/abilities.gd`) reads, and only effects with a clear real-time reading are in it.
 
 - **Which ability:** each species gets a **standard ability** by one policy, like its standard moveset: the highest-valued ability on its list that the table implements, ties broken by ID. A species with none implemented has no ability. A battle spec can name another with `"ability"` (`""` for none).
+  - For 1.8.4 and Showdown 0.11.11, 781 of the 1,005 roster entries get an ability; the rest have only abilities about weather, switching, accuracy and the like.
 - **Open sheets:** both fighters' abilities are known from the start, to the AI as to the player.
 - **Real-time readings:**
   - A main-series immunity from an ability plays like a type immunity (§9.4): the move hits at ×0.25, with no secondary effects. An absorb also restores 1/16 of max HP or raises a stat.
   - Effects per turn run at a fifth of their amount per second, as burn does (§9.5).
-  - Effects per hit that take or restore a share of max HP are scaled down, since a fighter takes about six times as many hits as in the main series.
+  - Effects per hit that take or restore a share of max HP are scaled down, since a fighter takes about six times as many hits as in the main series: Rough Skin and Iron Barbs take 1/50 of the attacker's max HP rather than 1/8.
   - Effects that last "until switched out" last 12 s, like a status condition.
-- **First set** (about 45):
+- **First set** (78):
   - **Immunities and absorbs:** Levitate (Ground), Flash Fire (Fire, then its own Fire moves ×1.5 for 12 s), Water Absorb and Volt Absorb (heal), Dry Skin (Water heals, Fire ×1.25 taken), Earth Eater (Ground heals), Sap Sipper (Grass, +1 Attack), Lightning Rod and Storm Drain (Electric and Water, +1 Sp. Atk), Motor Drive (Electric, +1 Speed), Well-Baked Body (Fire, +2 Defense), Bulletproof (ball and bomb moves), Soundproof (sound moves).
   - **Damage dealt:** Blaze, Torrent, Overgrow and Swarm (×1.5 to their type at 1/3 HP or less), Huge Power and Pure Power (Attack ×2), Adaptability (STAB ×2), Technician (moves of 60 power or less ×1.5), Iron Fist, Strong Jaw, Mega Launcher, Sharpness and Tough Claws (punch, bite, pulse, slicing and contact moves), Reckless (recoil moves ×1.2), Sheer Force (moves with secondary effects ×1.3, without them), Guts (Attack ×1.5 with a status, no burn halving), Hustle (Attack ×1.5, physical projectiles 20% slower), Tinted Lens (resisted hits count as neutral).
   - **Damage taken:** Thick Fat (Fire and Ice ×0.5), Heatproof (Fire ×0.5), Filter, Solid Rock and Prism Armor (super-effective ×0.75), Multiscale and Shadow Shield (×0.5 at full HP), Fur Coat (Defense ×2), Marvel Scale (Defense ×1.5 with a status).
@@ -649,7 +651,10 @@ Planned for rules version 18 (M9). Showdown implements abilities in code, so its
   - **Stat changes:** Intimidate (−1 Attack to the foe at the start, and every 12 s), Clear Body, White Smoke, Full Metal Body, Hyper Cutter and Big Pecks (the foe can't lower its stats, or one stat), Defiant and Competitive (+2 Attack or Sp. Atk when the foe lowers a stat), Justified (+1 Attack when hit by a Dark move), Weak Armor (−1 Defense, +2 Speed when hit by a physical move, at most every 3 s), Speed Boost (+1 Speed every 10 s, up to +2), Inner Focus (immune to Intimidate).
   - **Other:** Sturdy (the first knockout blow leaves 1 HP), Rock Head (no recoil), Magic Guard (no damage except from hits), Serene Grace (secondary chances ×2), Skill Link (2–5-hit moves always hit 5 times), Shield Dust (no secondary effects taken), Prankster (status moves wind up like priority moves).
 - **Left out:** weather and terrain abilities (no weather yet, §17), abilities about switching, items, accuracy, flinching or allies, and ones that would need new systems (Disguise, Imposter, Wonder Guard).
-- **Presentation:** an ability that triggers shows its name over the fighter, the way a move's banner does.
+- **Details:** Flash Fire's boost and Intimidate's repeat both run 12 s; Speed Boost raises Speed every 10 s while it's below +2, and the stage wears off like any other; Shed Skin has an 8% chance each second; Poison Heal restores 1/40 of max HP a second; Weak Armor triggers at most every 3 s; Prankster's status moves wind up like priority moves, but heals stay a channel. Fixed-damage moves ignore abilities.
+- **Battle spec:** a fighter's `"ability"` names an ability from the table, or `""` for none; without it the fighter gets its standard ability. A name outside the table is an error.
+- **AI:** expected damage includes both fighters' abilities (`Battle.damage_parts`, shared with the battle). Neither AI attacks into an absorb, throws a status move at a fighter immune to it or a stat drop at one that blocks it; the utility AI discounts melee moves against a contact punisher.
+- **Presentation:** an ability that takes effect shows its name over the fighter (`ability` events), and a contact punisher's damage shows like recoil.
 
 ### 9.10 Held items
 
@@ -683,7 +688,7 @@ Planned for rules version 19 (M9). Like abilities, item effects are our own tabl
 
 **Battle spec** (input):
 - rules version and data versions (manifest hashes): `"rules_version"`, and `"data_versions"` with the SHA-256 that `sources.json` pins for each source. Saved specs always have them; a hand-written spec may leave them out and then plays under any;
-- the two roster entries and their movesets;
+- the two roster entries, their movesets and their abilities (§9.9);
 - the AI profile for each side (`"ai"` per fighter; default `ranked`);
 - the seed.
 
@@ -1131,7 +1136,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 **M9: abilities, items and guarding.** The rules items from "Later" that need no arena moves (§9.2, §9.9, §9.10), one pull request and rules version each, with the AIs taught to use them, tests, a balance batch, and presentation in both clip formats. The ranking (§13) waits until the rules settle.
 
 - Guarding: a timed parry with a cooldown, which feints can bait. Done (rules version 17, §9.2, §11).
-- Abilities: a standard ability per species from a first set of about 45. Rules version 18. Planned.
+- Abilities: a standard ability per species from a first set of 78. Done (rules version 18, §9.9).
 - Held items: a standard item per species from a first set of about 15. Rules version 19. Planned.
 
 **Later:**

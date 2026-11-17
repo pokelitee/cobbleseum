@@ -67,7 +67,7 @@ func test_hit_counts_follow_the_main_series_weights() -> void:
 	var battle := _battle(["bulletseed"])
 	var counts := {2: 0, 3: 0, 4: 0, 5: 0}
 	for i in 2000:
-		counts[battle._roll_hits(_move("bulletseed"))] += 1
+		counts[battle._roll_hits(battle.fighters[0], _move("bulletseed"))] += 1
 	assert_true(counts[2] > 600 and counts[3] > 600 and counts[4] > 200 and counts[5] > 200, str(counts))
 	assert_true(counts[2] < 800 and counts[5] < 400, str(counts))
 
