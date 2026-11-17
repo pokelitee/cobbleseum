@@ -64,6 +64,8 @@ var theme := {}
 var seats: Array[Transform3D] = []
 ## How far from the centre a camera may go before it would be inside the scenery.
 var camera_limit := Rules.ARENA_RADIUS + CAMERA_OVERHANG
+## The weather's look over the arena (ArenaWeather), which the view keeps in step with the battle.
+var weather: ArenaWeather
 
 var _look: Dictionary
 ## The battle's ground: the floor is built at its heights.
@@ -150,8 +152,11 @@ func _build(names: Array) -> void:
 			_add_arc_mesh(_arcs[glow], glow)
 	if _look.has("water"):
 		_add_water(float(_look.water))
-	ArenaLighting.add(self, _look)
-	_add_particles(str(_look.particles))
+	var lights := ArenaLighting.add(self, _look)
+	weather = ArenaWeather.new()
+	weather.name = "Weather"
+	add_child(weather)
+	weather.setup(lights.sun, lights.environment, _add_particles(str(_look.particles)), _rng.seed)
 
 
 func _colour(index: int) -> Color:
@@ -705,9 +710,10 @@ func _add_water(level: float) -> void:
 	add_child(water)
 
 
-func _add_particles(kind: String) -> void:
+## Adds the preset's particles. Returns their material (for the weather to fade), or null.
+func _add_particles(kind: String) -> StandardMaterial3D:
 	if kind.is_empty():
-		return
+		return null
 	var particles := CPUParticles3D.new()
 	particles.use_fixed_seed = true
 	particles.seed = _rng.randi()
@@ -735,6 +741,7 @@ func _add_particles(kind: String) -> void:
 		"dust":
 			_configure_particles(particles, 70, 10.0, Vector3(0.05, 0.05, 0.05), 0.08, Color(0.8, 0.85, 1.0, 0.5))
 	add_child(particles)
+	return material
 
 
 ## Particles drift at `drift` (m/s) with a little spread; preprocessed so it fills the air from

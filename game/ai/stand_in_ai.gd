@@ -4,7 +4,8 @@ extends RefCounted
 ## - dodges sideways when a projectile is about to hit or a melee strike is about to land,
 ##   deciding once per threat with DODGE_CHANCE;
 ## - uses the best-scoring ready move that's in range (move_score): damaging moves by power,
-##   heals when hurt, buffs until +2, status on a foe without one, debuffs until -2;
+##   heals when hurt, buffs until +2, status on a foe without one, debuffs until -2, a
+##   weather that swings the battle its way (arena_score);
 ## - otherwise keeps a range suited to its ready moves (close for melee, mid range for
 ##   ranged) and circles the opponent, switching direction now and then.
 ## Every choice draws from the side's own random stream.
@@ -28,6 +29,12 @@ const STATUS_SCORE := 95.0
 const CONFUSE_SCORE := 70.0
 const DEBUFF_SCORE := 55.0
 const STAGE_TARGET := 2
+## Arena moves score this many points per share of HP their condition would swing its way
+## (the moveset policy's scale), and aren't worth using below ARENA_MIN_SCORE. A condition with
+## more than RENEW_SHARE of its time left isn't renewed.
+const ARENA_SCORE_SCALE := 400.0
+const ARENA_MIN_SCORE := 20.0
+const RENEW_SHARE := 1.0 / 3.0
 ## Damaging moves: charge and recharge moves are worth a little less, fixed damage a little
 ## more (it ignores defences), and self-destructing only when nearly knocked out.
 const CHARGE_FACTOR := 0.75
@@ -133,7 +140,20 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 				if type in foe.types:
 					return 0.0
 			return STATUS_SCORE
+		BattleMove.Kind.ARENA:
+			return arena_score(me, foe, move)
 	return 0.0
+
+
+## What setting `move`'s weather is worth now: the HP it would swing toward `me` against keeping
+## the current weather, or 0 if it's too little or the same weather has plenty of time left.
+static func arena_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
+	var arena := me.arena
+	var full := ArenaConditions.weather_ticks_for(me, move.weather) / float(Rules.TICK_RATE)
+	if arena.weather == move.weather and arena.weather_seconds_left() > full * RENEW_SHARE:
+		return 0.0
+	var score := arena.weather_value(me, foe, move.weather) * ARENA_SCORE_SCALE
+	return score if score >= ARENA_MIN_SCORE else 0.0
 
 
 static func _damage_score(me: Fighter, move: BattleMove) -> float:

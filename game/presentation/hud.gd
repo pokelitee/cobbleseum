@@ -102,6 +102,9 @@ var _caption: Dictionary = {}
 var _replay_tag: Control
 var _replay_dot: Control
 var _replay_age := -1
+## Arena conditions shown at the top centre (set_conditions): key -> {"pill", "bar", "width"}.
+var _conditions := {}
+var _condition_row: BoxContainer
 ## Whether the battle draws Cobblemon's move effects, which the credits then name too. Set
 ## before setup().
 var move_effects_credit := false
@@ -217,6 +220,14 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 	add_child(_winner)
 	_credits = _card(CREDITS_TEXT % cobblemon_credit(move_effects_credit), 44, 0.85)
 	_credits.visible = false
+	# Side by side above the top plate in portrait; stacked in the narrow gap between the
+	# landscape plates.
+	_condition_row = BoxContainer.new()
+	_condition_row.vertical = not _portrait
+	_condition_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_condition_row.add_theme_constant_override("separation", roundi(8 * _scale))
+	_condition_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_condition_row)
 
 
 ## Sets the HP fraction shown for a side. The lagging segment holds, then drains to match;
@@ -244,6 +255,56 @@ func set_status(side: int, status: String, active: bool) -> void:
 	var badge := _pill(STATUS_BADGES[status][0], STATUS_BADGES[status][1])
 	_badge_rows[side].add_child(badge)
 	_badges[side][status] = badge
+
+
+## Shows the arena's conditions (§9.11) as pills at the top centre, between the landscape
+## plates or above the top one in portrait: each entry {"key", "text", "colour", "left"}, with
+## `left` the share of its time left (a bar under the name drains) or -1 for one that lasts.
+## Pills come and go with their keys.
+func set_conditions(entries: Array) -> void:
+	var keys := entries.map(func(entry: Dictionary) -> String: return entry.key)
+	for key: String in _conditions.keys():
+		if not key in keys:
+			_conditions[key].pill.queue_free()
+			_conditions.erase(key)
+	for entry: Dictionary in entries:
+		if not _conditions.has(entry.key):
+			_conditions[entry.key] = _condition_pill(entry.text, entry.colour)
+		var shown: Dictionary = _conditions[entry.key]
+		var left := float(entry.left)
+		shown.bar.visible = left >= 0.0
+		shown.bar.size.x = shown.width * clampf(left, 0.0, 1.0)
+	_condition_row.size = _condition_row.get_combined_minimum_size()
+	var top := 18.0 if _portrait else 40.0
+	_condition_row.position = Vector2((_size.x - _condition_row.size.x) * 0.5, top * _scale)
+
+
+func _condition_pill(text: String, colour: Color) -> Dictionary:
+	var pill := PanelContainer.new()
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = PLATE
+	style.border_color = colour
+	style.set_border_width_all(roundi(3 * _scale))
+	style.set_corner_radius_all(roundi(20 * _scale))
+	style.content_margin_left = 22 * _scale
+	style.content_margin_right = 22 * _scale
+	style.content_margin_top = 4 * _scale
+	style.content_margin_bottom = 12 * _scale
+	pill.add_theme_stylebox_override("panel", style)
+	var label := _label(text.to_upper(), 32, colour.lightened(0.25), true)
+	label.add_theme_constant_override("outline_size", roundi(8 * _scale))
+	pill.add_child(label)
+	_condition_row.add_child(pill)
+	var width := label.get_minimum_size().x
+	# The timer drains under the name (a child of the label, so the pill's layout leaves it be).
+	var bar := ColorRect.new()
+	bar.color = colour
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.size = Vector2(width, 5 * _scale)
+	bar.position = Vector2(0, label.get_minimum_size().y + 2 * _scale)
+	label.add_child(bar)
+	return {"pill": pill, "bar": bar, "width": width}
 
 
 func shake(side: int) -> void:
@@ -402,6 +463,7 @@ func show_victory(side: int, name: String, hp_share: float, seconds: float) -> v
 ## A title flashed in the middle of the screen, e.g. "Overtime!".
 func flash_title(text: String, colour: Color) -> void:
 	var title := _label(text, 96, colour, true)
+	_fit_width(title, _size.x - 120.0 * _scale)
 	title.size = title.get_minimum_size()
 	title.position = (_size - title.size) * Vector2(0.5, 0.35)
 	add_child(title)

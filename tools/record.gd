@@ -3,7 +3,8 @@ extends SceneTree
 ## Usage: godot --headless --path . --script res://tools/record.gd -- <spec.json>
 ##        [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--mesh-fx]
 ## Instead of <spec.json>, --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=] [--arena=]
-## [--shiny=a|b|both|none] [--form=] [--vs-form=] (SpecFlags) describes an AI-against-AI battle.
+## [--weather=] [--shiny=a|b|both|none] [--form=] [--vs-form=] (SpecFlags) describes an
+## AI-against-AI battle.
 ## --ai-debug records the AI debug overlay on top (for reviewing AI behaviour, not posting).
 ## Moves draw in Cobblemon's style when the native runtime and the cached effects are there
 ## (see battle_view.gd); --mesh-fx draws our mesh styles instead, into a folder ending in _mesh.

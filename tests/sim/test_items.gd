@@ -81,7 +81,7 @@ func test_the_standard_item_follows_the_policy() -> void:
 func test_every_table_entry_is_a_known_effect() -> void:
 	var keys := ["name", "heal_per_second", "needs_type", "heal_from_damage", "power", "hit_cost", "super_effective_power",
 		"physical_power", "special_power", "stat_factors", "no_status_moves", "needs_evolution", "contact_damage",
-		"focus_sash", "berry_heal", "berry_below", "cures_status", "type_power"]
+		"focus_sash", "berry_heal", "berry_below", "cures_status", "type_power", "weather_extends", "umbrella"]
 	for id: String in Items.table():
 		assert_eq(id, BattleData.to_id(Items.display_name(id)), "%s is keyed by its Showdown ID" % id)
 		for key: String in Items.table()[id]:

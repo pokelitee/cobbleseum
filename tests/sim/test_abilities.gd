@@ -83,7 +83,8 @@ func test_every_table_entry_is_a_known_effect() -> void:
 		"full_hp_taken", "contact_status", "contact_damage", "status_immune", "intimidate_immune", "sleep_factor",
 		"shed_skin", "poison_heal", "ignores_paralysis", "synchronize", "intimidate", "no_lowering", "on_lowered",
 		"hit_by_type", "on_physical_hit", "speed_boost", "sturdy", "no_recoil", "magic_guard", "secondary_chance",
-		"skill_link", "shield_dust", "prankster"]
+		"skill_link", "shield_dust", "prankster", "sets_weather", "weather_stats", "weather_hp", "weather_power",
+		"weather_immune", "weather_cures", "weather_status_immune"]
 	for id: String in Abilities.table():
 		assert_eq(id, BattleData.to_id(Abilities.display_name(id)), "%s is keyed by its Showdown ID" % id)
 		for key: String in Abilities.table()[id]:

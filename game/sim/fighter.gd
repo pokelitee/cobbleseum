@@ -74,6 +74,8 @@ var item := ""
 var item_effect := {}
 var item_used := false
 var can_evolve := false
+## The arena conditions (weather) the battle shares with both fighters; stats read them.
+var arena := ArenaConditions.new()
 ## Multi-hit strikes still to come: {"ticks": int, "move": index, "last": bool}.
 var followups: Array[Dictionary] = []
 
@@ -111,9 +113,9 @@ func can_act() -> bool:
 	return action == Action.READY and not is_knocked_out() and not is_incapacitated()
 
 
-## A stat after stat stages, the ability, the item, and burn for Attack.
+## A stat after stat stages, the ability, the item, the weather, and burn for Attack.
 func stat(name: String) -> float:
-	var value: float = stats[name] * Rules.stage_multiplier(boosts[name]) * Abilities.stat_factor(self, name) * Items.stat_factor(self, name)
+	var value: float = stats[name] * Rules.stage_multiplier(boosts[name]) * Abilities.stat_factor(self, name) * Items.stat_factor(self, name) 		* arena.stat_factor(self, name)
 	if name == "atk" and status == "brn" and not ability_effect.get("ignores_burn", false):
 		value *= Rules.BURN_ATTACK_FACTOR
 	return value
@@ -171,11 +173,11 @@ func set_ability(id: String) -> void:
 
 
 ## Ticks to wind up `move`: Prankster speeds up status moves like priority (heals stay a
-## channel).
+## channel), and sun skips Solar Beam's charge.
 func windup_ticks(move: BattleMove) -> int:
 	if ability_effect.get("prankster", false) and not move.is_damaging() and move.kind != BattleMove.Kind.HEAL:
 		return Rules.seconds_to_ticks(Rules.STATUS_MOVE_WINDUP * Rules.PRIORITY_WINDUP_FACTOR)
-	return move.windup_ticks
+	return arena.windup_ticks(self, move, move.windup_ticks)
 
 
 ## Gives the fighter a held item (a Showdown ID in Items' table, or "" for none).
