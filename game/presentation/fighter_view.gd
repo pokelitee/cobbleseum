@@ -444,6 +444,18 @@ func pose_still() -> void:
 ## skinned positions can't be read back). Each vertex follows its heaviest bone, which is exact
 ## for Cobblemon's rigid cuboids.
 func posed_points() -> PackedVector3Array:
+	return _posed_points(-1)
+
+
+## The head's vertices as currently posed, in this view's space: those on the head bone or a
+## bone under it (ears, jaw, horns). Empty without a head bone.
+func head_points() -> PackedVector3Array:
+	var head := (_mesh.get_parent() as Skeleton3D).find_bone(HEAD_BONE)
+	return _posed_points(head) if head >= 0 else PackedVector3Array()
+
+
+## The posed vertices on bone `under` and the bones under it, or every vertex for -1.
+func _posed_points(under: int) -> PackedVector3Array:
 	var points := PackedVector3Array()
 	var skeleton: Skeleton3D = _mesh.get_parent()
 	var skin := _mesh.skin
@@ -451,11 +463,17 @@ func posed_points() -> PackedVector3Array:
 		return points
 	var to_view := _to_view(skeleton)
 	var binds: Array[Transform3D] = []
+	var kept: Array[bool] = []
 	for i in skin.get_bind_count():
 		var bone := skin.get_bind_bone(i)
 		if bone < 0:
 			bone = skeleton.find_bone(skin.get_bind_name(i))
 		binds.append(to_view * skeleton.get_bone_global_pose(maxi(bone, 0)) * skin.get_bind_pose(i))
+		var keep := under < 0
+		while not keep and bone >= 0:
+			keep = bone == under
+			bone = skeleton.get_bone_parent(bone)
+		kept.append(keep)
 	for surface in _mesh.mesh.get_surface_count():
 		var arrays := _mesh.mesh.surface_get_arrays(surface)
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -469,7 +487,8 @@ func posed_points() -> PackedVector3Array:
 			for k in range(v * per_vertex + 1, (v + 1) * per_vertex):
 				if weights[k] > weights[heaviest]:
 					heaviest = k
-			points.append(binds[bones[heaviest]] * vertices[v])
+			if kept[bones[heaviest]]:
+				points.append(binds[bones[heaviest]] * vertices[v])
 	return points
 
 
@@ -497,15 +516,6 @@ func _faint_lift() -> float:
 		return 0.0
 	heights.sort()
 	return maxf(0.0, -heights[int(heights.size() * ProceduralMotion.FAINT_REST_SHARE)])
-
-
-## The head bone's position in this view's space, as currently posed, or null without one.
-func head_position() -> Variant:
-	var skeleton: Skeleton3D = _mesh.get_parent()
-	var bone := skeleton.find_bone(HEAD_BONE)
-	if bone < 0:
-		return null
-	return _to_view(skeleton) * skeleton.get_bone_global_pose(bone).origin
 
 
 ## The transform from `node`'s space to this view's, without needing the tree.
