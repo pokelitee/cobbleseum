@@ -368,7 +368,7 @@ Implemented in `game/presentation/procedural_motion.gd`, as a transform on a nod
 
 Species with a faint animation of their own drop out of a hover to the ground, and are lifted wherever the animation would sink them into it (Tinkaton, Clefairy, Jigglypuff and Raichu sink by 10–40% of their height).
 
-Flying types hover and bob throughout. The layer advances per video frame at the animations' speed, so it freezes in hit-stop and slows in slow motion.
+Flying types hover and bob throughout. Serpents whose animations hold their body still (Rayquaza, whose only animation is a held pose, plus Seviper, Silicobra and Eternatus) get a travelling wave down their `segment` bones (`BodyWave`): gentle at rest, stronger and faster when moving, frozen in hit-stop. They slither instead of hopping, and on a knockout drop to the ground without tipping over, which would stand their coils on end. The layer advances per video frame at the animations' speed, so it freezes in hit-stop and slows in slow motion.
 
 Since M6 it also adds life on top of every animation, for every species:
 
