@@ -12,6 +12,7 @@ const POKEDEX := {
 }
 const COBBLEMON := {
 	"ninetales": {"name": "Ninetales", "implemented": true, "baseScale": 0.7, "hitbox": {"width": 1, "height": 2},
+		"behaviour": {"moving": {"fly": {"canFly": true}}},
 		"forms": [{"name": "Alola", "aspects": ["alolan"], "baseScale": 0.65, "hitbox": {"width": 1.2, "height": 2}}]},
 	"charizard": {"name": "Charizard", "implemented": true, "baseScale": 1.0,
 		"forms": [{"name": "Mega-X", "aspects": ["mega_x"], "battleOnly": true}]},
@@ -34,6 +35,8 @@ func test_matches_species_and_forms() -> void:
 	assert_eq(entries[1].base_scale, 0.7)
 	assert_eq(entries[1].hitbox.width, 1)
 	assert_eq(entries[0].hitbox, {})
+	assert_eq(entries.map(func(e: Dictionary) -> bool: return e.flies), [false, true, true, false],
+		"from Cobblemon's behaviour, which a form shares unless it has its own")
 
 
 func test_normalise_drops_punctuation() -> void:

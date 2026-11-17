@@ -220,3 +220,10 @@ func test_a_surge_shows_its_own_pattern_on_the_field_and_fades_out() -> void:
 	for surface in arena._surfaces:
 		assert_almost_eq((surface.get_shader_parameter("SURGE") as Color).a, 0.0, 1e-6, "faded out")
 	arena.free()
+
+
+func test_weather_fog_is_capped_and_never_thins_an_arenas_own() -> void:
+	assert_almost_eq(ArenaWeather.weather_fog(0.0, 2.5), ArenaWeather.MIN_FOG * 2.5, 1e-6, "rain hazes a clear arena")
+	assert_almost_eq(ArenaWeather.weather_fog(0.01, 4.0), ArenaWeather.MAX_WEATHER_FOG, 1e-6, "a sandstorm stops at the cap")
+	assert_almost_eq(ArenaWeather.weather_fog(0.03, 4.0), 0.03, 1e-6, "the cave's own fog stays as it is")
+	assert_almost_eq(ArenaWeather.weather_fog(0.03, 0.6), 0.018, 1e-6, "sun still clears the air")

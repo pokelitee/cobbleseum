@@ -25,8 +25,10 @@ const FEMALE := "female"
 
 ## `pokedex`: Showdown ID -> species. `cobblemon`: Cobblemon species id -> species JSON.
 ## `folders`: Cobblemon species id -> model folder ("0038_ninetales"). Returns entries
-## {"id", "name", "num", "folder", "aspects", "base_scale", "hitbox", "forms"}, sorted by dex
-## number then ID. "hitbox" is Cobblemon's {"width", "height"} in blocks before base scale, or {}.
+## {"id", "name", "num", "folder", "aspects", "base_scale", "hitbox", "flies", "forms"}, sorted by
+## dex number then ID. "hitbox" is Cobblemon's {"width", "height"} in blocks before base scale, or {}.
+## "flies" is whether Cobblemon lets the species fly (its behaviour's fly.canFly), which decides
+## which Flying types hover in battle.
 ## "forms" are the entry's candidate cosmetic forms (cosmetic_forms()).
 static func match_species(pokedex: Dictionary, cobblemon: Dictionary, folders: Dictionary) -> Array:
 	var by_name := {}
@@ -46,6 +48,7 @@ static func match_species(pokedex: Dictionary, cobblemon: Dictionary, folders: D
 		var aspects: Array = []
 		var base_scale := float(data.get("baseScale", 1.0))
 		var hitbox: Dictionary = data.get("hitbox", {})
+		var behaviour: Dictionary = data.get("behaviour", {})
 		var forme := BattleData.to_id(str(dex.get("forme", "")))
 		if not forme.is_empty():
 			var form := _form(data, forme)
@@ -54,8 +57,10 @@ static func match_species(pokedex: Dictionary, cobblemon: Dictionary, folders: D
 			aspects = form.get("aspects", [])
 			base_scale = float(form.get("baseScale", base_scale))
 			hitbox = form.get("hitbox", hitbox)
+			behaviour = form.get("behaviour", behaviour)
 		entries.append({"id": id, "name": dex.get("name", id), "num": int(dex.num),
 			"folder": folders[cobblemon_id], "aspects": aspects, "base_scale": base_scale, "hitbox": hitbox,
+			"flies": bool(behaviour.get("moving", {}).get("fly", {}).get("canFly", false)),
 			"forms": cosmetic_forms(id, pokedex, data, aspects)})
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return a.num < b.num if a.num != b.num else a.id < b.id)
