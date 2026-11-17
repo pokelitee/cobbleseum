@@ -41,6 +41,8 @@ var _flash_material: StandardMaterial3D
 var _flash_frames := 0
 var _flash_delay := 0
 var _head: HeadTurn
+## Undulates a serpent whose animations hold its body still; null for other models.
+var _wave: BodyWave
 ## Shows the poser's ground or air parts (folded or open wings); null when nothing swaps.
 var _parts: PartSwap
 var _watched: FighterView
@@ -119,6 +121,7 @@ static func from_model(path: String, scale: float, model_height: float, skin := 
 		view._head = HeadTurn.new()
 		view._head.bone = skeleton.find_bone(HEAD_BONE)
 		skeleton.add_child(view._head)
+	view._add_body_wave(skeleton)
 	pad_base_animations(view._player.get_animation_library(""), view._animations, skeleton)
 	play_one_offs_once(view._player.get_animation_library(""), view._animations)
 	view._player.animation_finished.connect(view._on_animation_finished)
@@ -133,6 +136,24 @@ static func from_model(path: String, scale: float, model_height: float, skin := 
 	view._overlay_wait = view._rng.randi_range(OVERLAY_GAP.x, OVERLAY_GAP.y)
 	view.play_idle()
 	return view
+
+
+## Gives a serpent whose base animations hold its body segments still a BodyWave, so it
+## undulates and slithers instead of hopping and gliding about rigidly.
+func _add_body_wave(skeleton: Skeleton3D) -> void:
+	var segments := BodyWave.find_segments(skeleton)
+	if segments.is_empty():
+		return
+	var base: Array[Animation] = []
+	for role in ["idle", "walk", "run", "air_idle", "air_fly"]:
+		if _animations.has(role):
+			base.append(_player.get_animation(_animations[role]))
+	if BodyWave.animated(base, skeleton, segments):
+		return
+	_wave = BodyWave.new()
+	_wave.segments = segments
+	skeleton.add_child(_wave)
+	_motion.slithers = true
 
 
 ## Gives each base animation (BASE_ROLES in `roles`) a rest-pose track for every bone channel
@@ -318,6 +339,9 @@ func next_frame() -> void:
 	_motion.next_frame(_time_scale)
 	if _head != null:
 		_head.yaw = _motion.head_yaw
+	if _wave != null:
+		_wave.phase = _motion.wave_phase
+		_wave.strength = _motion.wave_strength
 	_motion_root.transform = _motion.transform()
 
 

@@ -137,3 +137,32 @@ func test_revive_stands_a_fainted_fighter_up() -> void:
 	motion.revive()
 	_advance(motion, 1)
 	assert_true(motion.transform().is_equal_approx(rest), "back at rest")
+
+
+func test_serpents_slither_rather_than_hop_and_wave_harder_when_moving() -> void:
+	var serpent := ProceduralMotion.new(2.0, false)
+	serpent.slithers = true
+	_advance(serpent, 60)
+	assert_almost_eq(serpent.wave_strength, ProceduralMotion.WAVE_REST, 1e-3, "a gentle wave at rest")
+	var resting_phase := serpent.wave_phase
+	serpent.moving = true
+	serpent.velocity = Vector2(ProceduralMotion.LEAN_SPEED, 0)
+	_advance(serpent, 60)
+	assert_almost_eq(serpent.wave_strength, 1.0, 1e-3, "a full wave moving")
+	assert_true(serpent.wave_phase - resting_phase > 60 * ProceduralMotion.WAVE_REST_SPEED * 2.0, "travelling faster")
+	assert_almost_eq(serpent.transform().origin.y, 0.0, 1e-6, "no hop")
+	var paused := serpent.wave_phase
+	_advance(serpent, 10, 0.0)
+	assert_eq(serpent.wave_phase, paused, "hit-stop freezes it")
+
+
+func test_a_fainted_serpent_drops_without_tipping_over_and_stops_waving() -> void:
+	var serpent := ProceduralMotion.new(3.0, true)
+	serpent.slithers = true
+	_advance(serpent, 30)
+	serpent.faint(PackedVector2Array([Vector2(-1, 0), Vector2(3, 0), Vector2(0, 4)]))
+	_advance(serpent, ProceduralMotion.FAINT_FRAMES * 3)
+	assert_almost_eq(serpent.transform().basis.get_euler().z, 0.0, 1e-4, "its coils stay down")
+	assert_almost_eq(serpent.transform().origin.y, 0.0, 1e-4, "out of the hover, on the ground")
+	assert_almost_eq(serpent.wave_strength, 0.0, 1e-3)
+

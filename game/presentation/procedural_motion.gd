@@ -9,6 +9,8 @@ extends RefCounted
 ## - always: leaning into movement (pitched forward by forward speed, banked by sideways
 ##   speed, twice as much for fliers), fliers swooping low at speed, and a squash on landing
 ## - sleep: slow breathing (no sleep animation)
+## - serpents (BodyWave): a wave down the body instead of hopping, gentle at rest, stronger
+##   and faster when moving; on a knockout they drop to the ground rather than tipping over
 ## - faint: tipping over onto its side, resting on the ground (no faint animation); with a
 ##   faint animation, only dropping out of a hover and lifting what the animation sinks
 ## Everything advances per video frame, scaled like the animations (0 in hit-stop), so renders
@@ -47,11 +49,21 @@ const FAINT_SINK := 0.03
 ## The share of the fainted model's silhouette allowed below the ground: outstretched fins,
 ## wings and tails, so the body lies on the ground rather than balancing on a wingtip.
 const FAINT_REST_SHARE := 0.05
+## Serpents' body wave: its strength at rest (1 at LEAN_SPEED m/s), and how fast it travels
+## (radians per frame) at rest and at LEAN_SPEED.
+const WAVE_REST := 0.35
+const WAVE_REST_SPEED := 0.06
+const WAVE_MOVING_SPEED := 0.22
 
 var height := 1.0
 var hovers := false
 var moving := false
 var asleep := false
+## A serpent with a BodyWave: it slithers rather than hops, and doesn't tip over when it faints.
+var slithers := false
+## The BodyWave's phase and strength.
+var wave_phase := 0.0
+var wave_strength := 0.0
 ## Set each frame by the view: facing and the last tick's movement, on the floor.
 var facing := Vector2.UP
 var velocity := Vector2.ZERO
@@ -137,6 +149,10 @@ func next_frame(time_scale := 1.0) -> void:
 			_action = ""
 	if _fainting:
 		_faint_age = minf(_faint_age + time_scale, FAINT_FRAMES)
+	if slithers:
+		var pace := clampf(velocity.length() / LEAN_SPEED, 0.0, 1.0)
+		wave_strength = lerpf(wave_strength, 0.0 if _fainting else lerpf(WAVE_REST, 1.0, pace), ease)
+		wave_phase += time_scale * lerpf(WAVE_REST_SPEED, WAVE_MOVING_SPEED, pace)
 
 
 ## The root offset for the current frame, in the fighter's own space (-Z faces the foe).
@@ -148,7 +164,7 @@ func transform() -> Transform3D:
 	rotation.z += _lean.y
 	if hovers:
 		offset.y += height * (HOVER_HEIGHT * (1.0 - SWOOP_DEPTH * _swoop) + HOVER_BOB * sin(_phase * HOVER_SPEED))
-	elif moving:
+	elif moving and not slithers:
 		offset.y += height * HOP_HEIGHT * absf(sin(_phase * HOP_SPEED))
 	if asleep:
 		var breath := BREATH * sin(_phase * BREATH_SPEED)
@@ -172,7 +188,8 @@ func transform() -> Transform3D:
 				scale *= Vector3(1.0 + squash * 0.5, 1.0 - squash, 1.0 + squash * 0.5)
 	if _fainting:
 		var f := smoothstep(0.0, 1.0, _faint_age / FAINT_FRAMES)
-		if _tips:
+		# A serpent tipped onto its side would stand its coils on end.
+		if _tips and not slithers:
 			rotation.z += FAINT_ANGLE * f
 			# Fully lifted at every angle, so the body never passes through the ground on the way down.
 			offset.y = lerpf(offset.y, -height * FAINT_SINK, f) + _ground_lift(FAINT_ANGLE * f) - _standing_lift * (1.0 - f)
