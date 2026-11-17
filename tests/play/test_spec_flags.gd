@@ -67,3 +67,26 @@ func test_look_flags_set_shiny_and_forms() -> void:
 		for side in 2:
 			assert_eq(again.fighters[side].get("shiny"), spec.fighters[side].get("shiny"), "shiny round-trips")
 			assert_eq(again.fighters[side].get("form", ""), spec.fighters[side].get("form", ""), "forms round-trip")
+
+
+func test_moves_abilities_and_items_per_side() -> void:
+	var spec := SpecFlags.to_spec({"watch": "Garchomp", "vs": "Mr. Mime", "moves": "Earthquake, dragonclaw,", "vs-moves": "psychic",
+		"ability": "Rough Skin", "vs-ability": "none", "item": "none", "vs-item": "Life Orb", "seed": "5"})
+	assert_eq(spec.fighters[0], {"species": "garchomp", "ai": Controllers.DEFAULT_AI, "moves": ["earthquake", "dragonclaw"],
+		"ability": "roughskin", "item": ""}, "names become IDs; none is none")
+	assert_eq(spec.fighters[1], {"species": "mrmime", "ai": Controllers.DEFAULT_AI, "moves": ["psychic"], "ability": "", "item": "lifeorb"})
+	assert_eq(SpecFlags.to_spec(SpecFlags.parse(SpecFlags.from_spec(spec)).flags), spec, "they round-trip")
+	assert_false(SpecFlags.to_spec({"watch": "garchomp"}).fighters[0].has("moves"), "left out: the standard ones")
+	assert_true(SpecFlags.to_spec({"watch": "garchomp", "moves": ","}).has("error"))
+
+
+func test_a_seed_must_be_a_number() -> void:
+	assert_true(SpecFlags.to_spec({"watch": "garchomp", "seed": "abc"}).has("error"))
+
+
+func test_flags_without_a_seed_stay_without_one() -> void:
+	var flags := {"watch": "garchomp", "vs": "hydreigon", "ai": "hard", "vs-ai": "easy", "arena": "cave"}
+	var spec := SpecFlags.to_spec(flags)
+	spec.erase("seed")
+	assert_eq(SpecFlags.to_flags(spec), flags, "so each battle from them gets a new seed")
+	assert_eq(Array(SpecFlags.to_args(flags)), ["--watch=garchomp", "--vs=hydreigon", "--ai=hard", "--vs-ai=easy", "--arena=cave"])
