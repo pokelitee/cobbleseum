@@ -54,3 +54,19 @@ func test_an_effect_that_ends_is_dropped_and_comes_back_full() -> void:
 	assert_eq(effects.read(fighter), [] as Array[Dictionary])
 	fighter.confusion_ticks = PlateEffects.standard_ticks("confusion")
 	assert_almost_eq(effects.read(fighter)[0].left, 1.0, 1e-6)
+
+
+func test_changed_stat_stages_follow_the_timed_effects() -> void:
+	var fighter := Fighter.new()
+	var effects := PlateEffects.new()
+	fighter.boosts.spe = -1
+	fighter.boosts.atk = 2
+	fighter.status = "brn"
+	fighter.status_ticks = 10
+	var entries := effects.read(fighter)
+	assert_eq(_keys(entries), ["brn", "atk", "spe"], "unchanged stats are left out")
+	assert_eq(entries[1].stages, 2)
+	assert_eq(entries[2].stages, -1)
+	assert_false(entries[1].has("left"), "stages have no timer")
+	fighter.boosts.atk = 0
+	assert_eq(_keys(effects.read(fighter)), ["brn", "spe"], "gone once the stage wears off")

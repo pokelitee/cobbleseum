@@ -2,12 +2,14 @@ class_name PlateEffects
 extends RefCounted
 ## What a fighter's name plate shows in its row under the HP bar (concepts_brief.md §12.5): its
 ## status condition, confusion and its side's screens, each with the share of its time left,
-## read from the battle every video frame. One per fighter: it remembers each timed effect's
-## full length, since the battle only keeps the ticks left.
+## then its changed stat stages, read from the battle every video frame. One per fighter: it
+## remembers each timed effect's full length, since the battle only keeps the ticks left.
 
 ## Badge order along the row.
 const TIMED: Array[String] = ["brn", "par", "psn", "tox", "slp", "frz", "confusion",
 	"reflect", "lightscreen", "auroraveil"]
+## Stat stages, in badge order after the timed effects.
+const STAGES: Array[String] = ["atk", "def", "spa", "spd", "spe"]
 
 ## Full lengths in ticks, by effect, as last worked out.
 var _totals := {}
@@ -15,8 +17,8 @@ var _totals := {}
 var _lefts := {}
 
 
-## The effects `fighter` shows now, in badge order: {"key", "left"}, with `left` the share of
-## its time left.
+## The effects `fighter` shows now, in badge order: {"key", "left"} for a timed effect, with
+## `left` the share of its time left, then {"key", "stages"} for each stat stage that isn't 0.
 func read(fighter: Fighter) -> Array[Dictionary]:
 	var ticks := {}
 	if not fighter.status.is_empty():
@@ -38,6 +40,10 @@ func read(fighter: Fighter) -> Array[Dictionary]:
 			_totals[key] = maxi(left, standard_ticks(key))
 		_lefts[key] = left
 		entries.append({"key": key, "left": clampf(float(left) / maxi(_totals[key], 1), 0.0, 1.0)})
+	for stat in STAGES:
+		var stages: int = fighter.boosts[stat]
+		if stages != 0:
+			entries.append({"key": stat, "stages": stages})
 	return entries
 
 

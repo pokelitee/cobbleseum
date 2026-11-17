@@ -282,7 +282,7 @@ _Avoid_: end card
 A fighter's panel on the HUD: its portrait, name, type pills and HP bar, with its effect row under the bar.
 
 **Effect row**:
-The square badges under a name plate's HP bar for what is on the fighter now: its status condition, confusion and its side's screens, each with a draining timer. Type pills stay on the plate itself, so a condition never reads as a type.
+The square badges under a name plate's HP bar for what is on the fighter now: its status condition, confusion and its side's screens, each with a draining timer, then its changed stat stages as arrows with counts. Type pills stay on the plate itself, so a condition never reads as a type.
 _Avoid_: status pills
 
 ### Rankings
