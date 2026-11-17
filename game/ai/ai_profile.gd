@@ -14,3 +14,6 @@ extends Resource
 ## Chance of feinting when the chance comes up (the foe down to its last dodge charge, a
 ## melee or area move ready and in reach), rolled once per chance.
 @export_range(0.0, 1.0) var feint_chance := 0.0
+## Chance, per threat it may react to (its dodge roll succeeded), that raising a guard is also
+## an option.
+@export_range(0.0, 1.0) var guard_chance := 0.0

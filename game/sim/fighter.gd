@@ -2,7 +2,8 @@ class_name Fighter
 extends RefCounted
 ## One side's state in the simulation. Positions are on the arena floor (x, z) in metres.
 
-enum Action { READY, WINDUP, RECOVERY, DODGE }
+## GUARD covers the guard's active window and then, if it blocked nothing, its recovery.
+enum Action { READY, WINDUP, RECOVERY, DODGE, GUARD }
 
 const DEFAULT_RADIUS := 0.5
 ## Major statuses, indexed for the battle checksum.
@@ -40,6 +41,9 @@ var dodge_recharge_total := 0
 ## controllers must not read `feinting`: a feint looks like any other wind-up.
 var feint_cooldown := 0
 var feinting := false
+## Ticks until the fighter can guard again, and whether its current guard has blocked a hit.
+var guard_cooldown := 0
+var guard_blocked := false
 ## Per-tick dash while dodging.
 var dodge_step := Vector2.ZERO
 ## Stat stages, -6 to +6, and ticks since they last changed (for decay).
@@ -125,3 +129,18 @@ func move_ready(index: int) -> bool:
 ## Whether move `index` can be feinted now: a ready melee or area move, feints off cooldown.
 func can_feint(index: int) -> bool:
 	return can_act() and feint_cooldown == 0 and move_ready(index) and moves[index].can_feint()
+
+
+func can_guard() -> bool:
+	return can_act() and guard_cooldown == 0
+
+
+## Whether the guard is up (its active window, not the recovery after a whiff).
+func is_guarding() -> bool:
+	return action == Action.GUARD and action_ticks > Rules.seconds_to_ticks(Rules.GUARD_RECOVERY)
+
+
+## Whether a hit coming from `direction` (pointing from the fighter toward the hit's source)
+## meets the guard.
+func guards_against(direction: Vector2) -> bool:
+	return is_guarding() and facing.dot(direction.normalized()) >= cos(deg_to_rad(Rules.GUARD_ARC)) - 1e-6

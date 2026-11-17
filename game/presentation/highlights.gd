@@ -2,11 +2,12 @@ class_name Highlights
 extends RefCounted
 ## Picks the clip window (concepts_brief.md §12.6): the stretch of a planned battle that fills
 ## the requested video length with the most excitement. Events score by weight: big hits,
-## crits, super-effective hits and comebacks (hits by a fighter low on HP) count most, and the
-## knockout or time-up counts so much that clips usually end on it. A window ends either
-## where the plan ends or a short linger after a hit, so it always closes on a payoff; a
-## window that reaches the finish always plays the whole knockout to the end, and then the
-## victory, which comes on top of the requested length rather than out of it.
+## crits, super-effective hits and comebacks (hits by a fighter low on HP) count most, then
+## dodges, blocks and parries, and the knockout or time-up counts so much that clips usually
+## end on it. A window ends either where the plan ends or a short linger after a hit, so it
+## always closes on a payoff; a window that reaches the finish always plays the whole knockout
+## to the end, and then the victory, which comes on top of the requested length rather than
+## out of it.
 
 const HIT_SCORE := 1.0
 ## Added per share of the defender's max HP the hit took.
@@ -19,6 +20,9 @@ const COMEBACK_HP := 0.3
 const MISS_SCORE := 0.3
 ## An attack avoided by dodging through it.
 const DODGED_SCORE := 1.0
+## An attack stopped by a guard, more for a parry (it opens a punish window).
+const GUARDED_SCORE := 1.0
+const PARRY_SCORE := 1.5
 const STATUS_SCORE := 1.0
 const BOOST_SCORE := 0.4
 const HEAL_SCORE := 0.6
@@ -87,6 +91,8 @@ static func event_scores(events: Array, max_hp: Array) -> PackedFloat32Array:
 				scores[i] = MISS_SCORE
 			"dodged":
 				scores[i] = DODGED_SCORE
+			"guarded":
+				scores[i] = PARRY_SCORE if event.get("parry", false) else GUARDED_SCORE
 			"status":
 				scores[i] = STATUS_SCORE
 			"boost":

@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 16
+const RULES_VERSION := 17
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -77,6 +77,15 @@ const DODGE_RECHARGE_FAST := 1.5
 ## Breaking off late enough draws a dodge from an AI that waits for a strike's last moments.
 const FEINT_BREAK_TICKS := 3
 const FEINT_COOLDOWN := 3.0
+
+## Guarding (§9.2): a short parry against hits from within GUARD_ARC degrees of the facing. A
+## blocked melee strike staggers the attacker for at least PARRY_STAGGER; a guard that blocked
+## nothing ends in GUARD_RECOVERY. The cooldown runs from when the guard is raised.
+const GUARD_SECONDS := 0.35
+const GUARD_RECOVERY := 0.3
+const GUARD_COOLDOWN := 3.0
+const GUARD_ARC := 90.0
+const PARRY_STAGGER := 0.5
 
 ## Move timings in seconds, per move kind.
 const MELEE_REACH := 1.2

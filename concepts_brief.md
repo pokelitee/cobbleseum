@@ -50,7 +50,8 @@ Non-goals:
   - **Main-series accuracy.** Cobbleseum borrows stats, types, moves and the damage formula, but its real-time rules are its own. Rankings measure strength under these rules, not competitive strength in the main-series games.
   - Pokémon GO as an asset source.
 - **Left out of the first version:**
-  - Abilities, held items, Terastallization, Mega Evolution and Gigantamax.
+  - Terastallization, Mega Evolution and Gigantamax.
+  - Abilities and held items, until M9 adds a first set of each (§9.9, §9.10).
   - Arena moves such as weather, Pokémon's terrains, entry hazards and screens.
 
 ## 4. Constraints
@@ -436,7 +437,8 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
   - a movement direction;
   - dodge;
   - use move 1–4;
-  - feint move 1–4 (§9.2).
+  - feint move 1–4 (§9.2);
+  - guard (§9.2).
 
   The AI and the player produce identical intents.
 
@@ -447,6 +449,12 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - **Speed:** the Speed stat maps into a band of movement speeds. It also sets how quickly dodges recharge.
 - **Dodges:** each fighter has 2 dodge charges, each recharging in 3 s (slowest) to 1.5 s (fastest, by Speed). A dodge is a 2.5 m dash over 0.2 s, invulnerable throughout: projectiles fly on through and melee strikes whiff. A fighter can't dodge while winding up or recovering, so attacking commits it.
 - **Feints** (rules version 16): a fighter can fake the wind-up of a ready melee or area move that's in reach. A melee feint dashes in like the real thing. The feint breaks off, unreleased, with 3 ticks of the wind-up left, so to the foe it looks like a strike until its last moments, and both AIs dodge it as one. It deals no damage and spends none of the move's cooldown, but the fighter can't feint again for 3 s, and it can't dodge while feinting. The point is to draw a dodge, ideally the foe's last charge, and strike while the foe can't dodge. Projectile, heal and status wind-ups can't be feinted: nothing reacts to them before the release. In play, hold Shift (or LB) with a move key.
+- **Guarding** (rules version 17): a fighter can raise a guard, a short parry that holds its ground where a dodge moves it. For 0.35 s it blocks every hit whose source is within 90° of its facing (the attacker for melee and area moves, where a projectile came from), and it turns to face the foe at the wind-up rate. A blocked hit deals no damage and has no secondary effects, drain or recoil.
+  - **Parry:** blocking a melee strike staggers the attacker: its recovery lasts at least 0.5 s and its remaining multi-hit strikes are lost, so the guard opens a window to punish.
+  - **Whiff:** if nothing was blocked, the guard ends in a 0.3 s recovery in which the fighter can't act or dodge. A guard that blocked something stays up for its 0.35 s, then skips the recovery.
+  - **Cost:** a 3 s cooldown from when it's raised. It can't be raised while winding up, recovering or dodging, and the fighter can't move or dodge while guarding.
+  - **Against feints:** a feint baits a guard just as it baits a dodge: the guard whiffs into its recovery and the real strike lands. The AI's feint opening widens to match (§11).
+  - In play, G (or RT).
 - **Movement:** fighters walk at their speed, can't pass through each other (they slide around) and stay inside the wall. Since rules version 9 they speed up and slow down (14 m/s²) rather than starting and stopping instantly, and the slide out of a dodge carries on briefly.
 - **Facing:** fighters turn at 360° a second (900° while winding up, to aim). Walking, they face between the foe and where they're going, so they turn away to run and square up to fight, instead of always staring at each other.
 - **Agility** (rules version 10): acceleration and turning scale with body, by the square root of the Speed stat over 120 (a base-100 species) times (50 kg / weight)^0.15, within ×0.6 to ×1.5. Heavy, slow species lumber; light, fast ones dart, and the utility AI switches strafe direction more often for them. Flying types brake at half their acceleration, so they glide to a stop.
@@ -592,6 +600,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 17** (guarding, §9.2; 1,000 battles, same seed as a version 16 batch): median 41.2 s (41.8 s under version 16), 10th–90th percentile 22.1–73.6 s, draws 2.5% (2.9%), side A 48.2% (49.3%), hits 51.3 a battle (51.4), dodges 8.4 (8.8). The ranked AI guards 0.6 times a battle, blocking 0.5 hits, 0.1 of them parries; its reaction delay leaves it too late for most melee strikes, so it mostly guards projectiles and area moves. Hard against ranked (1,000 battles): hard wins 55.3% of decided battles (53.9%), guarding 1.7 times a battle with 0.5 parries, and a fifth of its foe's feints now draw a guard. Guarding adds a visible answer without moving balance.
 - **Rules version 16** (feints, §9.2; 1,000 battles, same seed as a version 15 batch): median 41.1 s (40.0 s under version 15), 10th–90th percentile 21.2–75.3 s, draws 2.4% (2.8%), side A 48.2% (50.3%), hits 50.8 a battle (50.3), dodges 8.5 (8.5). The ranked AI feints 0.54 times a battle. 20% of feints draw a dodge, and half of those dodges are punished by a hit. Openings are rare: the foe has to be down to its last dodge charge while a melee or area move is ready and in reach. Hard against ranked (1,000 battles): hard wins 58.6% of decided battles, against 58.3% under version 15, with 1.1 feints a battle. Feints add a tactic you can see without moving results.
 - **Rules version 15** (arena presets): three new arenas join the seed's choice, so a seed can land in a different arena; fields play as before, and coliseums around terrain flatten at the wall. No new batch.
 - **Rules version 14** (the continuous landscape and features; 1,000 battles): median 40.4 s, 10th–90th percentile 20.9–76.0 s, draws 3.0%, side A 48.8%.
@@ -619,6 +628,41 @@ Since rules version 12 the arena has ground the battle uses (`game/sim/terrain.g
 - **Effect** (rules version 14, 60 battles per field): 6% (beach) to 14% (cave) of shots hit rock, the fighters are out of each other's sight 10–26% of the time and on raised ground 14–20% of it.
 - **See-through:** in the view, anything between the camera and a fighter (above that fighter's ground) dissolves with a screen-door dither, so cover never hides the battle.
 - **Cost:** each cell keeps the highest ground within 3 cells, so collision and sight checks stop early where nothing rises; battles take about 20% longer to simulate.
+
+### 9.9 Abilities
+
+Planned for rules version 18 (M9). Showdown implements abilities in code, so its data gives only each species' list of abilities (1–3, 264 across the roster). The effects are our own table in `game/data/`, keyed by Showdown's ability IDs, and only effects with a clear real-time reading are in it.
+
+- **Which ability:** each species gets a **standard ability** by one policy, like its standard moveset: the highest-valued ability on its list that the table implements, ties broken by ID. A species with none implemented has no ability. A battle spec can name another with `"ability"` (`""` for none).
+- **Open sheets:** both fighters' abilities are known from the start, to the AI as to the player.
+- **Real-time readings:**
+  - A main-series immunity from an ability plays like a type immunity (§9.4): the move hits at ×0.25, with no secondary effects. An absorb also restores 1/16 of max HP or raises a stat.
+  - Effects per turn run at a fifth of their amount per second, as burn does (§9.5).
+  - Effects per hit that take or restore a share of max HP are scaled down, since a fighter takes about six times as many hits as in the main series.
+  - Effects that last "until switched out" last 12 s, like a status condition.
+- **First set** (about 45):
+  - **Immunities and absorbs:** Levitate (Ground), Flash Fire (Fire, then its own Fire moves ×1.5 for 12 s), Water Absorb and Volt Absorb (heal), Dry Skin (Water heals, Fire ×1.25 taken), Earth Eater (Ground heals), Sap Sipper (Grass, +1 Attack), Lightning Rod and Storm Drain (Electric and Water, +1 Sp. Atk), Motor Drive (Electric, +1 Speed), Well-Baked Body (Fire, +2 Defense), Bulletproof (ball and bomb moves), Soundproof (sound moves).
+  - **Damage dealt:** Blaze, Torrent, Overgrow and Swarm (×1.5 to their type at 1/3 HP or less), Huge Power and Pure Power (Attack ×2), Adaptability (STAB ×2), Technician (moves of 60 power or less ×1.5), Iron Fist, Strong Jaw, Mega Launcher, Sharpness and Tough Claws (punch, bite, pulse, slicing and contact moves), Reckless (recoil moves ×1.2), Sheer Force (moves with secondary effects ×1.3, without them), Guts (Attack ×1.5 with a status, no burn halving), Hustle (Attack ×1.5, physical projectiles 20% slower), Tinted Lens (resisted hits count as neutral).
+  - **Damage taken:** Thick Fat (Fire and Ice ×0.5), Heatproof (Fire ×0.5), Filter, Solid Rock and Prism Armor (super-effective ×0.75), Multiscale and Shadow Shield (×0.5 at full HP), Fur Coat (Defense ×2), Marvel Scale (Defense ×1.5 with a status).
+  - **Contact punishers**, on a melee hit taken: Static, Flame Body, Poison Point and Effect Spore (a 30% chance of a status), Rough Skin and Iron Barbs (the attacker loses a share of its max HP).
+  - **Status:** Limber, Insomnia, Vital Spirit, Immunity, Water Veil, Magma Armor, Own Tempo and Oblivious (immune to one condition), Early Bird (sleep half as long), Shed Skin (a chance each second to shake off a status), Poison Heal (poison heals instead), Quick Feet (Speed ×1.5 with a status), Synchronize (passes a status back).
+  - **Stat changes:** Intimidate (−1 Attack to the foe at the start, and every 12 s), Clear Body, White Smoke, Full Metal Body, Hyper Cutter and Big Pecks (the foe can't lower its stats, or one stat), Defiant and Competitive (+2 Attack or Sp. Atk when the foe lowers a stat), Justified (+1 Attack when hit by a Dark move), Weak Armor (−1 Defense, +2 Speed when hit by a physical move, at most every 3 s), Speed Boost (+1 Speed every 10 s, up to +2), Inner Focus (immune to Intimidate).
+  - **Other:** Sturdy (the first knockout blow leaves 1 HP), Rock Head (no recoil), Magic Guard (no damage except from hits), Serene Grace (secondary chances ×2), Skill Link (2–5-hit moves always hit 5 times), Shield Dust (no secondary effects taken), Prankster (status moves wind up like priority moves).
+- **Left out:** weather and terrain abilities (no weather yet, §17), abilities about switching, items, accuracy, flinching or allies, and ones that would need new systems (Disguise, Imposter, Wonder Guard).
+- **Presentation:** an ability that triggers shows its name over the fighter, the way a move's banner does.
+
+### 9.10 Held items
+
+Planned for rules version 19 (M9). Like abilities, item effects are our own table, keyed by Showdown's item IDs.
+
+- **Which item:** each species gets a **standard item** by one policy from its stats, types and standard moveset, for example Eviolite for a species that can still evolve, Assault Vest for a bulky one whose moveset has no status-category move, Life Orb for a frail attacker, Black Sludge for a Poison type, and Leftovers otherwise. A battle spec can name another with `"item"` (`""` for none). Items are known to both sides, like abilities.
+- **First set** (about 15), with the readings of §9.9:
+  - Leftovers and Black Sludge (restore a share of max HP each second; Black Sludge hurts non-Poison types), Shell Bell (restores a share of damage dealt);
+  - Life Orb (damage ×1.3, a small share of max HP lost per hit), Expert Belt (super-effective ×1.2), Muscle Band and Wise Glasses (physical or special ×1.1), type boosters such as Charcoal (×1.2 to one type);
+  - Assault Vest (Sp. Def ×1.5, status-category moves can't be used), Eviolite (Defense and Sp. Def ×1.5 for a species that can evolve), Rocky Helmet (a melee attacker loses a share of its max HP);
+  - Focus Sash (from full HP, the first knockout blow leaves 1 HP), Sitrus Berry (restores 1/4 of max HP once, at half HP or less), Lum Berry (cures the first status condition or confusion).
+- **Left out:** Choice items (locking into one move has no clear real-time reading), Mega Stones and Z-Crystals, and items about switching, accuracy or weather.
+- **Presentation:** a consumed item or one that triggers shows its name over the fighter.
 
 ## 10. Simulation and determinism
 
@@ -678,6 +722,7 @@ The AI is a utility AI. At each decision step it scores every candidate action a
   - use move N;
   - feint move N;
   - dodge;
+  - guard;
   - hold.
 - **Considerations:**
   - Each consideration maps one input to a score from 0 to 1 through a `Curve` resource. Examples: target within this move's range, expected damage as a share of the target's HP, type effectiveness, own HP, time until an incoming hit, move ready, dodge charges left.
@@ -686,7 +731,7 @@ The AI is a utility AI. At each decision step it scores every candidate action a
   - An action's score is the product of its considerations, with a compensation factor so actions with more considerations aren't unfairly penalised.
   - The current action gets a commitment bonus, plus a minimum hold time, so the AI doesn't flip between choices every tick.
 - **Choosing:** the highest score wins. Exact ties are broken by the side's AI random stream, never by list order.
-- **AI profiles** are resources. Each sets reaction delay, aim error, decision interval, mistake chance, dodge chance and feint chance.
+- **AI profiles** are resources. Each sets reaction delay, aim error, decision interval, mistake chance, dodge chance, feint chance and guard chance.
 - **Rankings** use one fixed "ranked" profile on both sides.
 - **Debugging:** an overlay shows each candidate's per-consideration scores. It's implemented in `game/presentation/ai_overlay.gd`: a panel per side listing the last decision's candidates, best first, each with a score bar and its considerations, and the chosen action highlighted. F3 toggles it in the window, and `--ai-debug` shows it from the start or records it (`tools/record.gd -- … --ai-debug`). It only reads scores the AI keeps when asked, so it never changes a battle.
 - **Tests:**
@@ -697,20 +742,21 @@ The AI is a utility AI. At each decision step it scores every candidate action a
 
 - **Profiles** (`game/ai/profiles/*.tres`):
 
-  | Profile | Reaction delay | Decision interval | Mistake chance | Dodge chance | Feint chance |
-  |---|---|---|---|---|---|
-  | easy | 12 ticks (0.4 s) | 6 | 25% | 30% | 0% |
-  | normal | 8 | 4 | 10% | 50% | 0% |
-  | hard | 4 | 2 | 2% | 80% | 40% |
-  | ranked | 6 | 3 | 5% | 60% | 25% |
+  | Profile | Reaction delay | Decision interval | Mistake chance | Dodge chance | Feint chance | Guard chance |
+  |---|---|---|---|---|---|---|
+  | easy | 12 ticks (0.4 s) | 6 | 25% | 30% | 0% | 0% |
+  | normal | 8 | 4 | 10% | 50% | 0% | 30% |
+  | hard | 4 | 2 | 2% | 80% | 40% | 90% |
+  | ranked | 6 | 3 | 5% | 60% | 25% | 60% |
 
-  The dodge chance is rolled once per threat, and the feint chance once per opening.
+  The dodge chance is rolled once per threat, the guard chance once per threat it may react to, and the feint chance once per opening.
 - **Perception:** the AI sees the opponent's position and wind-ups one reaction delay late, and notices a projectile only once it has flown that long. After noticing an attack, it judges the time left correctly.
 - **Considerations:**
   - moves: in range (a veto), expected damage as a share of the foe's max HP (power, STAB, stats, stages and type at once), finishing potential, and whether it's safe to commit while an attack it could dodge is incoming; non-damaging moves use the stand-in AI's situational value;
   - dodges: urgency, charges left and danger;
   - movement: distance outside the range its ready moves want;
   - feints (rules version 16): an opening comes when the foe is down to its last dodge charge and a melee or area move is ready and in reach. The AI rolls its feint chance once for the opening. If the roll succeeds, the feint outscores every attack (it is still weighed against an incoming attack, like committing to a move), and once the foe has dodged, the AI's usual scoring picks the real strike against a foe with no dodge left. The feinted move is never spent, so it can be that strike. The stand-in AI never feints.
+  - guards (rules version 17): a guard is a candidate against a threat the AI may react to (its dodge roll succeeded) when its guard roll for that threat also succeeded, the guard is ready, and the hit would land inside the guard's active window from the front. It scores by timing (best a few ticks before the hit), danger, the reward (a parry against a melee wind-up is worth more) and how few dodge charges are left, so it is weighed against dodging. The AI won't commit a move into a foe it sees guarding. The feint opening widens to a foe on its last dodge charge, or with no dodge charge but a guard ready. The stand-in AI never guards.
 
   Scores are products with the compensation factor. Movement scores sit below any usable attack's. The commitment bonus and minimum hold time apply only between ways of moving.
 - **Not modelled:** aim error. The sim aims projectiles itself.
@@ -1082,11 +1128,15 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - Music and crowd sound. Done (§12.5, §12.7): three original tracks rendered from scores with General MIDI instruments, picked by the seed with variants, a victory sting and overtime's climax layer; the crowd's murmur, cheers and roar in coliseums and each field's ambience in the open.
 - For clips, title cards, captions and an instant replay of the knockout. Done (§12.3, §12.5): the intro card names the arena (and overtime), "COMEBACK!" and "FINAL BLOW" captions, and an instant replay of the knockout from new angles before the victory.
 
+**M9: abilities, items and guarding.** The rules items from "Later" that need no arena moves (§9.2, §9.9, §9.10), one pull request and rules version each, with the AIs taught to use them, tests, a balance batch, and presentation in both clip formats. The ranking (§13) waits until the rules settle.
+
+- Guarding: a timed parry with a cooldown, which feints can bait. Done (rules version 17, §9.2, §11).
+- Abilities: a standard ability per species from a first set of about 45. Rules version 18. Planned.
+- Held items: a standard item per species from a first set of about 15. Rules version 19. Planned.
+
 **Later:**
 
-- Abilities (starting with a data-driven set: type immunities and absorbs, damage modifiers, Intimidate), then items.
 - Cobblemon's move effects.
-- Guarding.
 - Arena moves and weather.
 - Tournament mode seeded from the ranking.
 - Team battles (2v2 and up).

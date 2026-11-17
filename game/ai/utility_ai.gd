@@ -12,12 +12,16 @@ extends RefCounted
 ##   minimum time; between decisions (every `decision_interval_ticks`) it keeps moving.
 ## - How well it plays comes from the AIProfile: reaction delay, decision interval, the chance of
 ##   taking the second-best action, and the chance of dodging a given threat at all.
-## - Feints (hard and ranked profiles): with the foe down to its last dodge charge, it may fake
-##   a melee or area wind-up to draw that dodge, then strike while the foe has none left.
+## - Guards: against a threat it may react to, it can raise a guard (if the profile's guard roll
+##   for that threat succeeds) when the hit would land inside the guard's window from the front,
+##   weighed against dodging: parrying melee pays most, and guarding saves dodge charges.
+## - Feints (hard and ranked profiles): with the foe down to its last dodge charge (or out of
+##   them with a guard ready), it may fake a melee or area wind-up to draw that dodge or guard,
+##   then strike while the foe has neither left.
 ## - Exact ties go to the side's random stream, never list order.
 ## With `keep_scores` set (the debug overlay), the last evaluation is kept in `last_scores`.
 
-enum Action { USE_MOVE, DODGE, FEINT, APPROACH, RETREAT, CIRCLE, HOLD, TAKE_COVER, FLANK }
+enum Action { USE_MOVE, DODGE, FEINT, GUARD, APPROACH, RETREAT, CIRCLE, HOLD, TAKE_COVER, FLANK }
 
 ## Movement scores stay below a usable attack's, so ready moves in range get used; the
 ## commitment bonus only steadies the choice between ways of moving.
@@ -56,6 +60,15 @@ const SPOT_DISTANCES: Array[float] = [1.5, 3.0]
 const SHOT_SOON := 15
 ## A feint, once rolled for, outscores any attack: drawing the last dodge first is the point.
 const FEINT_SCORE := 0.95
+## Guards: how much a block is worth (a parry of a melee strike opens a punish window) and the
+## ticks before a hit when raising the guard is best (it's up for Rules.GUARD_SECONDS).
+const PARRY_REWARD := 1.0
+const BLOCK_REWARD := 0.7
+const GUARD_EARLIEST := 2
+const GUARD_LATE_MARGIN := 3
+const GUARD_OFF_TIMING := 0.6
+## A move that would land while the foe it sees is still guarding scores this much.
+const INTO_GUARD := 0.1
 
 var profile: AIProfile
 var random: SimRandom
@@ -73,6 +86,7 @@ var _held := 0
 var _since_decision := 0
 var _judged := {}
 var _dodge_allowed := {}
+var _guard_allowed := {}
 var _strafe := 1.0
 var _strafe_ticks := 0
 var _band_shift := 0.0
@@ -100,7 +114,8 @@ func decide(battle: Battle, side: int) -> Dictionary:
 	if not me.can_act():
 		_intent = {}
 		return {}
-	var keep_moving: bool = _intent.get("use", -1) < 0 and _intent.get("feint", -1) < 0 and _intent.get("dodge", Vector2.ZERO) == Vector2.ZERO
+	var keep_moving: bool = _intent.get("use", -1) < 0 and _intent.get("feint", -1) < 0 and _intent.get("dodge", Vector2.ZERO) == Vector2.ZERO \
+		and not _intent.get("guard", false)
 	if _since_decision < profile.decision_interval_ticks and keep_moving and not _intent.is_empty():
 		return _around_terrain(battle, me, _movement_intent(me, _perceived(foe), _current))
 	_since_decision = 0
@@ -116,6 +131,8 @@ func decide(battle: Battle, side: int) -> Dictionary:
 			_intent = {"use": choice.move}
 		Action.DODGE:
 			_intent = {"dodge": _dodge_direction(me, threat.direction)}
+		Action.GUARD:
+			_intent = {"guard": true}
 		Action.FEINT:
 			_intent = {"feint": choice.move}
 		_:
@@ -136,7 +153,8 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 	var gap := me.position.distance_to(seen.position) - me.radius - foe.radius
 	# A threat only argues against committing to a move if the AI could dodge it instead.
 	var can_avoid: bool = not threat.is_empty() and me.can_dodge() and _dodge_allowed.get(threat.key, false)
-	var urgency := _urgency(threat.ticks) if can_avoid else 0.0
+	var can_guard: bool = not threat.is_empty() and me.can_guard() and _guard_allowed.get(threat.key, false)
+	var urgency := _urgency(threat.ticks) if can_avoid or can_guard else 0.0
 	var candidates: Array[Dictionary] = []
 	var any_ready := false
 	# One line-of-sight check per decision (it's symmetric), shared by every move and tactic.
@@ -167,6 +185,8 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			considerations.value = _sample("value", StandInAI.move_score(me, foe, move) / VALUE_SCALE)
 			if move.kind == BattleMove.Kind.HEAL:
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
+		if not move.is_self() and _guarded_when_landing(me, seen, gap, move):
+			considerations.into_guard = INTO_GUARD
 		candidates.append(_scored("move:" + move.id, Action.USE_MOVE, considerations, i))
 	_add_feint(battle, me, foe, gap, urgency, candidates)
 	if can_avoid:
@@ -175,6 +195,10 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			"charges": _sample("charges", float(me.dodge_charges)),
 			"danger": _sample("danger", threat.danger),
 		}))
+	if can_guard:
+		var guard := guard_considerations(me, seen, threat)
+		if not guard.is_empty():
+			candidates.append(_scored("guard", Action.GUARD, guard))
 	var band := _band(me, gap)
 	candidates.append(_scored("approach", Action.APPROACH, {"too_far": _sample("too_far", gap - band.y)}))
 	candidates.append(_scored("retreat", Action.RETREAT, {"too_close": _sample("too_close", band.x - gap)}))
@@ -192,7 +216,9 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 ## it comes up, with the profile's feint_chance.
 func _add_feint(battle: Battle, me: Fighter, foe: Fighter, gap: float, urgency: float,
 		candidates: Array[Dictionary]) -> void:
-	if foe.dodge_charges != 1 or profile.feint_chance <= 0.0:
+	# An opening: one way left to answer a strike, a dodge or else a guard.
+	var opening := foe.dodge_charges == 1 or (foe.dodge_charges == 0 and foe.guard_cooldown == 0)
+	if not opening or profile.feint_chance <= 0.0:
 		_feint_roll = -1
 		return
 	for i in me.moves.size():
@@ -347,6 +373,37 @@ static func heal_cover(me: Fighter, foe: Fighter, seen: Dictionary, threat: Dict
 	return 1.0
 
 
+## Considerations for guarding against `threat`, or {} if the guard couldn't stop it: the hit
+## must land inside the guard's window and come from the front (the guard turns to face the
+## foe it sees).
+static func guard_considerations(me: Fighter, seen: Dictionary, threat: Dictionary) -> Dictionary:
+	var window := Rules.seconds_to_ticks(Rules.GUARD_SECONDS) - 1
+	var ticks := float(threat.ticks)
+	var to_foe := ((seen.position as Vector2) - me.position).normalized()
+	var source := -(threat.direction as Vector2)
+	if ticks < 0.0 or ticks > window or source.dot(to_foe) < cos(deg_to_rad(Rules.GUARD_ARC)):
+		return {}
+	var timing := 1.0 if ticks >= GUARD_EARLIEST and ticks <= window - GUARD_LATE_MARGIN else GUARD_OFF_TIMING
+	return {
+		"timing": timing,
+		"danger": _sample("danger", threat.danger),
+		"reward": PARRY_REWARD if threat.get("melee", false) else BLOCK_REWARD,
+		"need": _sample("guard_need", float(me.dodge_charges)),
+	}
+
+
+## Whether `move`, used now, would land while the foe (as seen, a reaction delay ago) is still
+## guarding: better to wait and hit its recovery.
+func _guarded_when_landing(me: Fighter, seen: Dictionary, gap: float, move: BattleMove) -> bool:
+	if seen.action != Fighter.Action.GUARD:
+		return false
+	var up := int(seen.action_ticks) - profile.reaction_delay_ticks - Rules.seconds_to_ticks(Rules.GUARD_RECOVERY)
+	var lands := float(move.windup_ticks)
+	if move.is_projectile():
+		lands += gap / maxf(move.projectile_speed / Rules.TICK_RATE, 1e-6)
+	return up > lands
+
+
 ## Damage `move` would do on average (no crit, mean roll), for scoring.
 static func expected_damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData) -> float:
 	if move.fixed_damage > 0:
@@ -373,6 +430,8 @@ static func curve(name: String) -> Curve:
 			"finisher": _make(0.0, 1.0, [Vector2(0.0, 0.55), Vector2(0.5, 0.75), Vector2(1.0, 1.0)]),
 			# Dodge charges left.
 			"charges": _make(0.0, 2.0, [Vector2(0.0, 0.0), Vector2(1.0, 0.6), Vector2(2.0, 1.0)]),
+			# Dodge charges left -> how much a guard is wanted instead: most with none to spare.
+			"guard_need": _make(0.0, 2.0, [Vector2(0.0, 1.0), Vector2(1.0, 0.8), Vector2(2.0, 0.55)]),
 			# Incoming damage as a share of our HP.
 			"danger": _make(0.0, 0.5, [Vector2(0.0, 0.4), Vector2(0.25, 0.9), Vector2(0.5, 1.0)]),
 			# Metres outside the preferred range.
@@ -443,7 +502,7 @@ func _threat(battle: Battle, me: Fighter, seen: Dictionary, side: int) -> Dictio
 			continue
 		var move := foe.moves[projectile.move]
 		var threat := {"key": "p%d" % int(projectile.id),
-			"direction": velocity.normalized(), "ticks": t,
+			"direction": velocity.normalized(), "ticks": t, "melee": false,
 			"danger": expected_damage(foe, me, move, data) / maxf(me.hp, 1.0) if move.is_damaging() else 0.1}
 		if best.is_empty() or threat.ticks < best.ticks:
 			best = threat
@@ -454,6 +513,7 @@ func _threat(battle: Battle, me: Fighter, seen: Dictionary, side: int) -> Dictio
 		if (move.kind == BattleMove.Kind.MELEE or move.kind == BattleMove.Kind.AREA) and gap <= reach:
 			var started := battle.tick - delay - (move.windup_ticks - int(seen.action_ticks))
 			var threat := {"key": "w%d" % started, "direction": (me.position - seen.position).normalized(),
+				"melee": move.kind == BattleMove.Kind.MELEE,
 				"ticks": float(int(seen.action_ticks) - delay), "danger": expected_damage(foe, me, move, data) / maxf(me.hp, 1.0)}
 			# A wind-up that has already landed by the time the AI sees it start is no threat.
 			if threat.ticks >= 0.0 and (best.is_empty() or threat.ticks < best.ticks):
@@ -461,6 +521,7 @@ func _threat(battle: Battle, me: Fighter, seen: Dictionary, side: int) -> Dictio
 	if not best.is_empty() and not _judged.has(best.key):
 		_judged[best.key] = true
 		_dodge_allowed[best.key] = random.chance(profile.dodge_chance)
+		_guard_allowed[best.key] = _dodge_allowed[best.key] and profile.guard_chance > 0.0 and random.chance(profile.guard_chance)
 	return best
 
 

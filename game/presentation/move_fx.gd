@@ -43,7 +43,12 @@ const CAMERA_NUDGE := 0.35
 const AURA_PIECES := {
 	"rise": "statup_actor", "drop": "statdown_actor", "heal": "heal_circles,heal_sparkles",
 	"dodge": "doubleteam_dashlines,quickattack_dust",
+	"guard": "protect_actor1", "block": "protect_block,protect_blockchip",
 }
+## Protect's pieces run about a second; a guard is up for a third of that, so they play faster.
+const GUARD_PIECE_SPEED := 2.5
+const GUARD_FRAMES := 11
+const GUARD_COLOUR := Color(0.55, 0.85, 1.0)
 const CHARGING: Array[String] = ["beam", "bolt", "stream", "pulse", "sound", "mind", "explosion", "orb", "bullet"]
 
 ## Move id -> style, from MoveStyle; moves not listed use their kind's default.
@@ -305,6 +310,21 @@ func dodge(view: FighterView, direction: Vector2) -> void:
 			cobblemon.play_piece(piece, view, _foe(view), {"on": "user", "at": "middle"})
 		return
 	_rush(view, Vector3(direction.x, 0, direction.y), Color(0.85, 0.95, 1.0))
+
+
+## A raised guard (a shield around the fighter), or a hit it blocked (`blocked`).
+func guard(view: FighterView, blocked := false) -> void:
+	var kind := "block" if blocked else "guard"
+	if cobblemon != null:
+		for piece: String in AURA_PIECES[kind].split(","):
+			cobblemon.play_piece(piece, view, _foe(view), {"on": "user", "at": "root", "speed": GUARD_PIECE_SPEED})
+		return
+	var shell := _mesh(_sphere(1.0), GUARD_COLOUR, 0.3 if not blocked else 0.6)
+	shell.position = view.position + Vector3.UP * view.height * 0.5
+	shell.scale = Vector3.ONE * maxf(view.height, 1.0) * 0.7
+	add_child(shell)
+	_effects.append({"node": shell, "age": 0, "frames": GUARD_FRAMES, "kind": "grow", "base": shell.scale,
+		"growth": 0.05 if not blocked else 0.3})
 
 
 ## Matches projectile visuals to the simulation's projectiles and moves them. Once the battle
