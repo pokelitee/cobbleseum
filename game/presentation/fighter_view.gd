@@ -284,6 +284,65 @@ func play_idle() -> void:
 		_play(_base_role, true)
 
 
+## Holds the first frame of the idle animation and stops animating (for a still portrait).
+func pose_still() -> void:
+	_player.advance(0.0)
+	_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	if _overlay != null:
+		_overlay.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+
+
+## The mesh's vertices as currently posed, in this view's space, skinned on the CPU (the GPU's
+## skinned positions can't be read back). Each vertex follows its heaviest bone, which is exact
+## for Cobblemon's rigid cuboids.
+func posed_points() -> PackedVector3Array:
+	var points := PackedVector3Array()
+	var skeleton: Skeleton3D = _mesh.get_parent()
+	var skin := _mesh.skin
+	if _mesh.mesh == null or skin == null:
+		return points
+	var to_view := _to_view(skeleton)
+	var binds: Array[Transform3D] = []
+	for i in skin.get_bind_count():
+		var bone := skin.get_bind_bone(i)
+		if bone < 0:
+			bone = skeleton.find_bone(skin.get_bind_name(i))
+		binds.append(to_view * skeleton.get_bone_global_pose(maxi(bone, 0)) * skin.get_bind_pose(i))
+	for surface in _mesh.mesh.get_surface_count():
+		var arrays := _mesh.mesh.surface_get_arrays(surface)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+		if bones.is_empty():
+			continue
+		var per_vertex := bones.size() / vertices.size()
+		for v in vertices.size():
+			var heaviest := v * per_vertex
+			for k in range(v * per_vertex + 1, (v + 1) * per_vertex):
+				if weights[k] > weights[heaviest]:
+					heaviest = k
+			points.append(binds[bones[heaviest]] * vertices[v])
+	return points
+
+
+## The head bone's position in this view's space, as currently posed, or null without one.
+func head_position() -> Variant:
+	var skeleton: Skeleton3D = _mesh.get_parent()
+	var bone := skeleton.find_bone(HEAD_BONE)
+	if bone < 0:
+		return null
+	return _to_view(skeleton) * skeleton.get_bone_global_pose(bone).origin
+
+
+## The transform from `node`'s space to this view's, without needing the tree.
+func _to_view(node: Node3D) -> Transform3D:
+	var transform := Transform3D.IDENTITY
+	while node != self:
+		transform = node.transform * transform
+		node = node.get_parent()
+	return transform
+
+
 ## Switches the looping animation between walking and idling; one-off animations play out first.
 func set_moving(moving: bool) -> void:
 	_moving = moving
