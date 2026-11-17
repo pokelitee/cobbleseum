@@ -347,8 +347,8 @@ Unknown queries and variables, such as riding yaw and a few custom variables, ev
 
 Animations play in three layers:
 
-1. **Base loop:** an idle or locomotion animation, crossfaded between states. Walk and run animations play faster or slower to match movement speed. Base animations are padded so that bones they don't key hold the idle pose; otherwise a crossfade passes through the rest pose and the model briefly looks like it's in a T-pose.
-2. **One-off actions** on top: attack animations, applied only to the bones they key.
+1. **Base loop:** an idle or locomotion animation, crossfaded between states. Walk and run animations play faster or slower to match movement speed. Base animations are padded so that bones they don't key hold the idle pose; otherwise a crossfade passes through the rest pose and the model briefly looks like it's in a T-pose. They also put back, at its rest pose, every bone that only other animations move (eyelids, mouths, a fidget's paw): Godot leaves a bone no playing animation tracks where it was last put, so eyes closed by a hit stayed closed.
+2. **One-off actions** on top: attack animations, applied only to the bones they key. They play once: Cobblemon loops many of its hurt, angry, sad and shocked animations (about 400 species), which would otherwise never end.
 3. **Additive reactions:** hit recoil, cries and blinking, applied as offsets from rest and faded in and out.
 
 **Procedural layer.** Most species lack attack, hit or faint animations, so a procedural layer on the model root fills the gaps:
