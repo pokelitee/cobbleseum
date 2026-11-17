@@ -364,7 +364,9 @@ Implemented in `game/presentation/procedural_motion.gd`, as a transform on a nod
 - a lunge for physical moves, a rear-back with squash and stretch for special moves, and a spin for status moves;
 - a backward tilt for hits;
 - slow breathing while asleep;
-- tipping over and sinking for knockouts, instead of fading.
+- tipping over onto its side for knockouts, instead of fading. It's lifted as it tips so the body comes to rest on the ground (only a twentieth of the silhouette, such as an outstretched fin or wing, may dip into it) rather than through it.
+
+Species with a faint animation of their own drop out of a hover to the ground, and are lifted wherever the animation would sink them into it (Tinkaton, Clefairy, Jigglypuff and Raichu sink by 10–40% of their height).
 
 Flying types hover and bob throughout. The layer advances per video frame at the animations' speed, so it freezes in hit-stop and slows in slow motion.
 

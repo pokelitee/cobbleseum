@@ -263,6 +263,7 @@ func next_frame() -> void:
 			play_role(_pending_role)
 			_pending_role = ""
 	_next_overlay()
+	_motion.ground_lift = _faint_lift() if _fainted else 0.0
 	_motion.next_frame(_time_scale)
 	if _head != null:
 		_head.yaw = _motion.head_yaw
@@ -338,6 +339,32 @@ func posed_points() -> PackedVector3Array:
 	return points
 
 
+## The posed model seen from the front, in the space ProceduralMotion moves (below its own
+## offset): x and y of every vertex, for tipping over onto the ground.
+func _faint_outline() -> PackedVector2Array:
+	var to_model := _motion_root.transform.affine_inverse()
+	var outline := PackedVector2Array()
+	for point in posed_points():
+		var local := to_model * point
+		outline.append(Vector2(local.x, local.y))
+	return outline
+
+
+## How far the faint animation sinks the model below the ground as currently posed (all but
+## ProceduralMotion's FAINT_REST_SHARE of it), measured while it plays and then held.
+func _faint_lift() -> float:
+	if not _animations.has("faint") or _player.current_animation != _animations.faint:
+		return _motion.ground_lift
+	var to_model := _motion_root.transform.affine_inverse()
+	var heights := PackedFloat32Array()
+	for point in posed_points():
+		heights.append((to_model * point).y)
+	if heights.is_empty():
+		return 0.0
+	heights.sort()
+	return maxf(0.0, -heights[int(heights.size() * ProceduralMotion.FAINT_REST_SHARE)])
+
+
 ## The head bone's position in this view's space, as currently posed, or null without one.
 func head_position() -> Variant:
 	var skeleton: Skeleton3D = _mesh.get_parent()
@@ -394,9 +421,12 @@ func play_role(role: String) -> void:
 		return
 	if role == "faint":
 		_fainted = true
-		if not _play("faint", false):
+		if _animations.has("faint"):
+			_play("faint", false)
+			_motion.fall()
+		else:
 			_player.pause()
-			_motion.faint()
+			_motion.faint(_faint_outline())
 		return
 	_one_off = _play(role, false)
 	if not _one_off and PROCEDURAL_ROLES.has(role):
