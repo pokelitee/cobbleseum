@@ -184,6 +184,8 @@ func _all_effects() -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	for key: String in PlateEffects.TIMED:
 		entries.append({"key": key, "left": 0.5})
+	for stat: String in PlateEffects.STAGES:
+		entries.append({"key": stat, "stages": 6 if stat.begins_with("s") else -6})
 	return entries
 
 
@@ -240,3 +242,20 @@ func test_every_badge_has_an_icon_and_a_code() -> void:
 		var rows: Array = HudBadge.ICONS[key]
 		for row: String in rows:
 			assert_eq(row.length(), (rows[0] as String).length(), "%s's rows are even" % key)
+
+
+func test_stat_stages_show_their_arrow_and_count_and_redraw_when_it_changes() -> void:
+	var hud := _hud()
+	hud.set_effects(0, [{"key": "atk", "stages": 2}, {"key": "spe", "stages": -1}] as Array[Dictionary])
+	var row: HBoxContainer = hud._effect_rows[0]
+	var texts := row.get_children().map(func(b: HudBadge) -> Array:
+		return b.find_children("*", "Label", false, false).map(func(l: Label) -> String: return l.text))
+	assert_eq(texts, [["ATK", "2"], ["SPE", "1"]])
+	assert_eq((row.get_child(0) as HudBadge).left(), -1.0, "no timer")
+	var first: HudBadge = row.get_child(0)
+	hud.set_effects(0, [{"key": "atk", "stages": 2}, {"key": "spe", "stages": -1}] as Array[Dictionary])
+	assert_eq(row.get_child(0), first, "kept while its count holds")
+	hud.set_effects(0, [{"key": "atk", "stages": 1}] as Array[Dictionary])
+	assert_eq(row.get_child_count(), 1)
+	assert_eq((row.get_child(0).find_children("*", "Label", false, false)[1] as Label).text, "1", "redrawn with its new count")
+	hud.free()

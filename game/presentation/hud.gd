@@ -50,6 +50,10 @@ const STATUS_BADGES := {
 	"reflect": ["REFL", Color("e0559a")], "lightscreen": ["LSCR", Color("d4a51c")],
 	"auroraveil": ["VEIL", Color("3ab8d8")],
 }
+## Stat stage badges: each stat's code, and the colours of a rise and a drop.
+const STAGE_CODES := {"atk": "ATK", "def": "DEF", "spa": "SPA", "spd": "SPD", "spe": "SPE"}
+const STAGE_UP := Color("5fd068")
+const STAGE_DOWN := Color("ff6b5e")
 ## The credits card; %s is the Cobblemon line (cobblemon_credit()).
 const CREDITS_TEXT := "%s\nBattle data: Pokémon Showdown\nOriginal music · Crowd and ambience: CC0, see description\nAn unaffiliated, non-commercial fan project"
 
@@ -265,15 +269,21 @@ func set_hp(side: int, fraction: float, immediate := false) -> void:
 
 
 ## Shows a fighter's effects in the row under its HP bar: `entries` as PlateEffects.read()
-## gives them, in order, each a square badge with its icon, code and timer. Badges come and go
-## with their keys; the row starts at the bar's end by the portrait and shrinks to fit the bar.
+## gives them, in order, each a square badge: a timed effect's icon, code and timer, or a stat's
+## code, arrow and stage count. Badges come and go with their keys (a stat's is redrawn when its
+## count changes); the row starts at the bar's end by the portrait and shrinks to fit the bar.
 func set_effects(side: int, entries: Array[Dictionary]) -> void:
 	var shown: Dictionary = _effects[side]
 	var row := _effect_rows[side]
 	var keys := entries.map(func(entry: Dictionary) -> String: return entry.key)
+	var stages := {}
+	for entry in entries:
+		if entry.has("stages"):
+			stages[entry.key] = entry.stages
 	for key: String in shown.keys():
-		if not key in keys:
-			shown[key].free()
+		var badge: HudBadge = shown[key]
+		if not key in keys or (stages.has(key) and badge.get_meta("stages") != stages[key]):
+			badge.free()
 			shown.erase(key)
 	for i in entries.size():
 		var entry := entries[i]
@@ -290,6 +300,13 @@ func set_effects(side: int, entries: Array[Dictionary]) -> void:
 
 
 func _effect_badge(entry: Dictionary) -> HudBadge:
+	if entry.has("stages"):
+		var stages: int = entry.stages
+		var colour := STAGE_UP if stages > 0 else STAGE_DOWN
+		var stage_badge := HudBadge.new([[STAGE_CODES[entry.key], Color.WHITE], ["up" if stages > 0 else "down", colour],
+			[str(absi(stages)), colour.lightened(0.2)]], colour, false, _scale)
+		stage_badge.set_meta("stages", stages)
+		return stage_badge
 	var badge: Array = STATUS_BADGES[entry.key]
 	var colour: Color = badge[1]
 	return HudBadge.new([[entry.key, colour], [badge[0], colour.lightened(0.35)]], colour, entry.has("left"), _scale)
