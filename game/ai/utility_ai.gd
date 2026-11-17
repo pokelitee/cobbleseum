@@ -69,7 +69,8 @@ const GUARD_LATE_MARGIN := 3
 const GUARD_OFF_TIMING := 0.6
 ## A move that would land while the foe it sees is still guarding scores this much.
 const INTO_GUARD := 0.1
-## A melee move into a foe whose ability punishes contact (Static, Rough Skin) scores this much.
+## A melee move into a foe whose ability or item punishes contact (Static, Rocky Helmet) scores
+## this much.
 const CONTACT_COST := 0.85
 
 var profile: AIProfile
@@ -181,7 +182,7 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			# the damage curve's floor would otherwise turn it into a usable score.
 			considerations.damage = _sample("damage", expected * adjusted / maxf(foe.max_hp, 1.0)) if adjusted > 0.0 else 0.0
 			considerations.finisher = _sample("finisher", expected / maxf(foe.hp, 1.0))
-			if move.kind == BattleMove.Kind.MELEE and Abilities.punishes_contact(foe):
+			if move.kind == BattleMove.Kind.MELEE and (Abilities.punishes_contact(foe) or Items.punishes_contact(foe)):
 				considerations.contact_cost = CONTACT_COST
 			if move.own_stat_drop() < 0 and _other_attack_on(me, i):
 				considerations.stage_cost = stage_cost(me, move)

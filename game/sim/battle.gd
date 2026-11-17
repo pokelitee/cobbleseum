@@ -33,7 +33,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 31
+const FIGHTER_STATE_SIZE := 32
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
@@ -95,6 +95,11 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		if not ability.is_empty() and not Abilities.is_known(ability):
 			return {"error": "ability '%s' isn't supported (see %s)" % [ability, Abilities.TABLE_FILE]}
 		fighter.set_ability(ability)
+		var item := str(entry.get("item", Items.standard(species, battle_moves, data)))
+		if not item.is_empty() and not Items.is_known(item):
+			return {"error": "item '%s' isn't supported (see %s)" % [item, Items.TABLE_FILE]}
+		fighter.set_item(item)
+		fighter.can_evolve = Items.can_evolve(species, data)
 		fighter.position = Vector2(0, (-0.5 if side == 0 else 0.5) * Rules.START_DISTANCE)
 		fighter.facing = Vector2(0, 1 if side == 0 else -1)
 		fighter.ground = battle.terrain.height_at(fighter.position)
@@ -215,6 +220,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			fighter.dodge_recharge_ticks = 0
 	_tick_conditions(fighter)
 	_tick_abilities(fighter, foe)
+	_tick_item(fighter)
 	if fighter.is_knocked_out() or fighter.is_incapacitated():
 		fighter.followups.clear()
 		if not fighter.is_knocked_out():
@@ -502,18 +508,26 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	outcome.damage = maxi(1, floori(outcome.damage * Rules.overtime_factor(tick)))
 	var immune := Abilities.immune(defender, move)
 	var dealt := mini(outcome.damage, defender.hp)
-	var holds: bool = dealt >= defender.hp and defender.hp > 1 and defender.ability_effect.get("sturdy", false) and not defender.sturdy_used
-	if holds:
+	var lethal: bool = dealt >= defender.hp and defender.hp > 1
+	var holds: bool = lethal and defender.ability_effect.get("sturdy", false) and not defender.sturdy_used
+	# Focus Sash: from full HP, the first knockout blow leaves 1 HP.
+	var sash: bool = lethal and not holds and defender.hp == defender.max_hp and defender.item_effect.get("focus_sash", false) \
+		and not defender.item_used
+	if holds or sash:
 		dealt = defender.hp - 1
-		defender.sturdy_used = true
+		defender.sturdy_used = defender.sturdy_used or holds
+		defender.item_used = defender.item_used or sash
 	defender.hp -= dealt
-	_event("hit", attacker.side, {"move": move.id, "damage": dealt if holds else outcome.damage, "crit": outcome.crit,
+	_event("hit", attacker.side, {"move": move.id, "damage": dealt if holds or sash else outcome.damage, "crit": outcome.crit,
 		"effectiveness": outcome.effectiveness, "hp": defender.hp})
 	if holds:
 		_ability_event(defender)
+	if sash:
+		_item_event(defender)
 	if immune and Abilities.absorbs(defender, move):
 		_absorb(defender, move)
 	_ability_on_hit(attacker, defender, move)
+	_item_on_hit(attacker, defender, move, dealt)
 	if defender.is_knocked_out():
 		_event("knockout", defender.side, {})
 	else:
@@ -600,6 +614,65 @@ func _ability_on_hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> 
 		_boost(defender, on_physical.boosts, defender.ability)
 
 
+## Reports that `fighter`'s held item took effect (or was used up), so the view can name it.
+func _item_event(fighter: Fighter, details := {}) -> void:
+	details.merge({"item": fighter.item, "name": Items.display_name(fighter.item)})
+	_event("item", fighter.side, details)
+
+
+## Items that act on a hit landing: the attacker's Life Orb cost and Shell Bell, the
+## defender's Rocky Helmet (melee strikes) and Sitrus Berry.
+func _item_on_hit(attacker: Fighter, defender: Fighter, move: BattleMove, dealt: int) -> void:
+	var held := attacker.item_effect
+	if held.has("heal_from_damage") and dealt > 0 and not attacker.is_knocked_out():
+		_heal(attacker, maxi(1, roundi(dealt * float(held.heal_from_damage))), attacker.item)
+	if held.has("hit_cost") and not Abilities.magic_guard(attacker):
+		_hurt(attacker, maxi(1, roundi(attacker.max_hp * float(held.hit_cost))), "item_damage", {"item": attacker.item})
+	if move.kind == BattleMove.Kind.MELEE and defender.item_effect.has("contact_damage") and not Abilities.magic_guard(attacker):
+		_item_event(defender)
+		_hurt(attacker, maxi(1, roundi(attacker.max_hp * float(defender.item_effect.contact_damage))), "item_damage",
+			{"item": defender.item})
+	_check_berry(defender)
+
+
+## A Sitrus Berry restoring HP once its holder falls to half or less.
+func _check_berry(fighter: Fighter) -> void:
+	var held := fighter.item_effect
+	if not held.has("berry_heal") or fighter.item_used or fighter.is_knocked_out():
+		return
+	if fighter.hp <= fighter.max_hp * float(held.berry_below):
+		fighter.item_used = true
+		_item_event(fighter)
+		_heal(fighter, maxi(1, roundi(fighter.max_hp * float(held.berry_heal))), fighter.item)
+
+
+## A Lum Berry curing a status condition or confusion the moment it's inflicted, once.
+func _check_lum(fighter: Fighter) -> void:
+	if not fighter.item_effect.get("cures_status", false) or fighter.item_used:
+		return
+	fighter.item_used = true
+	_item_event(fighter)
+	if not fighter.status.is_empty():
+		_end_status(fighter)
+	if fighter.confusion_ticks > 0:
+		fighter.confusion_ticks = 0
+		_event("status_end", fighter.side, {"status": "confusion"})
+
+
+## Items that act over time, once a second: Leftovers and Black Sludge (which hurts a holder
+## of the wrong type).
+func _tick_item(fighter: Fighter) -> void:
+	var held := fighter.item_effect
+	if not held.has("heal_per_second") or tick % Rules.TICK_RATE != 0:
+		return
+	var share := float(held.heal_per_second)
+	if held.has("needs_type") and not held.needs_type in fighter.types:
+		if not Abilities.magic_guard(fighter):
+			_hurt(fighter, maxi(1, roundi(fighter.max_hp * share)), "item_damage", {"item": fighter.item})
+	else:
+		_heal(fighter, maxi(1, roundi(fighter.max_hp * share)), fighter.item, "regen")
+
+
 ## Abilities that act over time, once per tick: Intimidate (at the start and every
 ## INTIMIDATE_SECONDS), Speed Boost, and the timers on Flash Fire and Weak Armor.
 func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
@@ -642,6 +715,7 @@ func _apply_effect(attacker: Fighter, defender: Fighter, effect: Dictionary, mov
 		else:
 			defender.confusion_ticks = Rules.seconds_to_ticks(Rules.CONFUSION_SECONDS)
 			_event("status", defender.side, {"status": "confusion"})
+			_check_lum(defender)
 	if not effect.get("boosts", {}).is_empty():
 		_boost(defender, effect.boosts, move_id, attacker)
 	if not effect.get("self_boosts", {}).is_empty():
@@ -672,6 +746,7 @@ func _inflict(fighter: Fighter, status: String, source: Fighter = null) -> void:
 		_:
 			fighter.status_ticks = Rules.seconds_to_ticks(Rules.STATUS_SECONDS)
 	_event("status", fighter.side, {"status": status})
+	_check_lum(fighter)
 	if source != null and fighter.ability_effect.get("synchronize", false) and status in ["brn", "par", "psn", "tox"]:
 		_ability_event(fighter)
 		_inflict(source, status)
@@ -723,11 +798,13 @@ func _decay_stages(fighter: Fighter) -> void:
 		_event("stage_decay", fighter.side, {"boosts": applied})
 
 
-func _heal(fighter: Fighter, amount: int, move_id: String) -> void:
+## Restores HP, reported as `type`: "heal", or "regen" for the small steady healing of
+## items like Leftovers, which the view doesn't call out.
+func _heal(fighter: Fighter, amount: int, move_id: String, type := "heal") -> void:
 	var healed := mini(amount, fighter.max_hp - fighter.hp)
 	if healed > 0:
 		fighter.hp += healed
-		_event("heal", fighter.side, {"amount": healed, "hp": fighter.hp, "move": move_id})
+		_event(type, fighter.side, {"amount": healed, "hp": fighter.hp, "move": move_id})
 
 
 ## Takes HP outside a hit (status damage, recoil, confusion), reporting it as `type`.
@@ -739,6 +816,8 @@ func _hurt(fighter: Fighter, amount: int, type: String, details: Dictionary) -> 
 	_event(type, fighter.side, details)
 	if fighter.is_knocked_out():
 		_event("knockout", fighter.side, {})
+	else:
+		_check_berry(fighter)
 
 
 ## Status timers, damage over time and paralysis stuns, once per tick before acting.
@@ -794,7 +873,8 @@ func _hurt_in_confusion(fighter: Fighter) -> void:
 
 
 ## Main-series damage formula with Cobbleseum's compressed type multipliers (§9.4), using
-## stats after stat stages, abilities and burn. Fixed-damage moves ignore stats, type and crits.
+## stats after stat stages, abilities, items and burn. Fixed-damage moves ignore stats, type
+## and crits.
 static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData, random: SimRandom) -> Dictionary:
 	if move.fixed_damage > 0:
 		return {"damage": move.fixed_damage, "crit": false, "effectiveness": 1.0}
@@ -816,7 +896,8 @@ static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove,
 	var stab := Abilities.stab(attacker) if move.type in attacker.types else 1.0
 	var main_series := Abilities.effectiveness(attacker, defender, move, data.effectiveness(move.type, defender.types))
 	var effectiveness := Rules.compressed_effectiveness(main_series)
-	return {"base": base, "factor": stab * effectiveness * Abilities.taken_factor(defender, move, main_series),
+	var factor := stab * effectiveness * Abilities.taken_factor(defender, move, main_series) * Items.power_factor(attacker, move, main_series)
+	return {"base": base, "factor": factor,
 		"effectiveness": effectiveness}
 
 
@@ -870,6 +951,7 @@ func _record_state() -> void:
 		_state[i + 28] = fighter.speed_boost_ticks
 		_state[i + 29] = fighter.weak_armor_ticks
 		_state[i + 30] = 1.0 if fighter.sturdy_used else 0.0
+		_state[i + 31] = 1.0 if fighter.item_used else 0.0
 		i += FIGHTER_STATE_SIZE
 	for projectile in projectiles:
 		_state[i] = projectile.position.x

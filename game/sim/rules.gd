@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 18
+const RULES_VERSION := 19
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -14,7 +14,7 @@ const TIME_CAP_SECONDS := 90.0
 const OVERTIME_SECONDS := 60.0
 const OVERTIME_RAMP := 0.1
 ## Multiplies the HP stat to set how long battles last (target 30-45 s).
-const HP_MULTIPLIER := 22.0
+const HP_MULTIPLIER := 19.0
 
 const ARENA_RADIUS := 14.0
 ## Terrain (§9.8): the most a fighter can step up (fliers more); projectiles leave and aim at
