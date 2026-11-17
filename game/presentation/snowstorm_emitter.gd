@@ -55,6 +55,11 @@ var speed := 1.0
 var follow := Callable()
 ## The node the effect rides (a WeakRef to a Node3D), or null; drawn with it between frames.
 var anchor: WeakRef
+## The fighter carrying the effect (a WeakRef to a Node3D), or null, and where it stood when the
+## effect started: the whole effect, particles already out included, moves with it by as much as
+## it has moved since. The particles themselves are simulated where the effect started.
+var carrier: WeakRef
+var carried_from := Vector3.ZERO
 ## Multiplies sizes and offsets for effects with cobblemon:emitter_space scaling "entity".
 var entity_scale := 1.0
 ## Multiplies particle sizes (a sequence's "scale").
@@ -135,7 +140,15 @@ func step(delta: float) -> void:
 	if capacity > 0:
 		multimesh.buffer = buffer
 	multimesh.visible_instance_count = _core.get_drawn()
+	carry()
 	_hand_over_spawns()
+
+
+## Moves the effect with its carrier, if it has one.
+func carry() -> void:
+	var holder: Node3D = carrier.get_ref() if carrier != null else null
+	if holder != null:
+		position = holder.position - carried_from
 
 
 func _hand_over_spawns() -> void:

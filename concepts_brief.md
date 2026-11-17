@@ -902,7 +902,7 @@ The camera director picks from a set of shot types based on battle events:
 - **Screen shake:** scaled with damage, and capped so it never obscures the action.
 - **Speed lines:** on dashes and big wind-ups.
 - **Hit flash:** on the defender's model, with a short knockback.
-- **Callouts:** "Critical hit!", "It's super effective!", and damage numbers.
+- **Callouts:** "Critical hit!", "It's super effective!", damage numbers, stat changes, statuses, and ability and item names. Each one follows its fighter (over 0.9 of its height, every display frame), rising and fading over 40 frames. Callouts over one fighter stack, the newest at the bottom (those of one hit in the order made: damage, then critical, then effectiveness), pushing older ones up instead of overlapping them; a stack stays on screen and out of the HUD's bands. Move banners and captions stay in screen space on the HUD.
 
 ### 12.5 Move visuals, sound and HUD
 
@@ -929,6 +929,7 @@ The camera director picks from a set of shot types based on battle events:
     - Where Cobblemon's timing or framing doesn't fit, a sequence is hand-tuned (Thunder's storm cloud gathers over the foe on release rather than a second before the bolt; Psychic's burst follows its grip quickly; String Shot drops a thread centred on the mouth that would trail behind the user; Draco Meteor's meteors fall straight onto the foe, the first two from the release, and three rather than four to stay within the frame budget).
     - Hidden Power keeps its style's sequence, since Cobblemon's effect for it is only the generic Normal impact.
     - Every move Cobblemon has an action effect for and our sim supports now has one, done by type batch: Fire, Water, Electric and Ice; Grass, Poison, Bug, Psychic and Fairy; Normal, Fighting, Flying, Dark, Ghost, Dragon, Ground, Rock and Steel.
+  - **Pieces on a fighter follow it:** a wind-up's and a hit's pieces sit on the user's or foe's body (Swords Dance's swords, charge glows, hit sparks), as do stat cues, heals, guards and the shiny sparkle, so the fighter carries each of them, particles already out included, by as much as it has moved since the piece started (`CARRIED_PHASES`). Pieces on the ground (floor scorches, quake and ground rings, powder settling, dust: `GROUND_PIECES`), a dodge's dash lines, shots fired at the foe and blasts stay in the world, and projectiles' pieces ride their projectile. Our mesh styles' glows, auras, bursts, shields and glints are carried the same way.
   - Effects still in flight end with the battle, and nothing here touches the simulation.
 - **Move visuals (our styles):** every damaging move has one of 20 visual styles, drawn in its type colour from simple meshes animated per video frame.
   - Melee: strike (crescent), punch (shockwave star), kick (low arc), bite (closing fangs), slash (claw marks), rush (speed lines and dust).
