@@ -77,6 +77,15 @@ Instead of a spec file, flags can describe an AI-vs-AI battle, here and in the w
 godot --headless --path . --script res://tools/record.gd -- --watch=garchomp --vs=hydreigon --ai=hard --vs-ai=easy --seed=7
 ```
 
+`--moves=a,b,c,d`, `--ability=<ability>` and `--item=<item>` (`none` for no ability or item) set what the first fighter brings instead of its standard moveset, ability and item; `--vs-moves`, `--vs-ability` and `--vs-item` set the foe's. Names can be IDs or written out (`--item="Life Orb"`). `tools/battle.gd` takes the same flags instead of a spec file.
+
+Every run prints the battle it resolved to first (seed, arena, weather, each fighter's ability, item, moves and look), and for a battle from flags the flags that repeat it exactly. `--help` explains the options of the game and of `tools/record.gd`, `tools/battle.gd` and `tools/rank.gd`; `--list=species|arenas|moves|abilities|items|profiles` prints what can be named. An unknown option or a misspelt species, arena, move, ability, item or AI profile stops with the nearest matches:
+
+```bash
+godot --headless --path . --script res://tools/battle.gd -- --help
+godot --headless --path . --script res://tools/battle.gd -- --list=arenas
+```
+
 Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves; gamepad: left stick, A to dodge, X Y B RB for moves). R starts a rematch and Esc quits. Each battle's spec, with every tick's intents and the rules and data versions it ran under, is saved to `recordings/specs/`, and `tools/record.gd` can render one like any spec (after a rules or data change it stops with an error instead of rendering a different battle):
 
 ```bash

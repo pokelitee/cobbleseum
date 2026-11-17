@@ -2,9 +2,9 @@ extends SceneTree
 ## Records a battle as video clips (concepts_brief.md §12).
 ## Usage: godot --headless --path . --script res://tools/record.gd -- <spec.json>
 ##        [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--mesh-fx]
-## Instead of <spec.json>, --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=] [--arena=]
-## [--weather=] [--shiny=a|b|both|none] [--form=] [--vs-form=] (SpecFlags) describes an
-## AI-against-AI battle.
+## Instead of <spec.json>, --watch=<species> and the other battle flags (SpecFlags, see --help)
+## describe an AI-against-AI battle. The resolved battle is printed first, with the flags that
+## repeat it.
 ## --ai-debug records the AI debug overlay on top (for reviewing AI behaviour, not posting).
 ## Moves draw in Cobblemon's style when the native runtime and the cached effects are there
 ## (see battle_view.gd); --mesh-fx draws our mesh styles instead, into a folder ending in _mesh.
@@ -26,6 +26,20 @@ const ENDING_FRAMES := Director.REPLAY_MAX_FRAMES + Director.VICTORY_TICKS + Hud
 const DEFAULT_FORMAT := "vertical"
 ## Godot reads this file from the project folder at startup (see VideoFormat.override_config).
 const OVERRIDE_FILE := "res://override.cfg"
+const HELP := """Records a battle as video clips in recordings/ (needs a display and ffmpeg).
+
+Usage: godot --headless --path . --script res://tools/record.gd -- <spec.json> [options]
+       godot --headless --path . --script res://tools/record.gd -- --watch=<species> [battle flags] [options]
+
+  <spec.json>              a battle spec, or a play-mode battle saved in recordings/specs/
+  --seconds=10             about how long the clip is, before the replay and victory
+  --format=vertical        vertical (1080x1920), landscape (1920x1080) or both
+  --ai-debug               records the AI debug overlay on top
+  --mesh-fx                draws our mesh move styles instead of Cobblemon's effects
+
+%s
+
+%s"""
 
 ## The clip window the view reported: {"start": tick, "end": tick}.
 var _window := {}
@@ -48,7 +62,14 @@ func _initialize() -> void:
 	var spec_path := ""
 	var seconds := DEFAULT_SECONDS
 	var format := DEFAULT_FORMAT
-	var parsed := SpecFlags.parse(OS.get_cmdline_user_args())
+	var args := OS.get_cmdline_user_args()
+	var handled := Cli.info(args, HELP % [Cli.SPEC_FLAGS_HELP, Cli.INFO_HELP])
+	if handled >= 0:
+		return quit(handled)
+	var parsed := SpecFlags.parse(args)
+	var unknown := Cli.unknown_option(parsed.rest, ["seconds", "format", "ai-debug", "mesh-fx", "cobblemon-fx"])
+	if not unknown.is_empty():
+		return _fail(unknown)
 	var flag_spec := SpecFlags.to_spec(parsed.flags)
 	if flag_spec.has("error"):
 		return _fail(flag_spec.error)
@@ -66,12 +87,11 @@ func _initialize() -> void:
 		else:
 			spec_path = arg
 	if spec_path.is_empty() and flag_spec.is_empty():
-		return _fail("usage: -- <spec.json> | --watch=<species> [--vs=] [--ai=] [--vs-ai=] [--seed=] [--arena=]" +
-			" [--shiny=a|b|both|none] [--form=] [--vs-form=]" +
-			" [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--mesh-fx]")
+		return _fail("usage: -- <spec.json> | --watch=<species> [battle flags]" +
+			" [--seconds=10] [--format=vertical|landscape|both] [--ai-debug] [--mesh-fx] (see --help)")
 	var formats: Array = VideoFormat.SIZES.keys() if format == "both" else [format]
 	if not VideoFormat.SIZES.has(formats[0]):
-		return _fail("unknown format '%s' (use vertical, landscape or both)" % format)
+		return _fail(Cli.unknown("format", format, VideoFormat.SIZES.keys() + ["both"]) + " (use vertical, landscape or both)")
 	if FileAccess.file_exists(OVERRIDE_FILE):
 		return _fail("%s exists, perhaps left by an interrupted recording; delete it and retry" % ProjectSettings.globalize_path(OVERRIDE_FILE))
 	spec_path = ProjectSettings.globalize_path(spec_path) if spec_path.begins_with("res://") else spec_path
@@ -81,6 +101,9 @@ func _initialize() -> void:
 	var loaded := BattleData.load_all()
 	if loaded.has("error"):
 		return _fail(loaded.error)
+	var names_problem := Cli.check_spec(spec, loaded.data)
+	if not names_problem.is_empty():
+		return _fail(names_problem)
 	if OS.execute("ffmpeg", ["-version"], [], true) != 0:
 		return _fail("ffmpeg is needed to encode the clip; install it and put it on PATH")
 	if not flag_spec.is_empty():
@@ -96,6 +119,7 @@ func _initialize() -> void:
 	if created.has("error"):
 		return _fail(created.error)
 	var battle: Battle = created.battle
+	print("\n".join(Cli.describe(spec, battle, not flag_spec.is_empty())))
 	var end_tick := battle.run()
 
 	var names: PackedStringArray = []

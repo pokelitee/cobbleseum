@@ -21,24 +21,55 @@ const DEFAULT_TOP := 24
 const DEFAULT_REPEATS := 5
 const PROGRESS_EVERY := 250
 const REPORT_ROWS := 30
+const COMMANDS: Array[String] = ["run", "matrix", "report", "compare"]
+const HELP := """Ranks the species under Cobbleseum's rules (Bradley-Terry ratings from many battles).
+
+Usage: godot --headless --path . --script res://tools/rank.gd -- <command> [options]
+
+Commands:
+  run          plays a sampled round robin (resumes: stored battles are skipped)
+  matrix       plays the top species against each other for the matchup matrix
+  report       fits the ratings and writes results/rank/v<rules>/<profile>/ranking.md
+  compare      checks how much the ranking depends on the AI profile
+
+Options:
+  --profile=ranked         the AI profile that plays (and whose results are read)
+  --opponents=20           run: random opponents per species
+  --seed=1                 run: the schedule's seed
+  --limit=N                run: only N species (a pilot)
+  --jobs=1                 run, matrix: parallel processes
+  --top=24                 matrix: how many top species
+  --repeats=5              matrix: seeds per matchup, each from both sides
+  --against=hard           compare: the other profile
+  --list=profiles          prints the AI profiles (see also --list=species)
+  --help                   prints this help"""
 
 
 func _initialize() -> void:
+	var handled := Cli.info(OS.get_cmdline_user_args(), HELP)
+	if handled >= 0:
+		return quit(handled)
 	var args := Array(OS.get_cmdline_user_args())
 	var options := {"command": "", "opponents": DEFAULT_OPPONENTS, "seed": 1, "profile": Controllers.DEFAULT_AI,
 		"against": "hard", "jobs": 1, "shard": 0, "shards": 1, "limit": 0, "top": DEFAULT_TOP, "repeats": DEFAULT_REPEATS}
 	for arg: String in args:
 		if not arg.begins_with("--"):
+			if not arg in COMMANDS:
+				return _fail(Cli.unknown("command", arg, COMMANDS) + " (use %s)" % ", ".join(COMMANDS))
 			options.command = arg
 			continue
 		var key := arg.trim_prefix("--").get_slice("=", 0)
-		if not options.has(key):
-			return _fail("unknown option %s" % arg)
+		if key == "command" or not options.has(key):
+			var keys := options.keys().filter(func(k: String) -> bool: return not k in ["command", "shard", "shards"])
+			return _fail(Cli.unknown_option(PackedStringArray([arg]), keys, false))
 		options[key] = arg.get_slice("=", 1) if options[key] is String else arg.get_slice("=", 1).to_int()
 	var loaded := BattleData.load_all()
 	if loaded.has("error"):
 		return _fail(loaded.error)
 	var data: BattleData = loaded.data
+	for key: String in ["profile", "against"]:
+		if not options[key] in Cli.profiles() + ["stand_in"]:
+			return _fail(Cli.unknown("AI profile", options[key], Cli.profiles()))
 	var err := ""
 	match options.command:
 		"run":
@@ -54,7 +85,7 @@ func _initialize() -> void:
 		"compare":
 			err = _compare(options.profile, options.against)
 		_:
-			err = "usage: -- run|matrix|report|compare [options] (see tools/rank.gd)"
+			err = "usage: -- run|matrix|report|compare [options] (see --help)"
 	if not err.is_empty():
 		return _fail(err)
 	quit(0)
