@@ -3,8 +3,8 @@ extends RefCounted
 ## Converts one Cobblemon species folder into a packed Godot scene: the model from
 ## BedrockGeometry plus an AnimationPlayer holding the animations the game needs
 ## (concepts_brief.md §7). Animation choices are stored in the root's "animations" metadata as
-## role -> animation name, and the standing pose's idle quirks (fidgets) in "quirks" as a
-## list of animation names. Parts the poser shows or hides by pose (open or folded wings) are
+## role -> animation name, the standing pose's idle quirks (fidgets) in "quirks" and its blinks
+## in "blinks" (several where each head or eye blinks on its own) as lists of animation names. Parts the poser shows or hides by pose (open or folded wings) are
 ## stored in "parts" as {"ground": {bone: visible}, "air": {bone: visible}}. Forms are
 ## converted by passing their aspects (["alolan"]).
 ## Resolver texture layers become extra material passes over the same mesh.
@@ -13,14 +13,14 @@ extends RefCounted
 const FALLBACK_ANIMATIONS := {
 	"idle": ["battle_idle", "ground_idle", "idle", "air_idle", "water_idle"],
 	"walk": ["ground_walk", "ground_run"],
-	"physical": ["physical"],
+	"physical": ["physical", "physical_attack"],
 	"special": ["special"],
 	"status": ["status"],
 	"cry": ["battle_cry", "cry"],
 	"recoil": ["recoil", "hurt"],
-	"faint": ["faint"],
+	"faint": ["faint", "battle_faint"],
 	"blink": ["blink"],
-	"sleep": ["sleep"],
+	"sleep": ["sleep", "battle_sleep", "ground_sleep"],
 	"air_idle": ["air_idle"],
 	"air_fly": ["air_fly"],
 	"air_sleep": ["air_sleep"],
@@ -33,6 +33,8 @@ const FALLBACK_ANIMATIONS := {
 ## Roles only some species have, left out of the missing-roles QA.
 const OPTIONAL_ROLES: Array[String] = ["air_idle", "air_fly", "air_sleep", "run", "happy", "sad", "angry", "shock"]
 const QUIRK_CALL := "q\\.bedrock_quirk\\w*\\(\\s*'([^']+)'\\s*,\\s*'([^']+)'"
+## Blink animations found by name when the poser names none: blink, blink1, blink_2, ...
+const BLINK_NAME := "^blink(_?\\d+)?$"
 ## Pose types whose pose gives each air role, and the part set it shows.
 const AIR_POSE_TYPES := {"air_idle": "HOVER", "air_fly": "FLY"}
 ## How far into the idle animation posed_bounds() samples. Rest poses are often stretched out
@@ -72,9 +74,12 @@ static func convert(source_root: String, folder: String, aspects: Array = []) ->
 	var groups: Array[String] = [files.poser, folder.get_slice("_", 1)]
 	var roles := choose_animations(poser, animations.keys(), groups)
 	var quirks := choose_quirks(poser, animations.keys())
+	var blinks := choose_blinks(poser, animations.keys(), groups)
+	if not blinks.is_empty():
+		roles.blink = blinks[0]
 
 	var library := AnimationLibrary.new()
-	for animation_name: String in roles.values() + quirks:
+	for animation_name: String in roles.values() + quirks + blinks:
 		if not library.has_animation(animation_name):
 			library.add_animation(animation_name, BedrockAnimation.build(
 				animations[animation_name], animation_name, skeleton, root.get_meta("rest_rotations"), "Skeleton", report))
@@ -86,6 +91,8 @@ static func convert(source_root: String, folder: String, aspects: Array = []) ->
 	root.set_meta("animations", roles)
 	if not quirks.is_empty():
 		root.set_meta("quirks", quirks)
+	if not blinks.is_empty():
+		root.set_meta("blinks", blinks)
 	var parts := part_sets(poser, skeleton)
 	if not parts.is_empty():
 		root.set_meta("parts", parts)
@@ -245,6 +252,34 @@ static func choose_quirks(poser: Dictionary, available: Array) -> Array[String]:
 				found.append(animation)
 		if not found.is_empty():
 			break
+	found.sort()
+	return found
+
+
+## The blinks of the poser's battle standing pose, else its standing pose (several where each
+## head or eye blinks on its own, like Maushold's mice), that the species' files hold. Without
+## any, every animation named blink, blinkN or blink_N in the first of `groups` that has one
+## (Doduo's heads blink as blink1 and blink2). Sorted.
+static func choose_blinks(poser: Dictionary, available: Array, groups: Array[String]) -> Array[String]:
+	var calls := RegEx.create_from_string(QUIRK_CALL)
+	var standing := _poses_of(poser, "STAND")
+	var battle := standing.filter(func(pose: Dictionary) -> bool: return _is_battle(pose))
+	var found: Array[String] = []
+	for pose: Dictionary in (battle if not battle.is_empty() else standing):
+		for entry: Variant in pose.get("quirks", []):
+			var call := calls.search(str(entry))
+			if call != null and call.get_string(2).begins_with("blink") and available.has(_animation_id(call)) and not found.has(_animation_id(call)):
+				found.append(_animation_id(call))
+		if not found.is_empty():
+			break
+	if found.is_empty():
+		var named := RegEx.create_from_string(BLINK_NAME)
+		for group in groups:
+			for animation_id: String in available:
+				if animation_id.get_slice(".", 0) == group and named.search(animation_id.substr(group.length() + 1)) != null:
+					found.append(animation_id)
+			if not found.is_empty():
+				break
 	found.sort()
 	return found
 

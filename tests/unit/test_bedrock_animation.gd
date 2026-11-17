@@ -175,3 +175,23 @@ func test_battle_poses_written_as_text_count_correctly() -> void:
 	var roles := CobblemonModel.choose_animations(poser, ["mon.wrong_idle", "mon.fight_idle"], ["mon"] as Array[String])
 	assert_eq(roles.idle, "mon.fight_idle", "\"false\" isn't a battle pose")
 
+
+
+func test_blinks_come_from_the_poser_else_numbered_names() -> void:
+	var poser := {"poses": {"battle": {"isBattle": true, "poseTypes": ["STAND"],
+		"quirks": ["q.bedrock_quirk('mice', 'blink2')", "q.bedrock_quirk('mice', 'blink1')", "q.bedrock_quirk('mice', 'look_quirk')"]}}}
+	var available := ["mice.blink1", "mice.blink2", "mice.blink3", "mice.look_quirk"]
+	assert_eq(CobblemonModel.choose_blinks(poser, available, ["mice"] as Array[String]), ["mice.blink1", "mice.blink2"] as Array[String],
+		"the poser's blinks, one per mouse")
+	var heads := ["bird.blink1", "bird.blink_2", "bird.blink_WIP", "bird.blinking_quirk", "bird.ground_idle"]
+	assert_eq(CobblemonModel.choose_blinks({}, heads, ["bird"] as Array[String]), ["bird.blink1", "bird.blink_2"] as Array[String],
+		"without a poser, numbered blinks by name; unfinished and other animations left out")
+	assert_eq(CobblemonModel.choose_blinks({}, ["mon.blink"], ["mon"] as Array[String]), ["mon.blink"] as Array[String])
+	assert_eq(CobblemonModel.choose_blinks({}, ["mon.ground_idle"], ["mon"] as Array[String]), [] as Array[String])
+
+
+func test_battle_sleep_battle_faint_and_physical_attack_fill_their_roles() -> void:
+	var roles := CobblemonModel.choose_animations({}, ["mon.ground_idle", "mon.battle_sleep", "mon.battle_faint", "mon.physical_attack", "mon.faint_WIP"], ["mon"] as Array[String])
+	assert_eq(roles.sleep, "mon.battle_sleep")
+	assert_eq(roles.faint, "mon.battle_faint")
+	assert_eq(roles.physical, "mon.physical_attack")
