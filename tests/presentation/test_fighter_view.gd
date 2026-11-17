@@ -57,3 +57,45 @@ func test_a_skin_is_worn_and_shaded_and_a_missing_one_is_left_off() -> void:
 	var plain := FighterView.from_model(dir.path_join("mon.scn"), 1.0, 1.0, dir.path_join("missing.res"))
 	assert_true(plain != null and plain._mesh.get_surface_override_material(0) == null, "a missing skin is left off")
 	plain.free()
+
+
+func _animation(tracks: Dictionary, loop := Animation.LOOP_NONE) -> Animation:
+	var animation := Animation.new()
+	animation.length = 1.0
+	animation.loop_mode = loop
+	for bone: String in tracks:
+		var track := animation.add_track(Animation.TYPE_POSITION_3D)
+		animation.track_set_path(track, "Skeleton:" + bone)
+		animation.position_track_insert_key(track, 0.0, tracks[bone])
+	return animation
+
+
+func test_base_animations_put_back_bones_only_other_animations_move() -> void:
+	var skeleton := Skeleton3D.new()
+	for bone in ["body", "eyelid"]:
+		skeleton.add_bone(bone)
+	skeleton.set_bone_rest(1, Transform3D(Basis.IDENTITY, Vector3(0, 1, 0)))
+	var library := AnimationLibrary.new()
+	library.add_animation("idle", _animation({"body": Vector3(0, 0.1, 0)}, Animation.LOOP_LINEAR))
+	library.add_animation("hurt", _animation({"body": Vector3.ZERO, "eyelid": Vector3(0, 1, -0.1)}))
+	var roles := {"idle": "idle", "recoil": "hurt"}
+	FighterView.pad_base_animations(library, roles, skeleton)
+	var idle := library.get_animation("idle")
+	var track := idle.find_track(NodePath("Skeleton:eyelid"), Animation.TYPE_POSITION_3D)
+	assert_true(track >= 0, "the idle puts the eyelid back")
+	assert_eq(idle.position_track_interpolate(track, 0.5), Vector3(0, 1, 0), "at its rest pose")
+	assert_eq(library.get_animation("hurt").get_track_count(), 2, "one-offs are left alone")
+	FighterView.pad_base_animations(library, roles, skeleton)
+	assert_eq(idle.get_track_count(), 2, "padding again adds nothing")
+	skeleton.free()
+
+
+func test_looping_one_offs_play_once_and_a_faint_is_left_as_authored() -> void:
+	var library := AnimationLibrary.new()
+	library.add_animation("idle", _animation({}, Animation.LOOP_LINEAR))
+	library.add_animation("angry", _animation({}, Animation.LOOP_LINEAR))
+	library.add_animation("faint", _animation({}, Animation.LOOP_LINEAR))
+	FighterView.play_one_offs_once(library, {"idle": "idle", "angry": "angry", "faint": "faint"})
+	assert_eq(library.get_animation("angry").loop_mode, Animation.LOOP_NONE)
+	assert_eq(library.get_animation("idle").loop_mode, Animation.LOOP_LINEAR)
+	assert_eq(library.get_animation("faint").loop_mode, Animation.LOOP_LINEAR)
