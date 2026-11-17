@@ -13,8 +13,13 @@ extends RefCounted
 
 const AXIS_FOLLOW := 0.02
 const SMOOTHING := 0.15
-## How fast the camera blends when tracking whips into an impact instead of cutting.
-const WHIP_SMOOTHING := 0.45
+## A new shot whose camera would sit near the current one (eyes within NEAR_DISTANCE, times
+## the fighters' scale, and looking within NEAR_ANGLE of the same way) eases onto it over
+## BLEND_SECONDS instead of cutting; tracking whips into an impact over WHIP_SECONDS.
+const NEAR_DISTANCE := 3.0
+const NEAR_ANGLE := deg_to_rad(40.0)
+const BLEND_SECONDS := 0.4
+const WHIP_SECONDS := 0.2
 ## Shot distances below are tuned for fighters of this height.
 const REFERENCE_HEIGHT := 1.5
 ## The camera keeps at least this many fighter heights away from each fighter's centre.
@@ -48,6 +53,10 @@ var limit := INF
 var _last_shot := -1
 ## Whether the last apply() cut to a new shot rather than moving the camera.
 var cut := false
+## Where the camera was as the current shot began ({"position", "target", "fov"}), and how
+## long it eases from there; {} before the first shot.
+var _blend_from: Dictionary = {}
+var _blend_seconds := 0.0
 
 
 ## `random` seeds the handheld wobble; give it its own stream so it can't shift other choices.
@@ -63,17 +72,30 @@ func _init(is_portrait: bool, fighter_heights: Array, random: SimRandom) -> void
 ## time (drives the wobble).
 func apply(camera: Camera3D, segment: Dictionary, battle: Battle, shot_seconds: float, progress: float, seconds: float, new_shot: bool) -> void:
 	var whip: bool = new_shot and _last_shot == Director.Shot.TRACKING and segment.shot == Director.Shot.IMPACT
-	cut = new_shot and not whip
 	_last_shot = segment.shot
-	var pose := pose_for(segment, battle, shot_seconds, progress, cut)
+	var pose := pose_for(segment, battle, shot_seconds, progress, new_shot)
 	# Shots are framed for the floor; lift them with the fighters' ground.
 	var lift := Vector3.UP * (battle.fighters[0].ground + battle.fighters[1].ground) * 0.5
 	pose.position += lift
 	pose.target += lift
-	var weight := 1.0 if cut else (WHIP_SMOOTHING if whip else SMOOTHING)
-	_position = pose.position if cut else _position.lerp(pose.position, weight)
-	_target = pose.target if cut else _target.lerp(pose.target, weight)
-	_fov = pose.fov if cut else lerpf(_fov, pose.fov, weight)
+	cut = new_shot and not (whip or _near(pose))
+	if new_shot:
+		_blend_from = {"position": _position, "target": _target, "fov": _fov}
+		_blend_seconds = 0.0 if cut else (WHIP_SECONDS if whip else BLEND_SECONDS)
+	if cut:
+		_position = pose.position
+		_target = pose.target
+		_fov = pose.fov
+	elif shot_seconds < _blend_seconds:
+		# Eases from where the last shot left the camera onto the new one, which keeps moving.
+		var weight := smoothstep(0.0, _blend_seconds, shot_seconds)
+		_position = (_blend_from.position as Vector3).lerp(pose.position, weight)
+		_target = (_blend_from.target as Vector3).lerp(pose.target, weight)
+		_fov = lerpf(_blend_from.fov, pose.fov, weight)
+	else:
+		_position = _position.lerp(pose.position, SMOOTHING)
+		_target = _target.lerp(pose.target, SMOOTHING)
+		_fov = lerpf(_fov, pose.fov, SMOOTHING)
 	var k := _scale()
 	var wobble := _wobble(seconds) * float(WOBBLE.get(segment.shot, 0.05)) * k
 	camera.fov = _fov
@@ -83,6 +105,17 @@ func apply(camera: Camera3D, segment: Dictionary, battle: Battle, shot_seconds: 
 		camera.position = eye
 	else:
 		camera.look_at_from_position(eye, look, Vector3.UP)
+
+
+## Whether a new shot's `pose` is close enough to where the camera is to blend rather than cut.
+func _near(pose: Dictionary) -> bool:
+	if _blend_from.is_empty() and _position == Vector3.ZERO:
+		return false
+	var looking := _target - _position
+	var will_look: Vector3 = pose.target - pose.position
+	if looking.length_squared() < 1e-6 or will_look.length_squared() < 1e-6:
+		return false
+	return _position.distance_to(pose.position) <= NEAR_DISTANCE * _scale() and looking.angle_to(will_look) <= NEAR_ANGLE
 
 
 ## `eye` pulled in toward the centre, if needed, to at most `radius` from it on the floor.
