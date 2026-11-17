@@ -179,10 +179,17 @@ func _ready() -> void:
 		var problem := _move_fx.use_cobblemon(_views, moves)
 		if not problem.is_empty():
 			printerr("warning: drawing the mesh move styles, since " + problem)
+	var portraits := []
+	for side in 2:
+		var entry: Dictionary = loaded.data.roster[battle.fighters[side].species_id]
+		var portrait := FighterPortrait.create(MODELS_DIR.path_join(entry.model), entry.scale, entry.height)
+		if portrait != null:
+			add_child(portrait)
+		portraits.append(portrait.get_texture() if portrait != null else null)
 	_hud = Hud.new()
 	_hud.move_effects_credit = _move_fx.cobblemon != null
 	add_child(_hud)
-	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types])
+	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types], portraits)
 	var arena_name: String = Arenas.preset(battle.arena).get("name", battle.arena)
 	_sound = BattleSound.new()
 	add_child(_sound)

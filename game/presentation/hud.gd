@@ -1,9 +1,9 @@
 class_name Hud
 extends CanvasLayer
-## The battle HUD (concepts_brief.md §12.1, §12.5): a name plate per fighter (its name, type
-## pills, status badges, and a rounded HP bar with a lagging damage segment and its percentage),
-## move-name banners, captions, the instant replay's tag, and the intro, victory, winner and
-## credits cards, in the game's fonts (UiFonts).
+## The battle HUD (concepts_brief.md §12.1, §12.5): a name plate per fighter (its portrait,
+## name, type pills, status badges, and a rounded HP bar with a lagging damage segment and its
+## percentage), move-name banners, captions, the instant replay's tag, and the intro, victory,
+## winner and credits cards, in the game's fonts (UiFonts).
 ## Layout follows the orientation: portrait has side B at the top and side A at the bottom;
 ## landscape has side A top-left and side B top-right. Everything animates per video frame.
 
@@ -27,6 +27,9 @@ const GOLD := Color(1.0, 0.86, 0.32)
 const PLATE_PAD := Vector2(18, 12)
 const BAR_TOP := 80.0
 const BAR_HEIGHT := 36.0
+## The fighter's portrait fills the plate's height on its outer end, this far from the name.
+const PORTRAIT_SIZE := BAR_TOP + BAR_HEIGHT
+const PORTRAIT_GAP := 16.0
 ## Banners sit this far below the panel's origin (above it for portrait's bottom plate).
 const BANNER_BELOW := 150.0
 const BANNER_ABOVE := -86.0
@@ -44,6 +47,8 @@ var _size := Vector2.ZERO
 var _scale := 1.0
 var _portrait := false
 var _panels: Array[Control] = []
+## The plate's inner width (portrait, name and bar), in pixels.
+var _content_width := 0.0
 var _panel_homes: Array[Vector2] = []
 var _bars: Array[ColorRect] = []
 var _lags: Array[ColorRect] = []
@@ -105,43 +110,53 @@ static func cobblemon_credit(move_effects: bool) -> String:
 	return "Models, animations and sounds: Cobblemon (CC BY‑NC 3.0)"
 
 
-## Builds the HUD for fighters `names` (side A first), with each one's `types` for its pills.
-func setup(names: Array, viewport_size: Vector2, types: Array = [[], []]) -> void:
+## Builds the HUD for fighters `names` (side A first), with each one's `types` for its pills
+## and its `portraits` (FighterPortrait textures; a null one shows the name's initial instead).
+func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portraits: Array = [null, null]) -> void:
 	_size = viewport_size
 	_portrait = VideoFormat.is_portrait(viewport_size)
 	_scale = minf(viewport_size.x, viewport_size.y) / REFERENCE_SIZE
 	var margin := 60.0 * _scale
 	var bar_width := viewport_size.x - 2 * margin if _portrait else viewport_size.x * 0.4
+	_content_width = bar_width
+	# The name and bar make room for the portrait on the plate's outer end.
+	var inset := (PORTRAIT_SIZE + PORTRAIT_GAP) * _scale
+	bar_width -= inset
 	for side in 2:
 		var panel := Control.new()
 		var home: Vector2
 		if _portrait:
 			home = Vector2(margin, (90 if side == 1 else viewport_size.y / _scale - 220) * _scale)
 		else:
-			home = Vector2(margin if side == 0 else viewport_size.x - margin - bar_width, 40 * _scale)
+			home = Vector2(margin if side == 0 else viewport_size.x - margin - _content_width, 40 * _scale)
 		panel.position = home
 		add_child(panel)
 		# Mirror the right-hand landscape plate so its bar drains toward the centre of the screen.
 		var mirrored := not _portrait and side == 1
 		var plate := Panel.new()
 		plate.position = -PLATE_PAD * _scale
-		plate.size = (Vector2(bar_width / _scale, BAR_TOP + BAR_HEIGHT) + PLATE_PAD * 2.0) * _scale
+		plate.size = (Vector2(_content_width / _scale, BAR_TOP + BAR_HEIGHT) + PLATE_PAD * 2.0) * _scale
 		plate.add_theme_stylebox_override("panel", _plate_style(side, mirrored))
 		plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(plate)
+		var slot := _portrait_slot(side, names[side], portraits[side] if side < portraits.size() else null, mirrored)
+		slot.position.x = _content_width - slot.size.x if mirrored else 0.0
+		panel.add_child(slot)
+		var left := 0.0 if mirrored else inset
 		var name_label := _label(names[side], 56, Color.WHITE, true)
+		name_label.position.x = left
 		panel.add_child(name_label)
 		# Type pills, then status badges as they come and go.
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", roundi(8 * _scale))
-		row.position = Vector2(name_label.get_minimum_size().x + 16 * _scale, 14 * _scale)
+		row.position = Vector2(left + name_label.get_minimum_size().x + 16 * _scale, 14 * _scale)
 		panel.add_child(row)
 		var own_types: Array = types[side] if side < types.size() else []
 		for type: String in own_types:
 			row.add_child(_pill(type.to_upper(), TypeColors.of(type)))
 		_badge_rows.append(row)
 		var track := Panel.new()
-		track.position = Vector2(0, BAR_TOP) * _scale
+		track.position = Vector2(left, BAR_TOP * _scale)
 		track.size = Vector2(bar_width / _scale, BAR_HEIGHT) * _scale
 		var track_style := StyleBoxFlat.new()
 		track_style.bg_color = Color(0, 0, 0, 0.6)
@@ -239,8 +254,7 @@ func banner(side: int, move_name: String, type: String) -> void:
 	_panels[side].add_child(tag)
 	tag.size = tag.get_minimum_size()  # measured once the theme applies, inside the tree
 	var right_aligned := not _portrait and side == 1
-	var bar_width := _bars[side].size.x
-	tag.position = Vector2(bar_width - tag.size.x if right_aligned else 0.0, BANNER_BELOW * _scale)
+	tag.position = Vector2(_content_width - tag.size.x if right_aligned else 0.0, BANNER_BELOW * _scale)
 	if _portrait and side == 0:
 		tag.position.y = BANNER_ABOVE * _scale  # above the bottom plate, not off the screen
 	for old in _banners.filter(func(b: Dictionary) -> bool: return b.side == side):
@@ -557,6 +571,40 @@ func _pill(text: String, colour: Color) -> Label:
 	style.content_margin_bottom = 2 * _scale
 	pill.add_theme_stylebox_override("normal", style)
 	return pill
+
+
+## The portrait's square on a fighter's plate: a rounded tile in the side's colour holding the
+## portrait, or the name's initial when there is none. `mirrored` flips the portrait so it faces
+## the middle of the screen from the right-hand plate.
+func _portrait_slot(side: int, name: String, portrait: Texture2D, mirrored: bool) -> Control:
+	var slot := Panel.new()
+	slot.size = Vector2.ONE * PORTRAIT_SIZE * _scale
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = SIDE_COLOURS[side].darkened(0.55)
+	style.border_color = SIDE_COLOURS[side].darkened(0.2)
+	style.set_border_width_all(roundi(3 * _scale))
+	style.set_corner_radius_all(roundi(16 * _scale))
+	slot.add_theme_stylebox_override("panel", style)
+	# The portrait keeps within the tile's rounded corners.
+	slot.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+	if portrait != null:
+		var picture := TextureRect.new()
+		picture.texture = portrait
+		picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		picture.flip_h = mirrored
+		picture.size = slot.size
+		picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(picture)
+	else:
+		var initial := _label(name.left(1).to_upper(), 72, Color.WHITE, true)
+		initial.add_theme_color_override("font_outline_color", SIDE_COLOURS[side].darkened(0.6))
+		initial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		initial.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		initial.size = slot.size
+		slot.add_child(initial)
+	return slot
 
 
 ## A fighter's plate: dark and rounded, with a stripe of the side's colour on its outer edge.

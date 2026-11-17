@@ -133,3 +133,32 @@ func test_the_intro_subtitle_sits_under_the_names() -> void:
 		assert_true(label.position.y >= hud._intro_box.position.y + hud._intro_box.size.y, "below the names")
 		assert_true(label.position.y + label.size.y <= size.y, "on screen at %s" % size)
 		hud.free()
+
+
+func test_each_plate_holds_a_portrait_or_the_initial_beside_the_bar() -> void:
+	var picture := ImageTexture.create_from_image(Image.create(8, 8, false, Image.FORMAT_RGBA8))
+	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
+		var hud := Hud.new()
+		(Engine.get_main_loop() as SceneTree).root.add_child(hud)
+		hud.setup(["Left", "Right"], size, [[], []], [picture, null])
+		for side in 2:
+			var panel: Control = hud._panels[side]
+			var slot: Control = panel.get_child(1)
+			var slot_rect := Rect2(slot.global_position, slot.size)
+			var track: Control = hud._bars[side].get_parent()
+			var track_rect := Rect2(track.global_position, track.size)
+			assert_false(slot_rect.intersects(track_rect), "slot %d clear of the bar at %s" % [side, size])
+			assert_true(Rect2(Vector2.ZERO, size).encloses(slot_rect), "slot %d on screen at %s" % [side, size])
+			var plate: Control = panel.get_child(0)
+			assert_true(Rect2(plate.global_position, plate.size).encloses(slot_rect), "slot %d on its plate at %s" % [side, size])
+		var shown: TextureRect = hud._panels[0].get_child(1).get_child(0)
+		assert_eq(shown.texture, picture)
+		assert_false(shown.flip_h, "side A faces the middle as rendered")
+		var initial: Label = hud._panels[1].get_child(1).get_child(0)
+		assert_eq(initial.text, "R", "no portrait: the initial")
+		hud.free()
+	var hud := Hud.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(hud)
+	hud.setup(["Left", "Right"], Vector2(1920, 1080), [[], []], [picture, picture])
+	assert_true((hud._panels[1].get_child(1).get_child(0) as TextureRect).flip_h, "the right-hand plate's portrait faces the middle")
+	hud.free()
