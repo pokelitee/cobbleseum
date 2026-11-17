@@ -19,7 +19,8 @@ extends Node3D
 ## be planned ahead. A camera follows the player's fighter, heavy hits freeze play briefly,
 ## a move bar shows keys and cooldowns, and the battle spec is saved with every tick's intents
 ## and the rules and data versions in recordings/specs/, which tools/record.gd can render.
-## R starts a rematch, Esc quits.
+## After the battle in the window (play or watch), R or a button starts a rematch and Esc or a
+## button goes back to the setup screen (SetupScreen); Esc goes back there during a battle too.
 ##
 ## The battle is run headless first so the Director can plan the whole presentation: hit-stop,
 ## slow motion and camera shots. Each video frame then either holds the current tick or
@@ -37,7 +38,7 @@ const OPTIONS: Array[String] = ["ai-debug", "mesh-fx", "cobblemon-fx", "clip-sec
 const HELP := """Cobbleseum: real-time battles with Cobblemon's models and Showdown's data.
 
 Usage: godot --path . [-- <spec.json> | <battle flags>] [options]
-With neither, the showcase battle plays.
+With neither, the setup screen opens; with only options, the showcase battle plays.
 
   <spec.json>              a battle spec, or a play-mode battle saved in recordings/specs/
   --ai-debug               starts with the AI debug overlay on (F3 toggles it)
@@ -48,7 +49,7 @@ With neither, the showcase battle plays.
 %s
 
 In play mode: WASD or arrows move, Space dodges, J K L I or 1-4 use moves, G guards, hold
-Shift to feint; R starts a rematch after the knockout and Esc quits.
+Shift to feint. After a battle, R starts a rematch; Esc goes back to the setup screen.
 Recording clips: tools/record.gd (--help there)."""
 const SPECS_DIR := "res://recordings/specs"
 ## Play mode: frames the controls hint stays up, and frames after the knockout before the
@@ -159,6 +160,10 @@ var _replay_hold := 0
 var _replaying := false
 ## The next of the plan's captions to show.
 var _caption_index := 0
+## The rematch and menu buttons, once the battle is over.
+var _after: AfterBattle
+## The arguments the setup screen started this battle with, used instead of the command line's.
+static var launch_args: PackedStringArray = []
 ## Draws fighters, the camera and projectiles smoothly between video frames in the window;
 ## null while recording, where every frame is one step.
 var _smooth: SmoothMotion
@@ -166,7 +171,7 @@ var _smooth: SmoothMotion
 
 func _ready() -> void:
 	UiFonts.use_by_default()
-	var args := OS.get_cmdline_user_args()
+	var args := launch_args if not launch_args.is_empty() else OS.get_cmdline_user_args()
 	var handled := Cli.info(args, HELP % [Cli.SPEC_FLAGS_HELP, Cli.INFO_HELP])
 	if handled >= 0:
 		get_tree().quit(handled)
@@ -414,6 +419,8 @@ func _next_frame() -> void:
 			_next_audio_frame()
 		elif _clip_mode:
 			_finish()
+		elif _after == null:
+			_show_after_battle()
 		return
 	if _replay_due():
 		_begin_replay()
@@ -547,7 +554,7 @@ func _next_live_frame() -> void:
 		_end_frames += 1
 		if _end_frames == END_LINGER_FRAMES:
 			_save_spec()
-			_hud.show_hint("R: rematch   Esc: quit")
+			_show_after_battle()
 	elif _hold_frames > 0:
 		_hold_frames -= 1
 		if _hold_frames == 0:
@@ -982,11 +989,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			_overlay.visible = not _overlay.visible
 			_overlay.refresh()
 		KEY_R:
-			if _live and battle.is_over():
+			if _after != null:
 				get_tree().reload_current_scene()
 		KEY_ESCAPE:
-			if _live:
-				get_tree().quit()
+			if not _clip_mode:
+				get_tree().change_scene_to_file(SetupScreen.SCENE)
+
+
+func _show_after_battle() -> void:
+	_after = AfterBattle.new()
+	_after.rematch.connect(get_tree().reload_current_scene)
+	_after.menu.connect(get_tree().change_scene_to_file.bind(SetupScreen.SCENE))
+	add_child(_after)
 
 
 func _is_recording() -> bool:

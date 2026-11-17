@@ -86,13 +86,21 @@ godot --headless --path . --script res://tools/battle.gd -- --help
 godot --headless --path . --script res://tools/battle.gd -- --list=arenas
 ```
 
-Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves; gamepad: left stick, A to dodge, X Y B RB for moves). R starts a rematch and Esc quits. Each battle's spec, with every tick's intents and the rules and data versions it ran under, is saved to `recordings/specs/`, and `tools/record.gd` can render one like any spec (after a rules or data change it stops with an error instead of rendering a different battle):
+Start the game without arguments to open the setup screen:
+
+```bash
+godot --path .
+```
+
+It sets up a battle without the command line: the mode (watch, play or record), each side's species (search the list; the model turns beside it), form and shiny, ability, item and moves (standard when left alone), each side's AI, the arena, the weather and the seed, and for a recording the format and length. It builds the battle through the same flags as below and shows the command line that repeats it. Watch and play open the battle in the window; record runs `tools/record.gd` in the background and offers the folder when it's done. After a battle, Rematch (R) plays it again (with a new seed if none was set) and Menu (Esc) goes back to the setup screen; Esc also leaves a battle early. With the keyboard, Tab moves between controls, Enter in a species search picks the first match, and F5 or Ctrl+Enter starts. Starting the game with arguments skips the setup screen, as below.
+
+Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves, G to guard, hold Shift to feint; gamepad: left stick, A to dodge, X Y B RB for moves). Each battle's spec, with every tick's intents and the rules and data versions it ran under, is saved to `recordings/specs/`, and `tools/record.gd` can render one like any spec (after a rules or data change it stops with an error instead of rendering a different battle):
 
 ```bash
 godot --path . -- --play=cinderace --vs=blastoise --ai=normal
 ```
 
-Watch the showcase battle in a window: `godot --path .`, or any AI-vs-AI battle with the flags above: `godot --path . -- --watch=garchomp --vs=hydreigon --ai=hard`. Add `--arena=grassland|beach|volcano|snowfield|cave|stadium` to pick the arena; otherwise the seed picks one that suits the fighters' types. Add `--weather=rain|sun|sand|snow` to start the battle in a weather that lasts it. Press F3 to show the AI debug overlay (each side's candidate actions and their scores); `godot --path . -- --ai-debug` starts with it on, and `tools/record.gd -- <spec> --ai-debug` records it.
+Watch the showcase battle in a window with `godot --path . -- game/data/battles/showcase.json`, or any AI-vs-AI battle with the flags above: `godot --path . -- --watch=garchomp --vs=hydreigon --ai=hard`. Add `--arena=<arena>` to pick the arena (`--list=arenas` names them); otherwise the seed picks one that suits the fighters' types. Add `--weather=rain|sun|sand|snow` to start the battle in a weather that lasts it. Press F3 to show the AI debug overlay (each side's candidate actions and their scores); `godot --path . -- --ai-debug` starts with it on, and `tools/record.gd -- <spec> --ai-debug` records it.
 
 Run the tests:
 
@@ -129,6 +137,12 @@ Preview the surges (Electric, Grassy, Misty and Psychic Terrain) on an arena in 
 
 ```bash
 godot --path . --script res://tools/preview_surges.gd -- --arena=night_stadium
+```
+
+Screenshot the setup screen in each mode (opens a window; images go to `cache/previews/setup_<mode>.png`):
+
+```bash
+godot --path . --script res://tools/preview_setup.gd
 ```
 
 Moves with a Cobblemon-style sequence (`game/presentation/move_sequences/`) can be compared with our styles, single particle effects previewed while authoring sequences, our own pixel-art particle textures (`tools/sprites/`) checked on one sheet, and the sequences' cost per frame measured. Battles and recordings draw every move in this style when the native runtime is built; `--mesh-fx` draws our mesh styles instead:

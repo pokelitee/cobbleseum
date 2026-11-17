@@ -1121,6 +1121,8 @@ game/
   sim/                  battle rules and simulation (no scene nodes)
   ai/
   presentation/         arena, fighters, camera, HUD, effects
+  play/                 player controls, battle flags and the command line's help
+  setup/                the setup screen and after-battle menu
   data/                 rules constants and override tables (original data)
 tools/
   assets.gd             pipeline entry point
@@ -1240,7 +1242,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **Stat stages on the plate:** small ↑ and ↓ arrows with counts per changed stat in the same row, gone once the stage wears off.
 - **Head-and-shoulders portraits:** the portrait frames a square on the head (the head bone, or the top of the silhouette where the bone sits mid-body), like a character-select bust. Small round species, whose head is most of them, keep the whole body.
 
-**M13: setup screen and CLI.**
+**M13: setup screen and CLI. Done (2026-11-17).** Presentation and tooling only; no rules change.
 
 - **Setup screen:** a plain launch opens it instead of the showcase battle. It sets the mode (watch, play, record), each side's species (searchable, with a model preview; team slots in M15), form and shiny, ability, item and moves (standard by default), the arena and weather, each side's AI profile and the seed. It builds the same battle spec the flags build; Record runs `tools/record.gd`. After a battle: rematch or back to the menu.
 - **CLI:** `--help` for the game, `record.gd`, `battle.gd` and `rank.gd`; unknown flags and misspelt species, arenas, moves, abilities and items fail with the nearest matches; `--list=species|arenas|moves|abilities|items|profiles`; the resolved spec (seed, arena, looks) printed at the start, so any run can be repeated.

@@ -54,6 +54,14 @@ The number of one set of battle rules. Every change that can change how a battle
 Everything needed to reproduce a battle exactly: the rules and data versions, the two fighters with their movesets, abilities and held items, each side's AI profile, the arena and the seed, plus every tick's intents for a player's side. It also says how each fighter looks (shiny, cosmetic form), which only the presentation reads.
 _Avoid_: replay file, config
 
+**Battle flags**:
+Command-line options such as `--watch=garchomp --vs=hydreigon --seed=7` that describe a battle spec without a file. The setup screen builds its battles through them too.
+_Avoid_: CLI args (for these)
+
+**Setup screen**:
+The screen a plain launch opens, where a battle is set up by hand (mode, fighters, arena, weather, seed) before watching, playing or recording it.
+_Avoid_: main menu, lobby
+
 **Replay**:
 Playing a battle again from its battle spec, which gives the same battle.
 
