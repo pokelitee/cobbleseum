@@ -600,6 +600,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 17** (guarding, §9.2; 1,000 battles, same seed as a version 16 batch): median 41.2 s (41.8 s under version 16), 10th–90th percentile 22.1–73.6 s, draws 2.5% (2.9%), side A 48.2% (49.3%), hits 51.3 a battle (51.4), dodges 8.4 (8.8). The ranked AI guards 0.6 times a battle, blocking 0.5 hits, 0.1 of them parries; its reaction delay leaves it too late for most melee strikes, so it mostly guards projectiles and area moves. Hard against ranked (1,000 battles): hard wins 55.3% of decided battles (53.9%), guarding 1.7 times a battle with 0.5 parries, and a fifth of its foe's feints now draw a guard. Guarding adds a visible answer without moving balance.
 - **Rules version 16** (feints, §9.2; 1,000 battles, same seed as a version 15 batch): median 41.1 s (40.0 s under version 15), 10th–90th percentile 21.2–75.3 s, draws 2.4% (2.8%), side A 48.2% (50.3%), hits 50.8 a battle (50.3), dodges 8.5 (8.5). The ranked AI feints 0.54 times a battle. 20% of feints draw a dodge, and half of those dodges are punished by a hit. Openings are rare: the foe has to be down to its last dodge charge while a melee or area move is ready and in reach. Hard against ranked (1,000 battles): hard wins 58.6% of decided battles, against 58.3% under version 15, with 1.1 feints a battle. Feints add a tactic you can see without moving results.
 - **Rules version 15** (arena presets): three new arenas join the seed's choice, so a seed can land in a different arena; fields play as before, and coliseums around terrain flatten at the wall. No new batch.
 - **Rules version 14** (the continuous landscape and features; 1,000 battles): median 40.4 s, 10th–90th percentile 20.9–76.0 s, draws 3.0%, side A 48.8%.
@@ -1129,7 +1130,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 
 **M9: abilities, items and guarding.** The rules items from "Later" that need no arena moves (§9.2, §9.9, §9.10), one pull request and rules version each, with the AIs taught to use them, tests, a balance batch, and presentation in both clip formats. The ranking (§13) waits until the rules settle.
 
-- Guarding: a timed parry with a cooldown, which feints can bait. Rules version 17.
+- Guarding: a timed parry with a cooldown, which feints can bait. Done (rules version 17, §9.2, §11).
 - Abilities: a standard ability per species from a first set of about 45. Rules version 18. Planned.
 - Held items: a standard item per species from a first set of about 15. Rules version 19. Planned.
 
