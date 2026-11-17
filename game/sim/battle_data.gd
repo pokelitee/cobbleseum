@@ -19,9 +19,11 @@ var roster: Dictionary = {}
 ## The data versions (§10): source -> the SHA-256 the manifest pins for it. Empty for data
 ## built by hand.
 var versions: Dictionary = {}
-## Converted moves and generated movesets, cached: both depend only on the data.
+## Converted moves, generated movesets and standard abilities, cached: all depend only on the
+## data.
 var _converted := {}
 var _movesets := {}
+var _abilities := {}
 var _effectiveness := {}
 
 
@@ -46,6 +48,13 @@ func standard_moveset(species_id: String) -> Dictionary:
 	if not _movesets.has(species_id):
 		_movesets[species_id] = Movesets.generate(species_id, self)
 	return _movesets[species_id]
+
+
+## The species' standard ability (Abilities.standard), cached; "" for none.
+func standard_ability(species_id: String) -> String:
+	if not _abilities.has(species_id):
+		_abilities[species_id] = Abilities.standard(species.get(species_id, {}))
+	return _abilities[species_id]
 
 
 ## A Showdown ID from a name: "Mr. Mime" -> "mrmime".

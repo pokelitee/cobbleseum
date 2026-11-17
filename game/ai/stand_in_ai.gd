@@ -105,13 +105,17 @@ func decide(battle: Battle, side: int) -> Dictionary:
 ## How much the AI wants a move now; 0 means not at all.
 static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 	if move.is_damaging():
+		# Hitting into an absorbing ability only helps the foe.
+		if Abilities.absorbs(foe, move):
+			return 0.0
 		return _damage_score(me, move)
 	match move.kind:
 		BattleMove.Kind.HEAL:
 			var share := float(me.hp) / me.max_hp
 			return HEAL_SCORE * (1.0 - share) if share < HEAL_BELOW else 0.0
 		BattleMove.Kind.SELF_BUFF:
-			for stat: String in move.boosts:
+			var allowed := Abilities.allowed_drops(foe, move.boosts)
+			for stat: String in allowed:
 				if me.boosts[stat] < STAGE_TARGET:
 					return BUFF_SCORE
 			return 0.0
@@ -122,8 +126,8 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 			return 0.0
 		BattleMove.Kind.STATUS:
 			if move.confuses:
-				return CONFUSE_SCORE if foe.confusion_ticks == 0 else 0.0
-			if not foe.status.is_empty():
+				return CONFUSE_SCORE if foe.confusion_ticks == 0 and not Abilities.status_immune(foe, "confusion") else 0.0
+			if not foe.status.is_empty() or Abilities.status_immune(foe, move.status):
 				return 0.0
 			for type: String in Rules.STATUS_IMMUNITIES.get(move.status, []):
 				if type in foe.types:

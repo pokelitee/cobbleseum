@@ -33,7 +33,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 26
+const FIGHTER_STATE_SIZE := 31
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
@@ -91,6 +91,10 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		if battle_moves.is_empty():
 			return {"error": "%s has no moves" % entry.species}
 		var fighter := Fighter.create(side, entry.species, species, battle_moves, radius)
+		var ability := str(entry.get("ability", data.standard_ability(entry.species)))
+		if not ability.is_empty() and not Abilities.is_known(ability):
+			return {"error": "ability '%s' isn't supported (see %s)" % [ability, Abilities.TABLE_FILE]}
+		fighter.set_ability(ability)
 		fighter.position = Vector2(0, (-0.5 if side == 0 else 0.5) * Rules.START_DISTANCE)
 		fighter.facing = Vector2(0, 1 if side == 0 else -1)
 		fighter.ground = battle.terrain.height_at(fighter.position)
@@ -210,6 +214,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			fighter.dodge_charges += 1
 			fighter.dodge_recharge_ticks = 0
 	_tick_conditions(fighter)
+	_tick_abilities(fighter, foe)
 	if fighter.is_knocked_out() or fighter.is_incapacitated():
 		fighter.followups.clear()
 		if not fighter.is_knocked_out():
@@ -288,7 +293,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 					_hurt_in_confusion(fighter)
 					return
 				fighter.action = Fighter.Action.WINDUP
-				fighter.action_ticks = move.windup_ticks
+				fighter.action_ticks = fighter.windup_ticks(move)
 				fighter.action_move = use
 				fighter.cooldowns[use] = move.cooldown_ticks
 				_event("windup", fighter.side, {"move": move.id})
@@ -387,7 +392,7 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 		else:
 			_boost(fighter, move.boosts, move.id)
 	else:
-		var hits := _roll_hits(move)
+		var hits := _roll_hits(fighter, move)
 		var parried := _strike(fighter, foe, fighter.action_move)
 		var interval := Rules.seconds_to_ticks(Rules.MULTI_HIT_INTERVAL)
 		for i in range(1, hits if not parried else 1):
@@ -423,6 +428,8 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> bool:
 			# Aimed along the facing, rising or falling to reach the foe's chest at its distance.
 			var start := fighter.position + fighter.facing * fighter.radius
 			var speed := move.projectile_speed / Rules.TICK_RATE
+			if move.physical:
+				speed *= float(fighter.ability_effect.get("physical_projectile_speed", 1.0))
 			var ticks_to_foe := maxf(start.distance_to(foe.position) / speed, 1.0)
 			projectiles.append({
 				"id": _projectile_count,
@@ -438,10 +445,12 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> bool:
 	return false
 
 
-## Hits for one use: fixed, or 2-5 with the main-series weights.
-func _roll_hits(move: BattleMove) -> int:
+## Hits for one use: fixed, or 2-5 with the main-series weights (always the most with Skill Link).
+func _roll_hits(fighter: Fighter, move: BattleMove) -> int:
 	if move.hits_min == move.hits_max:
 		return move.hits_min
+	if fighter.ability_effect.get("skill_link", false):
+		return move.hits_max
 	var roll := _random.next_float()
 	var total := 0.0
 	for i in Rules.MULTI_HIT_WEIGHTS.size():
@@ -491,10 +500,20 @@ func _move_projectiles() -> void:
 func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	var outcome := damage(attacker, defender, move, _data, _random)
 	outcome.damage = maxi(1, floori(outcome.damage * Rules.overtime_factor(tick)))
+	var immune := Abilities.immune(defender, move)
 	var dealt := mini(outcome.damage, defender.hp)
+	var holds: bool = dealt >= defender.hp and defender.hp > 1 and defender.ability_effect.get("sturdy", false) and not defender.sturdy_used
+	if holds:
+		dealt = defender.hp - 1
+		defender.sturdy_used = true
 	defender.hp -= dealt
-	_event("hit", attacker.side, {"move": move.id, "damage": outcome.damage, "crit": outcome.crit,
+	_event("hit", attacker.side, {"move": move.id, "damage": dealt if holds else outcome.damage, "crit": outcome.crit,
 		"effectiveness": outcome.effectiveness, "hp": defender.hp})
+	if holds:
+		_ability_event(defender)
+	if immune and Abilities.absorbs(defender, move):
+		_absorb(defender, move)
+	_ability_on_hit(attacker, defender, move)
 	if defender.is_knocked_out():
 		_event("knockout", defender.side, {})
 	else:
@@ -506,12 +525,13 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 			_event("interrupt", defender.side, {"move": defender.moves[defender.action_move].id})
 		if defender.status == "slp" or (defender.status == "frz" and move.type == "Fire"):
 			_end_status(defender)
-		for effect in move.secondaries:
-			if _random.chance(effect.chance / 100.0):
-				_apply_effect(attacker, defender, effect, move.id)
+		if not immune and Abilities.secondaries_apply(attacker, defender):
+			for effect in move.secondaries:
+				if _random.chance(effect.chance / 100.0 * Abilities.secondary_chance_factor(attacker)):
+					_apply_effect(attacker, defender, effect, move.id)
 	if move.drain_share > 0.0 and not attacker.is_knocked_out():
 		_heal(attacker, maxi(1, roundi(dealt * move.drain_share)), move.id)
-	if move.recoil_share > 0.0:
+	if move.recoil_share > 0.0 and not Abilities.no_recoil(attacker):
 		var recoil := maxi(1, roundi(dealt * move.recoil_share))
 		_hurt(attacker, recoil, "recoil", {"move": move.id})
 	if not move.self_boosts.is_empty() and not attacker.is_knocked_out():
@@ -532,6 +552,81 @@ func _guarded(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 			attacker.action_ticks = maxi(attacker.action_ticks, Rules.seconds_to_ticks(Rules.PARRY_STAGGER))
 
 
+## Reports that `fighter`'s ability took effect, so the view can name it.
+func _ability_event(fighter: Fighter, details := {}) -> void:
+	details.merge({"ability": fighter.ability, "name": Abilities.display_name(fighter.ability)})
+	_event("ability", fighter.side, details)
+
+
+## An absorbing ability (Water Absorb, Sap Sipper, Flash Fire) taking a hit of its type.
+func _absorb(fighter: Fighter, move: BattleMove) -> void:
+	if fighter.is_knocked_out():
+		return
+	var entry := fighter.ability_effect
+	_ability_event(fighter)
+	if entry.has("absorb_heal"):
+		_heal(fighter, maxi(1, roundi(fighter.max_hp * float(entry.absorb_heal))), move.id)
+	if entry.has("absorb_boosts"):
+		_boost(fighter, entry.absorb_boosts, fighter.ability)
+	if entry.has("absorb_power"):
+		fighter.flash_fire_ticks = Rules.seconds_to_ticks(Abilities.ABILITY_SECONDS)
+
+
+## Abilities that answer a hit: contact punishers on the attacker (melee strikes), and the
+## defender's own reactions (Justified, Weak Armor).
+func _ability_on_hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
+	var entry := defender.ability_effect
+	if move.kind == BattleMove.Kind.MELEE and not attacker.is_knocked_out():
+		var statuses: Array = entry.get("contact_status", [])
+		if not statuses.is_empty() and _random.chance(Abilities.CONTACT_STATUS_CHANCE):
+			var status: String = statuses[0] if statuses.size() == 1 else statuses[_random.next_u32() % statuses.size()]
+			if attacker.status.is_empty():
+				_ability_event(defender)
+				_inflict(attacker, status, defender)
+		if entry.has("contact_damage") and not Abilities.magic_guard(attacker):
+			_ability_event(defender)
+			_hurt(attacker, maxi(1, roundi(attacker.max_hp * float(entry.contact_damage))), "ability_damage",
+				{"ability": defender.ability})
+	if defender.is_knocked_out():
+		return
+	var by_type: Dictionary = entry.get("hit_by_type", {})
+	if not by_type.is_empty() and move.type == by_type.type:
+		_ability_event(defender)
+		_boost(defender, by_type.boosts, defender.ability)
+	var on_physical: Dictionary = entry.get("on_physical_hit", {})
+	if not on_physical.is_empty() and move.physical and defender.weak_armor_ticks == 0:
+		defender.weak_armor_ticks = Rules.seconds_to_ticks(float(on_physical.seconds))
+		_ability_event(defender)
+		_boost(defender, on_physical.boosts, defender.ability)
+
+
+## Abilities that act over time, once per tick: Intimidate (at the start and every
+## INTIMIDATE_SECONDS), Speed Boost, and the timers on Flash Fire and Weak Armor.
+func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
+	var entry := fighter.ability_effect
+	if entry.is_empty():
+		return
+	fighter.flash_fire_ticks = maxi(0, fighter.flash_fire_ticks - 1)
+	fighter.weak_armor_ticks = maxi(0, fighter.weak_armor_ticks - 1)
+	if entry.get("intimidate", false):
+		fighter.intimidate_ticks -= 1
+		if fighter.intimidate_ticks <= 0:
+			fighter.intimidate_ticks = Rules.seconds_to_ticks(Abilities.INTIMIDATE_SECONDS)
+			_ability_event(fighter)
+			if foe.ability_effect.get("intimidate_immune", false):
+				_ability_event(foe)
+			else:
+				_boost(foe, {"atk": -1}, fighter.ability, fighter)
+	var speed_boost: Dictionary = entry.get("speed_boost", {})
+	if not speed_boost.is_empty():
+		fighter.speed_boost_ticks += 1
+		if fighter.speed_boost_ticks >= Rules.seconds_to_ticks(float(speed_boost.seconds)):
+			fighter.speed_boost_ticks = 0
+			if fighter.boosts.spe < int(speed_boost.max):
+				_ability_event(fighter)
+				_boost(fighter, {"spe": 1}, fighter.ability)
+
+
 ## A debuff or status projectile reaching its target.
 func _land(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	_event("landed", attacker.side, {"move": move.id})
@@ -540,35 +635,46 @@ func _land(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 
 func _apply_effect(attacker: Fighter, defender: Fighter, effect: Dictionary, move_id: String) -> void:
 	if not str(effect.get("status", "")).is_empty():
-		_inflict(defender, effect.status)
+		_inflict(defender, effect.status, attacker)
 	if effect.get("confuses", false) and defender.confusion_ticks == 0:
-		defender.confusion_ticks = Rules.seconds_to_ticks(Rules.CONFUSION_SECONDS)
-		_event("status", defender.side, {"status": "confusion"})
+		if Abilities.status_immune(defender, "confusion"):
+			_ability_event(defender)
+		else:
+			defender.confusion_ticks = Rules.seconds_to_ticks(Rules.CONFUSION_SECONDS)
+			_event("status", defender.side, {"status": "confusion"})
 	if not effect.get("boosts", {}).is_empty():
-		_boost(defender, effect.boosts, move_id)
+		_boost(defender, effect.boosts, move_id, attacker)
 	if not effect.get("self_boosts", {}).is_empty():
 		_boost(attacker, effect.self_boosts, move_id)
 
 
-## Gives a major status unless the fighter already has one or its type is immune.
-func _inflict(fighter: Fighter, status: String) -> void:
+## Gives a major status unless the fighter already has one or its type or ability is immune.
+## `source` is the foe that caused it, if any (Synchronize passes it back).
+func _inflict(fighter: Fighter, status: String, source: Fighter = null) -> void:
 	if not fighter.status.is_empty() or fighter.is_knocked_out():
 		return
 	for type: String in Rules.STATUS_IMMUNITIES.get(status, []):
 		if type in fighter.types:
 			return
+	if Abilities.status_immune(fighter, status):
+		_ability_event(fighter)
+		return
 	fighter.status = status
 	fighter.toxic_level = 0
 	if status == "slp" or status == "frz":
 		fighter.followups.clear()
 	match status:
 		"slp":
-			fighter.status_ticks = Rules.seconds_to_ticks(_random.range_float(Rules.SLEEP_MIN_SECONDS, Rules.SLEEP_MAX_SECONDS))
+			var seconds := _random.range_float(Rules.SLEEP_MIN_SECONDS, Rules.SLEEP_MAX_SECONDS)
+			fighter.status_ticks = Rules.seconds_to_ticks(seconds * float(fighter.ability_effect.get("sleep_factor", 1.0)))
 		"frz":
 			fighter.status_ticks = Rules.seconds_to_ticks(Rules.FREEZE_SECONDS)
 		_:
 			fighter.status_ticks = Rules.seconds_to_ticks(Rules.STATUS_SECONDS)
 	_event("status", fighter.side, {"status": status})
+	if source != null and fighter.ability_effect.get("synchronize", false) and status in ["brn", "par", "psn", "tox"]:
+		_ability_event(fighter)
+		_inflict(source, status)
 
 
 func _end_status(fighter: Fighter) -> void:
@@ -577,8 +683,15 @@ func _end_status(fighter: Fighter) -> void:
 	fighter.status_ticks = 0
 
 
-## Changes stat stages within +-6 and reports the changes that took effect.
-func _boost(fighter: Fighter, changes: Dictionary, move_id: String) -> void:
+## Changes stat stages within +-6 and reports the changes that took effect. `foe` is the foe
+## making the change, if any: abilities can block its drops (Clear Body) or answer them
+## (Defiant).
+func _boost(fighter: Fighter, changes: Dictionary, move_id: String, foe: Fighter = null) -> void:
+	if foe != null:
+		var allowed := Abilities.allowed_drops(fighter, changes)
+		if allowed.size() < changes.size():
+			_ability_event(fighter)
+		changes = allowed
 	var applied := {}
 	for stat: String in changes:
 		var before: int = fighter.boosts[stat]
@@ -588,6 +701,10 @@ func _boost(fighter: Fighter, changes: Dictionary, move_id: String) -> void:
 	if not applied.is_empty():
 		fighter.stage_ticks = 0
 		_event("boost", fighter.side, {"boosts": applied, "move": move_id})
+	var answer: Dictionary = fighter.ability_effect.get("on_lowered", {})
+	if foe != null and not answer.is_empty() and applied.values().any(func(stages: int) -> bool: return stages < 0):
+		_ability_event(fighter)
+		_boost(fighter, answer, fighter.ability)
 
 
 ## Moves every stat stage one step toward 0 once they've gone unchanged long enough.
@@ -637,14 +754,27 @@ func _tick_conditions(fighter: Fighter) -> void:
 		return
 	fighter.status_ticks -= 1
 	if fighter.status_ticks % Rules.TICK_RATE == 0:
+		var entry := fighter.ability_effect
+		if entry.has("shed_skin") and _random.chance(float(entry.shed_skin)):
+			_ability_event(fighter)
+			_end_status(fighter)
+			return
+		# Magic Guard takes no damage from conditions; Poison Heal turns poison into healing.
+		var harmed := not Abilities.magic_guard(fighter)
+		if fighter.status in ["psn", "tox"] and entry.get("poison_heal", false):
+			harmed = false
+			_heal(fighter, maxi(1, roundi(fighter.max_hp * Abilities.POISON_HEAL)), fighter.ability)
 		match fighter.status:
 			"brn":
-				_hurt(fighter, maxi(1, roundi(fighter.max_hp * Rules.BURN_DAMAGE)), "status_damage", {"status": "brn"})
+				if harmed:
+					_hurt(fighter, maxi(1, roundi(fighter.max_hp * Rules.BURN_DAMAGE)), "status_damage", {"status": "brn"})
 			"psn":
-				_hurt(fighter, maxi(1, roundi(fighter.max_hp * Rules.POISON_DAMAGE)), "status_damage", {"status": "psn"})
+				if harmed:
+					_hurt(fighter, maxi(1, roundi(fighter.max_hp * Rules.POISON_DAMAGE)), "status_damage", {"status": "psn"})
 			"tox":
 				fighter.toxic_level += 1
-				_hurt(fighter, maxi(1, roundi(fighter.max_hp * Rules.TOXIC_STEP * fighter.toxic_level)), "status_damage", {"status": "tox"})
+				if harmed:
+					_hurt(fighter, maxi(1, roundi(fighter.max_hp * Rules.TOXIC_STEP * fighter.toxic_level)), "status_damage", {"status": "tox"})
 			"par":
 				if _random.chance(Rules.PARALYSIS_STUN_CHANCE):
 					fighter.stun_ticks = Rules.seconds_to_ticks(Rules.PARALYSIS_STUN_SECONDS)
@@ -664,19 +794,30 @@ func _hurt_in_confusion(fighter: Fighter) -> void:
 
 
 ## Main-series damage formula with Cobbleseum's compressed type multipliers (§9.4), using
-## stats after stat stages and burn. Fixed-damage moves ignore stats, type and crits.
+## stats after stat stages, abilities and burn. Fixed-damage moves ignore stats, type and crits.
 static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData, random: SimRandom) -> Dictionary:
 	if move.fixed_damage > 0:
 		return {"damage": move.fixed_damage, "crit": false, "effectiveness": 1.0}
-	var attack := move.attack_stat(attacker, defender)
-	var defense := defender.stat(move.defensive_stat)
-	var base := floorf(floorf(floorf(2.0 * Rules.LEVEL / 5.0 + 2.0) * move.power * attack / defense) / 50.0) + 2.0
-	var stab := Rules.STAB if move.type in attacker.types else 1.0
-	var effectiveness := Rules.compressed_effectiveness(data.effectiveness(move.type, defender.types))
+	var parts := damage_parts(attacker, defender, move, data)
 	var crit := random.chance(Rules.CRIT_CHANCE)
 	var roll := random.range_float(Rules.ROLL_MIN, Rules.ROLL_MAX)
-	var total := base * stab * effectiveness * (Rules.CRIT_MULTIPLIER if crit else 1.0) * roll
-	return {"damage": maxi(1, floori(total)), "crit": crit, "effectiveness": effectiveness}
+	var total: float = parts.base * parts.factor * (Rules.CRIT_MULTIPLIER if crit else 1.0) * roll
+	return {"damage": maxi(1, floori(total)), "crit": crit, "effectiveness": parts.effectiveness}
+
+
+## A hit's damage before luck, shared with the AI's estimates: the formula's base (power after
+## abilities, stats after stages), the multipliers on it (STAB, type, the defender's ability)
+## and the compressed effectiveness. An ability immunity counts as a type immunity (§9.9).
+static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData) -> Dictionary:
+	var attack := move.attack_stat(attacker, defender)
+	var defense := defender.stat(move.defensive_stat)
+	var power := move.power * Abilities.power_factor(attacker, move)
+	var base := floorf(floorf(floorf(2.0 * Rules.LEVEL / 5.0 + 2.0) * power * attack / defense) / 50.0) + 2.0
+	var stab := Abilities.stab(attacker) if move.type in attacker.types else 1.0
+	var main_series := Abilities.effectiveness(attacker, defender, move, data.effectiveness(move.type, defender.types))
+	var effectiveness := Rules.compressed_effectiveness(main_series)
+	return {"base": base, "factor": stab * effectiveness * Abilities.taken_factor(defender, move, main_series),
+		"effectiveness": effectiveness}
 
 
 func _check_end() -> void:
@@ -724,6 +865,11 @@ func _record_state() -> void:
 		_state[i + 23] = 1.0 if fighter.feinting else 0.0
 		_state[i + 24] = fighter.guard_cooldown
 		_state[i + 25] = 1.0 if fighter.guard_blocked else 0.0
+		_state[i + 26] = fighter.flash_fire_ticks
+		_state[i + 27] = fighter.intimidate_ticks
+		_state[i + 28] = fighter.speed_boost_ticks
+		_state[i + 29] = fighter.weak_armor_ticks
+		_state[i + 30] = 1.0 if fighter.sturdy_used else 0.0
 		i += FIGHTER_STATE_SIZE
 	for projectile in projectiles:
 		_state[i] = projectile.position.x
