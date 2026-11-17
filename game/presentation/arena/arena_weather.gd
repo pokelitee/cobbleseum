@@ -15,13 +15,19 @@ const LOOKS := {
 		"ambient": [Color("8392a8"), 0.85], "fog": [Color("66748a"), 2.5], "exposure": 0.95},
 	"sun": {"sky": [Color("4f9be6"), Color("ffd59a")], "sun": 1.45, "sun_colour": Color("ffd08a"),
 		"ambient": [Color("ffd9b0"), 1.15], "fog": [Color("ffe2b8"), 0.6], "exposure": 1.05},
-	"sand": {"sky": [Color("8c7450"), Color("d2b27a")], "sun": 0.55, "sun_colour": Color("f0c890"),
-		"ambient": [Color("c8a878"), 0.95], "fog": [Color("b8996a"), 4.0], "exposure": 1.0},
+	# Blown dust scatters the light more than it blocks it: the sun dims less than in rain and
+	# the ambient light rises, so the fighters stay readable inside the haze.
+	"sand": {"sky": [Color("8c7450"), Color("d2b27a")], "sun": 0.8, "sun_colour": Color("f0c890"),
+		"ambient": [Color("d8bc90"), 1.3], "fog": [Color("b8996a"), 4.0], "exposure": 1.0},
 	"snow": {"sky": [Color("9fb0c4"), Color("dfe8f0")], "sun": 0.6, "sun_colour": Color("dce8ff"),
 		"ambient": [Color("c8d8ee"), 1.05], "fog": [Color("d4dfea"), 2.2], "exposure": 1.0},
 }
 ## Fog density never drops below this, so a clear arena's weather still hazes the distance.
 const MIN_FOG := 0.006
+## A weather thickens the fog to at most this density (about 17% at 8 m), and never thins an
+## arena's own: fog covers the fighters too, and a sandstorm that multiplied the cave's already
+## thick fog left them murky shapes. The weather's particles and colours carry the rest.
+const MAX_WEATHER_FOG := 0.024
 ## Particles fade in between these distances from the camera (metres).
 const NEAR_FADE := Vector2(1.5, 4.0)
 
@@ -85,6 +91,16 @@ func next_frame() -> void:
 	_apply()
 
 
+## The fog density a weather with fog `factor` gives an arena whose own is `base`: the factor
+## applied to it (or to MIN_FOG on a clear arena), kept within MAX_WEATHER_FOG unless the
+## arena's own fog is thicker, which a hazy weather then leaves as it is.
+static func weather_fog(base: float, factor: float) -> float:
+	var weathered := maxf(base, MIN_FOG) * factor
+	if factor > 1.0:
+		weathered = maxf(base, minf(weathered, MAX_WEATHER_FOG))
+	return weathered
+
+
 ## The weather shown and how far it's blended in, for tests and tools.
 func shown() -> Array:
 	return [_shown, _blend]
@@ -105,7 +121,7 @@ func _apply() -> void:
 	_environment.ambient_light_color = (_base.ambient[0] as Color).lerp(look.ambient[0], eased)
 	_environment.ambient_light_energy = _base.ambient[1] * lerpf(1.0, look.ambient[1], eased)
 	_environment.fog_light_color = (_base.fog[0] as Color).lerp(look.fog[0], eased)
-	_environment.fog_density = lerpf(_base.fog[1], maxf(_base.fog[1], MIN_FOG) * look.fog[1], eased)
+	_environment.fog_density = lerpf(_base.fog[1], weather_fog(_base.fog[1], look.fog[1]), eased)
 	_environment.tonemap_exposure = _base.exposure * lerpf(1.0, look.exposure, eased)
 	if _own_particles != null:
 		_own_particles.albedo_color.a = _own_alpha * (1.0 - eased)

@@ -229,7 +229,8 @@ func _ready() -> void:
 		if view == null:
 			return _fail("cannot load the model %s; run tools/assets.gd" % look.model)
 		add_child(view)
-		view.set_hovering("Flying" in battle.fighters[side].types or view.floats())
+		# A roster built before "flies" was listed keeps every Flying type hovering, as it did.
+		view.set_hovering(view.hovers_as(battle.fighters[side].types, entry.get("flies", true)))
 		_views.append(view)
 	for side in 2:
 		_views[side].watch(_views[1 - side])
@@ -959,7 +960,7 @@ func _add_crowd(data: BattleData) -> void:
 				push_warning("cannot load the model %s for a spectator" % entry.model)
 				continue
 			_crowd.add_watcher(view, seats[i], _views[i % 2])
-			view.set_hovering("Flying" in data.species[ids[i]].get("types", []) or view.floats())
+			view.set_hovering(view.hovers_as(data.species[ids[i]].get("types", []), entry.get("flies", true)))
 	_crowd.build()
 
 

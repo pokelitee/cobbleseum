@@ -3,7 +3,7 @@ extends RefCounted
 ## Matches Showdown species to Cobblemon models (CobblemonRoster), converts each one into
 ## models/<id>.scn and each of its cosmetic forms into models/<id>@<form>.scn, gives each of
 ## those looks its shiny (models/<look>~shiny.res, a skin, or .scn), and writes:
-## - roster.json: one entry per species with its model, scale, height, hitbox radius, animations,
+## - roster.json: one entry per species with its model, scale, height, hitbox radius, whether it flies, animations,
 ##   QA flags, licence, shiny and cosmetic forms. Headless simulation reads only this file.
 ## - report.json: the QA report, a summary plus each species' flags and conversion problems.
 ## - move_fx/: the move particle effects, their textures and the action effects, copied as they
@@ -247,7 +247,7 @@ static func _roster_entry(entry: Dictionary, report: Dictionary, source_dir: Str
 			flags.append(problem)
 	var roster_entry := {
 		"name": entry.name, "num": entry.num, "folder": entry.folder, "aspects": entry.aspects,
-		"model": entry.id + ".scn", "scale": sized.scale, "height": sized.height, "radius": sized.radius,
+		"model": entry.id + ".scn", "scale": sized.scale, "height": sized.height, "radius": sized.radius, "flies": entry.flies,
 		"animations": (report.get("animations", {}) as Dictionary).keys(), "poser": report.get("poser", false),
 		"flags": flags, "licence": LICENCE,
 	}

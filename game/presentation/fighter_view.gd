@@ -266,6 +266,14 @@ func floats() -> bool:
 	return _animations.has("air_idle") and _animations.get("idle") == _animations.air_idle
 
 
+## Whether a species with these `types` hovers in battle (concepts_brief.md §7.4). A Flying
+## type hovers when it can really fly: Cobblemon lets it (`flies`, from the roster) or it has a
+## flying animation. Flightless ones (Doduo, Dodrio, Natu, Hawlucha) walk. Any species that only
+## idles in the air hovers too.
+func hovers_as(types: Array, flies: bool) -> bool:
+	return floats() or ("Flying" in types and (flies or _animations.has("air_fly")))
+
+
 func _idle_role() -> String:
 	return "air_idle" if _motion.hovers and _animations.has("air_idle") else "idle"
 
