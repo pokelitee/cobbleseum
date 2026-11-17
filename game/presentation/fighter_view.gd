@@ -63,6 +63,9 @@ var _motion_root: Node3D
 ## touches the bones those animations move (it isn't deterministic-blended).
 var _overlay: AnimationPlayer
 var _quirks: Array = []
+## The blink animations: one for most species, one per head or eye where each blinks on its
+## own (Doduo, Maushold).
+var _blinks: Array = []
 var _overlay_wait := 0.0
 var _rng := RandomNumberGenerator.new()
 var _celebrating := false
@@ -126,6 +129,7 @@ static func from_model(path: String, scale: float, model_height: float, skin := 
 	play_one_offs_once(view._player.get_animation_library(""), view._animations)
 	view._player.animation_finished.connect(view._on_animation_finished)
 	view._quirks = model.get_meta("quirks", [])
+	view._blinks = model.get_meta("blinks", [view._animations.blink] if view._animations.has("blink") else [])
 	if view._animations.has("blink") or not view._quirks.is_empty():
 		view._overlay = AnimationPlayer.new()
 		view._overlay.deterministic = false
@@ -355,7 +359,13 @@ func _next_overlay() -> void:
 		return
 	_overlay_wait = _rng.randi_range(OVERLAY_GAP.x, OVERLAY_GAP.y)
 	var fidget := not _quirks.is_empty() and not _one_off and not _moving and not _asleep and _rng.randf() < QUIRK_SHARE
-	var animation: String = _quirks[_rng.randi() % _quirks.size()] if fidget else _animations.get("blink", "")
+	var animation := ""
+	if fidget:
+		animation = _quirks[_rng.randi() % _quirks.size()]
+	elif _blinks.size() == 1:
+		animation = _blinks[0]
+	elif not _blinks.is_empty():
+		animation = _blinks[_rng.randi() % _blinks.size()]
 	if not animation.is_empty() and not _asleep:
 		_overlay.play(animation)
 

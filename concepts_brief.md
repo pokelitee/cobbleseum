@@ -338,7 +338,8 @@ Unknown queries and variables, such as riding yaw and a few custom variables, ev
   - the named one-off animations: physical, special, status, cry and recoil;
   - head-tracking bones and their limits;
   - quirks such as blinking.
-- The 248 species without a poser use a name-based fallback: `battle_idle`, else `ground_idle`, with `air_idle` for species that fly.
+- **Blinks:** the standing pose's blink quirks, which can be several where each head or eye blinks on its own (Maushold's mice); without a poser, every animation named `blink`, `blinkN` or `blink_N` (Doduo's and Dodrio's heads, Mr. Rime). The game picks one at random for each blink.
+- The 248 species without a poser use a name-based fallback: `battle_idle`, else `ground_idle`, with `air_idle` for species that fly. Other roles also fall back on names, including Cobblemon's variants that are real animations: `battle_sleep` and `ground_sleep` (Garchomp's own sleep pose uses `battle_sleep`), `battle_faint` and `physical_attack`. Unfinished ones (`faint_WIP`, `ground_walk_placeholder`) are left out.
 - **Air animations and parts:** the hover pose's animation fills the `air_idle` role and the fly pose's animation fills `air_fly` (about 120 species), falling back to animations of those names. Poses also show or hide parts (`transformedParts`), mostly open or folded wings on about 40 birds; the standing pose's set and the hover (else fly) pose's set are stored as the model's `parts`. In the game, a `PartSwap` skeleton modifier scales the hidden parts' bones to zero after the animation has posed them, so either stance works with any animation. Before this, both sets of wings showed at once.
 
 **Resolvers:** the converter takes the base variation (no aspects) or the requested aspects (shiny, female, regional form). Shinies and cosmetic forms are converted as their own looks (§12.8).
@@ -382,7 +383,7 @@ Knockback is the simulation's own since rules version 9, so the view no longer f
 **More of Cobblemon's animations** (presentation only):
 
 - **Cries:** each fighter plays its cry animation when the battle opens, in time with its cry sound.
-- **Blinks and fidgets:** a second animation player layers the blink animation (about 930 species), and now and then one of the standing pose's idle quirks (look around, sniff, tail twitch; about 200 species, only while idling), every 2–6 s. It's seeded by the model, so renders repeat exactly, and it only touches the bones those animations move.
+- **Blinks and fidgets:** a second animation player layers the blink animation (about 940 species; one of several where heads or eyes blink separately), and now and then one of the standing pose's idle quirks (look around, sniff, tail twitch; about 200 species, only while idling), every 2–6 s. It's seeded by the model, so renders repeat exactly, and it only touches the bones those animations move.
 - **Emotions:** a crit or super-effective hit plays `shock` (falling back to `surprised`) instead of the hit animation, a stat drop while ready plays `angry`, the winner loops `happy`, and a time-up draw plays `sad` on both (about 100–210 species each).
 - **Running:** grounded fighters with a `ground_run` animation run above 3.5 m/s.
 - **Sleeping in the air:** hovering species with `air_sleep` sleep in mid-air.
