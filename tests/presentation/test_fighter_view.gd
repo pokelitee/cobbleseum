@@ -99,3 +99,38 @@ func test_looping_one_offs_play_once_and_a_faint_is_left_as_authored() -> void:
 	assert_eq(library.get_animation("angry").loop_mode, Animation.LOOP_NONE)
 	assert_eq(library.get_animation("idle").loop_mode, Animation.LOOP_LINEAR)
 	assert_eq(library.get_animation("faint").loop_mode, Animation.LOOP_LINEAR)
+
+
+func test_head_points_are_the_head_bone_and_the_bones_under_it() -> void:
+	var view := FighterView.new()
+	var skeleton := Skeleton3D.new()
+	view.add_child(skeleton)
+	for bone: Array in [["body", -1], ["head", 0], ["ear", 1], ["tail", 0]]:
+		skeleton.add_bone(bone[0])
+		skeleton.set_bone_parent(skeleton.get_bone_count() - 1, bone[1])
+	var vertices := PackedVector3Array([Vector3(0, 0, 0), Vector3(0, 1, 0), Vector3(0, 2, 0), Vector3(1, 0, 0)])
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	for i in vertices.size():
+		bones.append_array([i, 0, 0, 0])
+		weights.append_array([1.0, 0.0, 0.0, 0.0])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_POINTS, arrays)
+	var skin := Skin.new()
+	for i in skeleton.get_bone_count():
+		skin.add_named_bind(skeleton.get_bone_name(i), Transform3D.IDENTITY)
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.skin = skin
+	skeleton.add_child(instance)
+	view._mesh = instance
+	assert_eq(view.posed_points().size(), 4)
+	assert_eq(view.head_points(), PackedVector3Array([Vector3(0, 1, 0), Vector3(0, 2, 0)]), "the head and its ear, not the body or tail")
+	skeleton.set_bone_name(1, "neck")
+	assert_eq(view.head_points(), PackedVector3Array(), "none without a head bone")
+	view.free()

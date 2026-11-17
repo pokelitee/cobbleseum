@@ -5,8 +5,14 @@ extends SceneTree
 ## Writes cache/previews/portraits.png, a grid of portraits on a dark plate colour; previews
 ## show Cobblemon art, so they stay in the cache.
 
-const SPECIES: Array[String] = ["blastoise", "cinderace", "garchomp", "pikachu", "onix", "voltorb",
-	"gyarados", "charizard", "magikarp", "wailord", "ditto", "hydreigon"]
+## A spread of body shapes: bipeds, quadrupeds, serpents, fliers, round and headless bodies, and
+## very tall, long and small species.
+const SPECIES: Array[String] = ["blastoise", "cinderace", "machamp", "mrmime", "lucario", "garchomp",
+	"arcanine", "rapidash", "tauros", "eevee", "pikachu", "snorlax",
+	"onix", "gyarados", "rayquaza", "ekans", "steelix", "lapras",
+	"charizard", "dragonite", "pidgeot", "butterfree", "zubat", "hydreigon",
+	"voltorb", "gengar", "jigglypuff", "ditto", "magnemite", "magikarp",
+	"wailord", "joltik", "psyduck", "squirtle", "bulbasaur", "wailmer"]
 const COLUMNS := 6
 
 
