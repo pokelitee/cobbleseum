@@ -1,8 +1,10 @@
 class_name BattleView
 extends Node3D
 ## Plays a battle in a 3D arena (concepts_brief.md §12). User arguments (after --):
-## <spec.json> [--clip-seconds=S] [--expect-checksum=HEX] [--ai-debug]. --ai-debug shows the
-## AI debug overlay from the start; F3 toggles it in the window.
+## <spec.json> [--clip-seconds=S] [--expect-checksum=HEX] [--ai-debug] [--mesh-fx]. --ai-debug
+## shows the AI debug overlay from the start; F3 toggles it in the window. Moves draw in
+## Cobblemon's style (CobblemonMoveFX) when the native runtime and the cached effects are there;
+## --mesh-fx, or either one missing, draws our mesh styles instead.
 ##
 ## Instead of a spec file, SpecFlags can describe the battle: --watch=<species> [--vs=<species>]
 ## [--ai=<profile>] [--vs-ai=<profile>] [--seed=N] for AI against AI. --arena=<name> (or a
@@ -118,7 +120,7 @@ var _caption_index := 0
 
 func _ready() -> void:
 	UiFonts.use_by_default()
-	var options := _parse_args(OS.get_cmdline_user_args())
+	var options := parse_args(OS.get_cmdline_user_args())
 	var spec: Variant = options.flag_spec if not options.flag_spec.is_empty() \
 		else JSON.parse_string(FileAccess.get_file_as_string(options.spec))
 	if spec is Dictionary and spec.has("error"):
@@ -165,11 +167,6 @@ func _ready() -> void:
 	for side in 2:
 		_views[side].watch(_views[1 - side])
 	_add_crowd(loaded.data)
-	_hud = Hud.new()
-	_hud.move_effects_credit = options.cobblemon_fx
-	add_child(_hud)
-	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types])
-	var arena_name: String = Arenas.preset(battle.arena).get("name", battle.arena)
 	_move_fx = MoveFX.new()
 	add_child(_move_fx)
 	for fighter in battle.fighters:
@@ -181,7 +178,12 @@ func _ready() -> void:
 			moves.append_array(fighter.moves)
 		var problem := _move_fx.use_cobblemon(_views, moves)
 		if not problem.is_empty():
-			printerr("warning: " + problem)
+			printerr("warning: drawing the mesh move styles, since " + problem)
+	_hud = Hud.new()
+	_hud.move_effects_credit = _move_fx.cobblemon != null
+	add_child(_hud)
+	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types])
+	var arena_name: String = Arenas.preset(battle.arena).get("name", battle.arena)
 	_sound = BattleSound.new()
 	add_child(_sound)
 	_sound.setup([spec.fighters[0].species, spec.fighters[1].species])
@@ -769,15 +771,18 @@ func _is_recording() -> bool:
 	return not Array(OS.get_cmdline_args()).filter(func(a: String) -> bool: return a.begins_with("--write-movie")).is_empty()
 
 
-func _parse_args(args: PackedStringArray) -> Dictionary:
+## The view's options from its user arguments (see the top of this file).
+static func parse_args(args: PackedStringArray) -> Dictionary:
 	var parsed := SpecFlags.parse(args)
 	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": "", "ai_debug": false,
-		"cobblemon_fx": false, "flag_spec": SpecFlags.to_spec(parsed.flags)}
+		"cobblemon_fx": true, "flag_spec": SpecFlags.to_spec(parsed.flags)}
 	for arg: String in parsed.rest:
 		if arg == "--ai-debug":
 			options.ai_debug = true
+		elif arg == "--mesh-fx":
+			options.cobblemon_fx = false
 		elif arg == "--cobblemon-fx":
-			options.cobblemon_fx = true
+			pass  # the default now; still accepted so older commands keep working
 		elif arg.begins_with("--clip-seconds="):
 			options.clip_seconds = arg.get_slice("=", 1).to_float()
 		elif arg.begins_with("--expect-checksum="):

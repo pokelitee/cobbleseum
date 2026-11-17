@@ -174,6 +174,7 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []]) -> voi
 	var credit := _label(cobblemon_credit(move_effects_credit), 28, Color.WHITE)
 	credit.position = Vector2(margin, viewport_size.y - 60 * _scale)
 	add_child(credit)
+	_fit_width(credit, viewport_size.x - 2 * margin)
 	_intro = _matchup(names)
 	_winner_band = ColorRect.new()
 	_winner_band.color = Color(0.04, 0.05, 0.1, 0.72)
@@ -593,6 +594,16 @@ func _label(text: String, font_size: int, colour: Color, display := false) -> La
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", roundi(12 * _scale))
 	return label
+
+
+## Shrinks a one-line label's font until its text fits `width`; the credit line naming the
+## move effects is wider than a vertical clip at full size.
+func _fit_width(label: Label, width: float) -> void:
+	var font := label.get_theme_font("font")
+	var font_size := label.get_theme_font_size("font_size")
+	var text_width := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x 		+ label.get_theme_constant("outline_size")
+	if text_width > width:
+		label.add_theme_font_size_override("font_size", floori(font_size * width / text_width))
 
 
 func _rect(colour: Color, position: Vector2, size: Vector2) -> ColorRect:

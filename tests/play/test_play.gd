@@ -130,3 +130,9 @@ func test_every_move_kind_has_a_wind_up_animation() -> void:
 	var quake: BattleMove = BattleMove.from_showdown("quake", {"name": "Quake", "category": "Physical", "type": "Ground",
 		"basePower": 100, "accuracy": 100, "pp": 10, "flags": {}, "target": "allAdjacent"}).move
 	assert_eq(BattleView.wind_up_role(quake), "physical", "area moves too")
+
+
+func test_moves_draw_in_cobblemon_style_unless_mesh_fx_is_asked_for() -> void:
+	assert_true(BattleView.parse_args(PackedStringArray()).cobblemon_fx, "the default")
+	assert_false(BattleView.parse_args(PackedStringArray(["--mesh-fx"])).cobblemon_fx)
+	assert_true(BattleView.parse_args(PackedStringArray(["--cobblemon-fx"])).cobblemon_fx, "the old flag still parses")
