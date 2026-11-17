@@ -700,11 +700,12 @@ func set_sight(chests: Array[Vector3], grounds: Array[float]) -> void:
 		surface.set_shader_parameter("SIGHT_GROUND_B", grounds[1])
 
 
-## Tints the field for a surge (ArenaSurge): `colour` at `strength` (0 for none), its glowing
-## cells at `phase`.
-func set_surge(colour: Color, strength: float, phase: float) -> void:
+## Shows a surge on the field (ArenaSurge): `kind` (its index in ArenaSurge.COLOURS) in
+## `colour` at `strength` (0 for none), its pattern at `phase`.
+func set_surge(kind: int, colour: Color, strength: float, phase: float) -> void:
 	for surface in _surfaces:
 		surface.set_shader_parameter("SURGE", Color(colour, strength))
+		surface.set_shader_parameter("SURGE_KIND", kind)
 		surface.set_shader_parameter("SURGE_RADIUS", FLOOR_RADIUS)
 		surface.set_shader_parameter("SURGE_PHASE", phase)
 

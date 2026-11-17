@@ -1,8 +1,10 @@
 class_name ArenaSurge
 extends Node3D
-## How a surge (concepts_brief.md §9.11) looks: the field's upward faces inside the arena wall
-## take the surge's colour, with pixel cells glowing on and off (the arena's surface shader), and
-## particles drift low over the ground: sparks, leaves, mist or a psychic shimmer. Like
+## How a surge (concepts_brief.md §9.11) looks: the field inside the arena wall takes a light
+## tint of the surge's colour, a glowing band along its edge and a pattern of its own in pixels
+## (the arena's surface shader): pulses running along lines (electric), mown stripes of grass
+## (grassy), drifting cloud patches (misty) or rings rippling out (psychic). Particles drift
+## low over the ground: sparks, leaves, mist motes or a psychic shimmer. Like
 ## ArenaWeather it follows the battle's state every frame, fading in and out over FADE_FRAMES,
 ## and its particles have fixed seeds.
 
@@ -11,8 +13,10 @@ const COLOURS := {"electric": Color(1.0, 0.85, 0.2), "grassy": Color(0.35, 0.9, 
 	"misty": Color(1.0, 0.6, 0.85), "psychic": Color(0.75, 0.4, 1.0)}
 ## Particles fill the arena from the ground up to this height.
 const PARTICLE_HEIGHT := 2.5
-## Glowing cells cycle at this rate (cycles a second at normal speed).
-const TWINKLE_RATE := 0.6
+## Misty Terrain's motes stay within this height of the ground.
+const MIST_HEIGHT := 0.8
+## How fast the ground's pattern moves (its phase per second at normal speed).
+const PATTERN_RATE := 0.6
 
 var _arena: Arena
 var _emitters := {}
@@ -62,7 +66,7 @@ func _apply() -> void:
 	var colour: Color = COLOURS.get(_shown, Color.BLACK)
 	var t := _blend if not _shown.is_empty() else 0.0
 	var eased := t * t * (3.0 - 2.0 * t)
-	_arena.set_surge(colour, eased, _frames * TWINKLE_RATE / Rules.TICK_RATE)
+	_arena.set_surge(COLOURS.keys().find(_shown), colour, eased, _frames * PATTERN_RATE / Rules.TICK_RATE)
 	for name: String in COLOURS:
 		var here := eased if name == _shown else 0.0
 		if here > 0.0 and not _emitters.has(name):
@@ -100,7 +104,7 @@ func _emitter(name: String) -> CPUParticles3D:
 	match name:
 		"electric":
 			# Quick bright sparks, brighter than white so they bloom.
-			quad.size = Vector2(0.07, 0.07)
+			quad.size = Vector2(0.1, 0.1)
 			_drift(particles, 160, 0.5, Vector3(0.0, 1.2, 0.0), 90.0)
 			particles.color = Color(colour.r * 2.4, colour.g * 2.4, colour.b * 1.6, 1.0)
 		"grassy":
@@ -108,9 +112,12 @@ func _emitter(name: String) -> CPUParticles3D:
 			_drift(particles, 120, 5.0, Vector3(0.4, 0.25, 0.2), 45.0)
 			particles.color = Color(colour.r, colour.g, colour.b, 0.9)
 		"misty":
-			quad.size = Vector2(0.6, 0.6)
-			_drift(particles, 90, 6.0, Vector3(0.2, 0.08, 0.1), 60.0)
-			particles.color = Color(colour.r, colour.g, colour.b, 0.22)
+			# Small motes kept low, so the mist hangs over the ground rather than the stands.
+			quad.size = Vector2(0.12, 0.12)
+			particles.emission_ring_height = MIST_HEIGHT
+			particles.position.y = MIST_HEIGHT * 0.5
+			_drift(particles, 140, 6.0, Vector3(0.2, 0.03, 0.1), 60.0)
+			particles.color = Color(colour.r * 1.3, colour.g * 1.3, colour.b * 1.3, 0.7)
 		"psychic":
 			quad.size = Vector2(0.07, 0.07)
 			_drift(particles, 140, 3.0, Vector3(0.0, 0.6, 0.0), 30.0)
