@@ -88,7 +88,7 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 	for id in picked:
 		picked_moves.append(data.convert_move(id).move)
 	for move in arena_moves:
-		var score := arena_value(move, types, Abilities.effect(ability), picked_moves)
+		var score := arena_value(move, types, ability, picked_moves)
 		if score > 0.0:
 			utilities.append({"id": move.id, "value": score})
 	var utility := _best(utilities, picked)
@@ -177,12 +177,14 @@ static func utility_value(move: BattleMove, physical: bool) -> float:
 	return 0.0
 
 
-## How useful an arena move is to a species of `types` with ability `ability` (its table
-## entry) and attacks `attacks`: what its condition swings the species' way, plus the chip it
-## does a typical foe.
-static func arena_value(move: BattleMove, types: Array, ability: Dictionary, attacks: Array[BattleMove]) -> float:
+## How useful an arena move is to a species of `types` with ability `ability` (an ID) and
+## attacks `attacks`: what its condition swings the species' way, plus the chip a sandstorm
+## does a typical foe (which is grounded, for a surge).
+static func arena_value(move: BattleMove, types: Array, ability: String, attacks: Array[BattleMove]) -> float:
 	var seconds := Rules.WEATHER_SECONDS
-	var gain := ArenaConditions.weather_gain(types, ability, {}, attacks, move.weather, seconds)
+	if not move.surge.is_empty():
+		return ArenaConditions.surge_gain(types, ability, attacks, move.surge, seconds, true) * ARENA_VALUE_SCALE
+	var gain := ArenaConditions.weather_gain(types, Abilities.effect(ability), {}, attacks, move.weather, seconds)
 	if move.weather == "sand":
 		gain += ArenaConditions.SAND_DAMAGE * seconds * FOE_SAND_SHARE
 	return gain * ARENA_VALUE_SCALE

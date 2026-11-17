@@ -64,8 +64,10 @@ var theme := {}
 var seats: Array[Transform3D] = []
 ## How far from the centre a camera may go before it would be inside the scenery.
 var camera_limit := Rules.ARENA_RADIUS + CAMERA_OVERHANG
-## The weather's look over the arena (ArenaWeather), which the view keeps in step with the battle.
+## The weather's look over the arena (ArenaWeather) and the surge's on its field (ArenaSurge),
+## which the view keeps in step with the battle.
 var weather: ArenaWeather
+var surge: ArenaSurge
 
 var _look: Dictionary
 ## The battle's ground: the floor is built at its heights.
@@ -157,6 +159,10 @@ func _build(names: Array) -> void:
 	weather.name = "Weather"
 	add_child(weather)
 	weather.setup(lights.sun, lights.environment, _add_particles(str(_look.particles)), _rng.seed)
+	surge = ArenaSurge.new()
+	surge.name = "Surge"
+	add_child(surge)
+	surge.setup(self, _rng.seed)
 
 
 func _colour(index: int) -> Color:
@@ -692,6 +698,15 @@ func set_sight(chests: Array[Vector3], grounds: Array[float]) -> void:
 		surface.set_shader_parameter("SIGHT_B", chests[1])
 		surface.set_shader_parameter("SIGHT_GROUND_A", grounds[0])
 		surface.set_shader_parameter("SIGHT_GROUND_B", grounds[1])
+
+
+## Tints the field for a surge (ArenaSurge): `colour` at `strength` (0 for none), its glowing
+## cells at `phase`.
+func set_surge(colour: Color, strength: float, phase: float) -> void:
+	for surface in _surfaces:
+		surface.set_shader_parameter("SURGE", Color(colour, strength))
+		surface.set_shader_parameter("SURGE_RADIUS", FLOOR_RADIUS)
+		surface.set_shader_parameter("SURGE_PHASE", phase)
 
 
 func _add_water(level: float) -> void:

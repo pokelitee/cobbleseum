@@ -16,6 +16,8 @@ const HELMET_LEAD := 20
 const SITRUS_HP := 100
 ## Moveset types at which an Expert Belt pays off: hitting many types super-effectively.
 const BELT_TYPES := 3
+## What a surge setter holds.
+const SURGE_EXTENDER := "terrainextender"
 
 static var _table := {}
 
@@ -56,7 +58,8 @@ static func can_evolve(species: Dictionary, data: BattleData) -> bool:
 ## carries no status-category move; Life Orb for a frail attacker; Rocky Helmet for a
 ## physically sturdy one; Expert Belt for wide coverage; Sitrus Berry for a lot of HP; then
 ## Black Sludge for Poison types and Leftovers for the rest. A species whose standard `ability`
-## or moveset sets a weather holds that weather's rock, after Eviolite.
+## or moveset sets a weather holds that weather's rock, after Eviolite, and one that sets a
+## surge a Terrain Extender.
 static func standard(species: Dictionary, moves: Array, data: BattleData, ability := "") -> String:
 	var base: Dictionary = species.get("baseStats", {})
 	var bulk := int(base.get("hp", 0)) + int(base.get("def", 0)) + int(base.get("spd", 0))
@@ -74,6 +77,9 @@ static func standard(species: Dictionary, moves: Array, data: BattleData, abilit
 			weather = move.weather
 	if not weather.is_empty():
 		return weather_rock(weather)
+	if not str(Abilities.effect(ability).get("sets_surge", "")).is_empty() \
+			or moves.any(func(m: BattleMove) -> bool: return not m.surge.is_empty()):
+		return SURGE_EXTENDER
 	if not status_moves and bulk >= VEST_BULK:
 		return "assaultvest"
 	if attack >= ORB_ATTACK and bulk < ORB_BULK:

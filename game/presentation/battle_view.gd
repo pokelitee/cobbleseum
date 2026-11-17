@@ -65,6 +65,11 @@ const WEATHER_STARTS := {"rain": "It started to rain!", "sun": "The sunlight tur
 	"sand": "A sandstorm kicked up!", "snow": "It started to snow!"}
 const WEATHER_ENDS := {"rain": "The rain stopped.", "sun": "The sunlight faded.",
 	"sand": "The sandstorm subsided.", "snow": "The snow stopped."}
+## Surges: what's said when each starts and ends (colours from ArenaSurge).
+const SURGE_STARTS := {"electric": "The ground crackles with electricity!", "grassy": "Grass grew over the field!",
+	"misty": "Mist swirled over the field!", "psychic": "The field turned weird!"}
+const SURGE_ENDS := {"electric": "The electricity faded.", "grassy": "The grass withered away.",
+	"misty": "The mist cleared.", "psychic": "The weirdness faded."}
 ## Metres a fighter must move in a tick to play its walk animation.
 const WALK_THRESHOLD := 0.01
 ## Hits taking at least this share of the defender's HP (or big ones) make the crowd cheer;
@@ -263,6 +268,7 @@ func _ready() -> void:
 			_hud.set_hp(side, 1.0, true)
 		_hud.set_intro_subtitle(arena_name + _weather_subtitle())
 		_arena.weather.snap(battle.conditions.weather)
+		_arena.surge.snap(battle.conditions.surge)
 		return
 	var start := 0
 	_end_tick = plan.slow.size()
@@ -282,6 +288,7 @@ func _ready() -> void:
 		_music.overtime()
 	_hud.set_intro_subtitle(arena_name + _weather_subtitle() + (" · Overtime" if overtime else ""))
 	_arena.weather.snap(battle.conditions.weather)
+	_arena.surge.snap(battle.conditions.surge)
 	while _caption_index < plan.captions.size() and int(plan.captions[_caption_index].tick) < _tick:
 		_caption_index += 1
 	_begin_tick()
@@ -669,6 +676,12 @@ func _play_events() -> void:
 			"weather_end":
 				if not _replaying:
 					_hud.flash_title(WEATHER_ENDS[event.weather], WEATHER_COLOURS[event.weather])
+			"surge":
+				if not _replaying and int(event.tick) > 0 and not event.get("renewed", false):
+					_hud.flash_title(SURGE_STARTS[event.surge], ArenaSurge.COLOURS[event.surge])
+			"surge_end":
+				if not _replaying:
+					_hud.flash_title(SURGE_ENDS[event.surge], ArenaSurge.COLOURS[event.surge])
 			"weather_damage":
 				_fx.announce(_views[event.side], "-%d" % event.damage, WEATHER_COLOURS[event.weather], 44)
 			"stunned":
@@ -712,36 +725,50 @@ func _play_events() -> void:
 					view.play_role("sad")
 
 
-## The weather shown last frame, its ticks left then, and the ticks it lasted in all.
+## The weather and surge shown last frame, their ticks left then, and the ticks they lasted in
+## all (for the HUD's timers).
 var _weather_seen := ""
 var _weather_left := 0
 var _weather_total := 1.0
+var _surge_seen := ""
+var _surge_left := 0
+var _surge_total := 1.0
 
 
-## Keeps the weather's look and the HUD's condition pills in step with the battle shown (the
-## instant replay's copy included), one video frame at a time.
+## Keeps the weather's and surge's looks and the HUD's condition pills in step with the battle
+## shown (the instant replay's copy included), one video frame at a time.
 func _sync_conditions() -> void:
 	var conditions := battle.conditions
 	_arena.weather.show_weather(conditions.weather)
 	_arena.weather.next_frame()
+	_arena.surge.show_surge(conditions.surge)
+	_arena.surge.next_frame()
 	var entries := []
 	if not conditions.weather.is_empty():
 		# A new weather (or a renewed one) sets the timer's full length.
 		if conditions.weather != _weather_seen or conditions.weather_ticks > _weather_left:
-			_weather_total = maxf(_weather_full(), 1.0)
+			_weather_total = maxf(_condition_full("weather"), 1.0)
 		var left := -1.0 if conditions.weather_ticks < 0 else conditions.weather_ticks / _weather_total
 		entries.append({"key": "weather", "text": WEATHER_PILLS[conditions.weather],
 			"colour": WEATHER_COLOURS[conditions.weather], "left": left})
 	_weather_seen = conditions.weather
 	_weather_left = conditions.weather_ticks
+	if not conditions.surge.is_empty():
+		if conditions.surge != _surge_seen or conditions.surge_ticks > _surge_left:
+			_surge_total = maxf(_condition_full("surge"), 1.0)
+		entries.append({"key": "surge", "text": conditions.surge,
+			"colour": ArenaSurge.COLOURS[conditions.surge], "left": conditions.surge_ticks / _surge_total})
+	_surge_seen = conditions.surge
+	_surge_left = conditions.surge_ticks
 	_hud.set_conditions(entries)
 
 
-## Ticks the shown weather lasted when set (its "weather" event), for the pill's timer.
-func _weather_full() -> float:
+## Ticks the shown weather or surge (`type`, its event's type) lasted when set, for the pill's
+## timer.
+func _condition_full(type: String) -> float:
 	for i in range(battle.events.size() - 1, -1, -1):
 		var event: Dictionary = battle.events[i]
-		if event.type == "weather":
+		if event.type == type:
 			return float(event.seconds) * Rules.TICK_RATE
 	return Rules.WEATHER_SECONDS * Rules.TICK_RATE
 

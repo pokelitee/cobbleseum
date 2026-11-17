@@ -5,7 +5,7 @@ extends RefCounted
 ##   deciding once per threat with DODGE_CHANCE;
 ## - uses the best-scoring ready move that's in range (move_score): damaging moves by power,
 ##   heals when hurt, buffs until +2, status on a foe without one, debuffs until -2, a
-##   weather that swings the battle its way (arena_score);
+##   weather or surge that swings the battle its way (arena_score);
 ## - otherwise keeps a range suited to its ready moves (close for melee, mid range for
 ##   ranged) and circles the opponent, switching direction now and then.
 ## Every choice draws from the side's own random stream.
@@ -133,8 +133,8 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 			return 0.0
 		BattleMove.Kind.STATUS:
 			if move.confuses:
-				return CONFUSE_SCORE if foe.confusion_ticks == 0 and not Abilities.status_immune(foe, "confusion") else 0.0
-			if not foe.status.is_empty() or Abilities.status_immune(foe, move.status):
+				return CONFUSE_SCORE if foe.confusion_ticks == 0 and not Abilities.status_immune(foe, "confusion") 					and not me.arena.blocks_status(foe, "confusion") else 0.0
+			if not foe.status.is_empty() or Abilities.status_immune(foe, move.status) or me.arena.blocks_status(foe, move.status):
 				return 0.0
 			for type: String in Rules.STATUS_IMMUNITIES.get(move.status, []):
 				if type in foe.types:
@@ -145,14 +145,22 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 	return 0.0
 
 
-## What setting `move`'s weather is worth now: the HP it would swing toward `me` against keeping
-## the current weather, or 0 if it's too little or the same weather has plenty of time left.
+## What setting `move`'s weather or surge is worth now: the HP it would swing toward `me` against
+## keeping the current one, or 0 if it's too little or the same one has plenty of time left.
 static func arena_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 	var arena := me.arena
-	var full := ArenaConditions.weather_ticks_for(me, move.weather) / float(Rules.TICK_RATE)
-	if arena.weather == move.weather and arena.weather_seconds_left() > full * RENEW_SHARE:
-		return 0.0
-	var score := arena.weather_value(me, foe, move.weather) * ARENA_SCORE_SCALE
+	var value := 0.0
+	if not move.surge.is_empty():
+		var full := ArenaConditions.surge_ticks_for(me) / float(Rules.TICK_RATE)
+		if arena.surge == move.surge and arena.surge_seconds_left() > full * RENEW_SHARE:
+			return 0.0
+		value = arena.surge_value(me, foe, move.surge)
+	else:
+		var full := ArenaConditions.weather_ticks_for(me, move.weather) / float(Rules.TICK_RATE)
+		if arena.weather == move.weather and arena.weather_seconds_left() > full * RENEW_SHARE:
+			return 0.0
+		value = arena.weather_value(me, foe, move.weather)
+	var score := value * ARENA_SCORE_SCALE
 	return score if score >= ARENA_MIN_SCORE else 0.0
 
 

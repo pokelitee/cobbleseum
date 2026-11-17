@@ -99,5 +99,12 @@
   "sandforce": {"name": "Sand Force", "value": 3, "weather_power": {"sand": {"types": ["Rock", "Ground", "Steel"], "factor": 1.3}}, "weather_immune": true},
   "overcoat": {"name": "Overcoat", "value": 3, "immune_flags": ["powder"], "weather_immune": true},
   "hydration": {"name": "Hydration", "value": 3, "weather_cures": "rain"},
-  "leafguard": {"name": "Leaf Guard", "value": 3, "weather_status_immune": "sun"}
+  "leafguard": {"name": "Leaf Guard", "value": 3, "weather_status_immune": "sun"},
+
+  "electricsurge": {"name": "Electric Surge", "value": 8, "sets_surge": "electric"},
+  "grassysurge": {"name": "Grassy Surge", "value": 8, "sets_surge": "grassy"},
+  "mistysurge": {"name": "Misty Surge", "value": 8, "sets_surge": "misty"},
+  "psychicsurge": {"name": "Psychic Surge", "value": 8, "sets_surge": "psychic"},
+  "surgesurfer": {"name": "Surge Surfer", "value": 3, "surge_stats": {"electric": {"spe": 2.0}}},
+  "grasspelt": {"name": "Grass Pelt", "value": 3, "surge_stats": {"grassy": {"def": 1.5}}}
 }
