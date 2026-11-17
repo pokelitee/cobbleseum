@@ -4,7 +4,19 @@ extends Node3D
 ## the simulation, and animations chosen by role (concepts_brief.md §7.4, §8). Roles the species
 ## has no animation for fall back to ProceduralMotion, applied to a node above the model.
 
+## Crossfades into a looping animation (idle, walk), and into a one-off one (an attack, a
+## flinch), which has to answer the battle at once.
 const CROSSFADE := 0.15
+const ONE_OFF_CROSSFADE := 0.05
+## An attack animation is played up to this much faster, and started partway in, so that its
+## strike lands as the move goes off (AnimationTiming.strike_time).
+const MAX_FIT_RATE := 2.0
+## The speed (m/s) a reference-height fighter's walk and run animations are played at normal
+## speed for; faster or slower movement plays them faster or slower, within GAIT_RATES.
+const WALK_PACE := 2.5
+const RUN_PACE := 4.5
+const GAIT_RATES := Vector2(0.6, 1.7)
+const REFERENCE_HEIGHT := 1.5
 ## Hit flash: frames it lasts and its peak strength.
 const FLASH_FRAMES := 6
 const FLASH_STRENGTH := 0.6
@@ -72,6 +84,10 @@ var _celebrating := false
 ## A one-off role to play after a delay (the intro cry), in frames.
 var _pending_role := ""
 var _pending_frames := 0
+## Strike times of attack animations by name, worked out as they're first played.
+var _strikes: Dictionary = {}
+## The idle animations (by role) that hold one pose, so the fighter breathes procedurally.
+var _still_idles: Dictionary = {}
 ## The looping roles a fighter returns to between one-off animations (see pad_base_animations).
 const BASE_ROLES: Array[String] = ["idle", "walk", "run", "air_idle", "air_fly", "sleep", "air_sleep", "happy"]
 ## Roles played once between base loops. Cobblemon loops many of these (hurt, angry, sad,
@@ -96,7 +112,12 @@ static func from_model(path: String, scale: float, model_height: float, skin := 
 	view._motion_root.add_child(model)
 	view._motion = ProceduralMotion.new(model_height, false)
 	view._player = model.get_node("AnimationPlayer")
-	view._animations = model.get_meta("animations", {})
+	view._animations = (model.get_meta("animations", {}) as Dictionary).duplicate()
+	# A walk or run that holds one pose (Bulbasaur's, among others) would slide a statue about;
+	# without it, the procedural layer hops instead.
+	for role in ["walk", "run"]:
+		if view._animations.has(role) and AnimationTiming.is_still(view._player.get_animation(view._animations[role])):
+			view._animations.erase(role)
 	var mesh: MeshInstance3D = model.get_node("Skeleton/Mesh")
 	view._mesh = mesh
 	if mesh.mesh != null:
@@ -138,7 +159,10 @@ static func from_model(path: String, scale: float, model_height: float, skin := 
 	# Seeded by the model, so renders of the same battle are identical.
 	view._rng.seed = hash(path)
 	view._overlay_wait = view._rng.randi_range(OVERLAY_GAP.x, OVERLAY_GAP.y)
-	view.play_idle()
+	for role in ["idle", "air_idle"]:
+		view._still_idles[role] = not view._animations.has(role) or AnimationTiming.is_still(view._player.get_animation(view._animations[role]))
+	view._base_role = ""
+	view._update_base()
 	return view
 
 
@@ -310,6 +334,7 @@ func set_velocity(velocity: Vector2) -> void:
 	_motion.velocity = velocity
 	if _moving:
 		_update_base()
+	_update_speed()
 
 
 ## Squashes briefly on landing (the end of a dodge).
@@ -379,7 +404,7 @@ func _next_overlay() -> void:
 ## Animation speed relative to normal: 0 freezes (hit-stop), below 1 is slow motion.
 func set_time_scale(scale: float) -> void:
 	_time_scale = scale
-	_player.speed_scale = scale
+	_update_speed()
 	if _overlay != null:
 		_overlay.speed_scale = scale
 
@@ -387,6 +412,16 @@ func set_time_scale(scale: float) -> void:
 func play_idle() -> void:
 	if not _fainted:
 		_play(_base_role, true)
+	_update_speed()
+
+
+## The main animation's speed: the time scale, times the gait's rate while walking or running.
+func _update_speed() -> void:
+	var rate := 1.0
+	if not _one_off and not _fainted and (_base_role == "walk" or _base_role == "run"):
+		var pace := (RUN_PACE if _base_role == "run" else WALK_PACE) * sqrt(height / REFERENCE_HEIGHT)
+		rate = clampf(_motion.velocity.length() / pace, GAIT_RATES.x, GAIT_RATES.y)
+	_player.speed_scale = _time_scale * rate
 
 
 ## Holds the first frame of the idle animation and stops animating (for a still portrait).
@@ -501,13 +536,16 @@ func _update_base() -> void:
 	if role == _base_role:
 		return
 	_base_role = role
+	_motion.breathes = _still_idles.get(role, false)
 	if not _one_off:
 		play_idle()
 
 
 ## Plays a one-off animation for a role (physical, special, status, recoil, faint, cry, shock,
-## angry, sad), or its procedural stand-in when the species has no animation for it.
-func play_role(role: String) -> void:
+## angry, sad), or its procedural stand-in when the species has no animation for it. A wind-up
+## gives `windup_seconds`, the time until the move goes off: the attack is fitted so its strike
+## lands then.
+func play_role(role: String, windup_seconds := 0.0) -> void:
 	if _fainted:
 		return
 	if role == "faint":
@@ -519,9 +557,10 @@ func play_role(role: String) -> void:
 			_player.pause()
 			_motion.faint(_faint_outline())
 		return
-	_one_off = _play(role, false)
+	_one_off = _play(role, false, windup_seconds)
 	if not _one_off and PROCEDURAL_ROLES.has(role):
-		_motion.start(PROCEDURAL_ROLES[role])
+		_motion.start(PROCEDURAL_ROLES[role], windup_seconds * Rules.TICK_RATE)
+	_update_speed()
 
 
 ## Breaks off a one-off animation (a feint's wind-up), blending back to the idle or walk.
@@ -531,13 +570,25 @@ func break_off() -> void:
 		play_idle()
 
 
-func _play(role: String, looping: bool) -> bool:
+func _play(role: String, looping: bool, fit_seconds := 0.0) -> bool:
 	if not _animations.has(role):
 		return false
 	var animation: String = _animations[role]
 	if looping:
 		_player.get_animation(animation).loop_mode = Animation.LOOP_LINEAR
-	_player.play(animation, CROSSFADE)
+		_player.play(animation, CROSSFADE)
+		return true
+	if fit_seconds <= 0.0:
+		_player.play(animation, ONE_OFF_CROSSFADE)
+		return true
+	if not _strikes.has(animation):
+		_strikes[animation] = AnimationTiming.strike_time(_player.get_animation(animation))
+	var strike: float = _strikes[animation]
+	var rate := clampf(strike / fit_seconds, 1.0, MAX_FIT_RATE)
+	_player.play(animation, ONE_OFF_CROSSFADE, rate)
+	var start := strike - fit_seconds * rate
+	if start > 0.0:
+		_player.seek(start, true)
 	return true
 
 
