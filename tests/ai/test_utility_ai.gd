@@ -320,12 +320,12 @@ func test_the_ai_switches_to_a_better_matchup_when_its_roll_succeeds() -> void:
 	profile.mistake_chance = 0.0
 	var ai := UtilityAI.new(profile, SimRandom.new(1))
 	var battle := _team_battle(ai)
-	for i in Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS) + 5:
+	for i in Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS) + 30:
 		battle.step()
 	assert_eq(battle.fighters[0].species_id, "caster", "switched to the Grass attacker")
 	profile.switch_chance = 0.0
 	var stays := _team_battle(UtilityAI.new(profile, SimRandom.new(1)))
-	for i in Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS) + 5:
+	for i in Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS) + 30:
 		stays.step()
 	assert_eq(stays.fighters[0].species_id, "blaze", "a profile without the chance never switches")
 

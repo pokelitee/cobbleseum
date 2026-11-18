@@ -129,6 +129,9 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		var lead: Fighter = battle.teams[side][0]
 		battle._place_at_start(lead)
 		battle.fighters.append(lead)
+		# The leads' send-out starts the switch cooldown like any other.
+		if team_size > 1:
+			battle._switch_cooldown[side] = Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS)
 	battle._count_benches()
 	battle._hash.start(HashingContext.HASH_SHA256)
 	return {"battle": battle}
