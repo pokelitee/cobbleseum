@@ -245,3 +245,12 @@ func test_a_side_can_switch_either_fighter_under_one_cooldown() -> void:
 	assert_eq(battle.fighters[2].place, 1)
 	assert_eq(battle.fighters[0].slot, 0, "the side's cooldown held the first back")
 	assert_false(battle.can_switch(0, 3))
+
+
+func test_doubles_hp_takes_a_team_of_twos_factor_at_any_size() -> void:
+	var two := _create(_spec(1, _four(), _four()), _scripted())
+	var six_team := _four() + _four() + _four()
+	var six := _create(_spec(1, six_team, six_team), _scripted())
+	assert_almost_eq(two.pace, Rules.team_hp_factor(2), 1e-9)
+	assert_almost_eq(six.pace, Rules.team_hp_factor(2), 1e-9)
+	assert_eq(six.fighters[0].max_hp, two.fighters[0].max_hp)

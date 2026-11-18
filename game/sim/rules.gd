@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 33
+const RULES_VERSION := 34
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -37,6 +37,9 @@ const SWITCH_COOLDOWN_SECONDS := 5.0
 const MIN_DOUBLES_TEAM := 2
 const DOUBLES_SPREAD := 2.5
 const SPREAD_FACTOR := 0.75
+## Doubles' pace: every fighter's HP takes the team factor of a team this size, whatever the
+## team's size (doubles_hp_factor()).
+const DOUBLES_PACE_SIZE := 2
 ## Doubles' ally moves (§9.11): Helping Hand boosts the ally's next damaging move (if it comes
 ## within HELPING_HAND_SECONDS); Dragon Cheer raises its critical-hit chance for a while; Follow
 ## Me and Rage Powder draw every foe's attacks, and Wide Guard blocks spread moves on the side,
@@ -220,6 +223,13 @@ const COOLDOWN_PP_FACTOR := 12.0
 ## The HP factor for team battles of `size` a side (at most): 1 for one-on-one.
 static func team_hp_factor(size: int) -> float:
 	return pow(maxf(size, 1.0), -TEAM_HP_EXPONENT)
+
+
+## The HP factor for doubles of any team size: a team of two's. With two out a side, each
+## fighter takes hits from two foes, so a knockout comes about as fast as in a singles team battle
+## a size smaller; this keeps a 4v4 at about 90-120 s and a 6v6 at about 2.5-3 minutes.
+static func doubles_hp_factor() -> float:
+	return team_hp_factor(DOUBLES_PACE_SIZE)
 
 
 static func overtime_factor(tick: int, overtime_seconds := OVERTIME_SECONDS) -> float:
