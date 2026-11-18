@@ -108,6 +108,9 @@ const ALLY_HARM_WEIGHT := 1.5
 ## Doubles spacing: within ALLY_SPACING metres of its ally a fighter edges away from it.
 const ALLY_SPACING := 3.0
 const ALLY_PUSH := 0.8
+## Helping Hand is worth the most once the boost it adds would take this share of the target's
+## max HP.
+const HELPING_SHARE := 0.1
 
 var profile: AIProfile
 var random: SimRandom
@@ -272,6 +275,57 @@ func _meet(me: Fighter, foe: Fighter) -> void:
 	_foe = foe
 
 
+## What one of doubles' ally moves is worth now, in move-value units (VALUE_SCALE at most); 0
+## when it would do nothing (no ally up, or nothing to gain):
+## - Helping Hand: half what the ally's best ready move would take from its target, with the
+##   ally ready to use it and not already helped;
+## - ally boosts and Dragon Cheer: a buff's worth while the ally can still use one;
+## - Follow Me and Rage Powder: drawing attacks off an ally worn below half while this fighter
+##   is still above half;
+## - Wide Guard: while a foe it can see winds up a spread move that reaches its side;
+## - team heals: a heal's worth for the HP both have lost.
+static func ally_move_value(battle: Battle, me: Fighter, move: BattleMove) -> float:
+	var ally := battle.ally_of(me)
+	var ally_up := ally != null and not ally.is_knocked_out()
+	if move.wide_guard:
+		for foe in battle.out(1 - me.side):
+			if foe.action != Fighter.Action.WINDUP or foe.is_knocked_out():
+				continue
+			var threat := foe.moves[foe.action_move]
+			if threat.kind == BattleMove.Kind.AREA and (Battle._gap(foe, me) <= Rules.AREA_RADIUS
+					or (ally_up and Battle._gap(foe, ally) <= Rules.AREA_RADIUS)):
+				return VALUE_SCALE
+		return 0.0
+	if move.team_heal:
+		var lost := 1.0 - float(me.hp) / me.max_hp
+		if ally_up:
+			lost += 1.0 - float(ally.hp) / ally.max_hp
+		return StandInAI.HEAL_SCORE * minf(lost, 1.0) if lost > 1.0 - StandInAI.HEAL_BELOW else 0.0
+	if not ally_up:
+		return 0.0
+	match move.kind:
+		BattleMove.Kind.REDIRECT:
+			var ally_share := float(ally.hp) / ally.max_hp
+			var my_share := float(me.hp) / me.max_hp
+			return StandInAI.HEAL_SCORE * (1.0 - ally_share) if ally_share < 0.5 and my_share > 0.5 else 0.0
+		BattleMove.Kind.ALLY:
+			if move.ally_effect == "helping":
+				if ally.helping_ticks > 0 or not ally.can_act():
+					return 0.0
+				var best := 0.0
+				var target := battle.target_of(ally)
+				for i in ally.moves.size():
+					if ally.move_ready(i) and ally.moves[i].is_damaging():
+						best = maxf(best, expected_damage(ally, target, ally.moves[i], battle.data()))
+				return VALUE_SCALE * minf(1.0, 0.5 * best / maxf(target.max_hp, 1.0) / HELPING_SHARE)
+			if move.ally_effect == "cheer":
+				return StandInAI.BUFF_SCORE if ally.cheer_ticks == 0 else 0.0
+			for stat: String in move.boosts:
+				if ally.boosts[stat] < StandInAI.STAGE_TARGET:
+					return StandInAI.BUFF_SCORE
+	return 0.0
+
+
 ## What a spread (area) move would do now in doubles: {"foes": how many foes it would hit,
 ## "share": the shares of their max HP it would take (×0.75 when it hits several) less
 ## ALLY_HARM_WEIGHT times the share of the ally's it would take}.
@@ -354,6 +408,10 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 				considerations.contact_cost = CONTACT_COST
 			if move.own_stat_drop() < 0 and _other_attack_on(me, i):
 				considerations.stage_cost = stage_cost(me, move)
+		elif move.is_ally_move():
+			considerations.value = _sample("value", ally_move_value(battle, me, move) / VALUE_SCALE)
+			if move.kind == BattleMove.Kind.HEAL:
+				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		else:
 			considerations.value = _sample("value", StandInAI.move_score(me, foe, move) / VALUE_SCALE)
 			if move.kind == BattleMove.Kind.HEAL:

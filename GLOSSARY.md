@@ -65,6 +65,10 @@ _Avoid_: slot (that's a member's position in its team), position
 The foe a fighter in doubles is locked onto, by its place. Its facing, melee dash, projectiles, feints and guards follow it.
 _Avoid_: focus, aggro
 
+**Ally move**:
+A doubles move that helps the ally instead of hitting a foe, such as Helping Hand, Follow Me or Wide Guard. Standard movesets never carry one.
+_Avoid_: support move, team move
+
 **Spread move**:
 An area move in doubles: it hits every foe in its ring, at ×0.75 each when it hits more than one, and the ally too if it's an "all adjacent" move such as Earthquake.
 _Avoid_: AoE, multi-target move

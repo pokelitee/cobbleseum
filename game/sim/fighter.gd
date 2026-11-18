@@ -17,6 +17,11 @@ var slot := 0
 ## it's locked onto (Battle.target_of).
 var place := 0
 var target_place := 0
+## Doubles' ally moves: ticks left on Helping Hand's boost (waiting for its next damaging move)
+## and on Dragon Cheer's, and whether the move it's using now is helped.
+var helping_ticks := 0
+var cheer_ticks := 0
+var helped := false
 ## Landing from its ball after a knockout: it can't be hit until it lands.
 var shielded := false
 var species_id: String

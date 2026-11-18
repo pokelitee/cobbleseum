@@ -611,6 +611,7 @@ Constants are tuned against targets for these numbers. `tools/batch.gd` runs see
 - **AI fix:** the stand-in AI weighs its own attacking stat stage, charges moves that lower it (Overheat, Draco Meteor) for the drop, and won't use them below −2, waiting for the stage to wear off instead. Since rules version 8 the utility AI honours that veto (its damage curve's floor used to turn it into a usable score) and adds a `stage_cost` consideration when the drop would weaken its other attacks on that stat, a boost thrown away included.
 - **Remaining draws:** mostly mutually resisted matchups with many dodged hits, such as Charizard vs Noivern.
 - **Rules version 7** (heal channel, 1,000 battles): median 30.7 s, 10th–90th percentile 16.5–64.3 s, draws 1.4%, heals 1.1% of move uses.
+- **Rules version 32** (ally moves, §9.11): singles, singles team battles and the standard doubles batch play exactly as under version 31 (standard movesets never pick ally moves). Paired probe (60 random 4v4s per move, seed 61, side A's second member carrying the move in place of its last standard move against the same battles without it): side A wins 33% without; with Helping Hand 53% (used 3.9 times a battle), Life Dew 50% (4.3), Coaching 47% (5.1), Follow Me 43% (0.9), Wide Guard 37% (1.1). Small samples, so roughly: a support move is worth about an attack or more to a doubles team, Helping Hand most.
 - **Rules version 31** (the doubles AI, §11): singles and singles team battles play exactly as before (the same two batches matched version 29 battle for battle). Doubles batch (100 random 4v4s, seed 41): median 73.5 s (62.3 s under version 30), 10th–90th percentile 48–111 s, 5.3 knockouts and 4 switches a battle, side A 54%, no time-ups; fighters dodge and guard more now that they watch both foes.
 - **Rules version 30** (doubles, §9.1): singles and singles team battles play exactly as before (the 300-battle one-on-one batch, seed 5, and the 150-battle 3v3 batch, seed 31, matched version 29 battle for battle, events included). A first doubles batch (100 random 4v4s, seed 41, before the doubles AI and pace) ran a median 62 s (42–89 s), with 4.9 knockouts and 4 switches a battle and no time-ups.
 - **Rules version 29** (the leads' send-out starts the switch cooldown, §9.1; 150 random 3v3s, seed 31): median 98.9 s (101 s under version 28), 3.5 switches a battle (2.9), side A 47.3% (54%). Until then the AI could switch on the first tick, before anything had happened. One-on-one has no switching, so it plays as before.
@@ -754,6 +755,21 @@ Arena moves set a condition on the whole arena or on one side for a while instea
 - **AI:** both AIs value a layer by what it takes from each send-out still to come on the foe's side (its healthy bench, plus half a switch): 1/8 of HP for Stealth Rock, the next Spikes layer's step, poison 8% (bad poison 4% more), a Speed drop 4%. Clearing is worth the hazards on its own side less those on the foe's. Nothing to send out, or the most layers already, is worth nothing.
 - **Presentation:** a badge per hazard in the effect row of its side's plate (ROCK, SPK×2, TSPK, WEB, with icons drawn in-house, no timer since they last), low-poly pieces around that side's start spot (pointed stones hovering and turning, grey and purple spikes, more each layer, a pale web lying flat), and callouts when one is laid, cleared, absorbed or bites.
 - **Determinism:** each side's layers are part of the hashed state in team battles.
+
+**Ally moves** (doubles, M17, rules version 32): moves that help the ally rather than hit a foe. Standard movesets never pick them (like hazards), so singles and the ranking are unchanged; specs, `--moves` and the setup screen give them. Without an ally up they fail ("But it failed!").
+
+| Move | Effect |
+|---|---|
+| Helping Hand | The ally's next damaging move, if it starts within 4 s, deals ×1.5 (every hit of it) |
+| Coaching, Aromatic Mist, Howl | The ally's stat stages (+1 Attack and Defense, +1 Sp. Def, +1 Attack); Howl raises the user's too |
+| Dragon Cheer | The ally's critical-hit chance is 1 in 8 for 12 s |
+| Life Dew, Jungle Healing, Lunar Blessing | A heal channel (§9.5) healing the user and the ally a quarter of max HP times the heal factor; the last two also cure a status condition |
+| Follow Me, Rage Powder | For 4 s every foe's attacks go for the user, whatever it's locked onto (Grass types and Overcoat ignore Rage Powder); 12 s cooldown; it ends early if the user faints or is recalled |
+| Wide Guard | For 1 s spread moves (area moves, spread status moves) don't touch the user's side; 12 s cooldown |
+
+- **AI:** the utility AI values each by what it gains: Helping Hand at half what the ally's best ready move would take from its target (only while the ally is ready and not already helped), ally boosts and Dragon Cheer as a buff while the ally can use one, Follow Me while its ally is below half HP and it is above, Wide Guard while it sees a foe winding up a spread move that reaches its side, team heals by the HP both have lost. The stand-in AI never uses them.
+- **Presentation:** callouts ("Helping Hand!", "Pumped up!", "Center of attention!", "Wide Guard!", "Protected!") with a glow on the fighter helped and the guard's look on both of a Wide Guard's side.
+- **Determinism:** the timers and the side's pull and Wide Guard are hashed in doubles.
 
 - **Left out:** Tailwind, Safeguard, Mist, Trick Room, Magic Room, Wonder Room, Gravity, Quick Guard, Wide Guard and Fairy Lock (special cases, §9.3); Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide and Steel Roller's surge readings; the seeds, Protosynthesis, Quark Drive and other abilities of species missing from the roster; Sand Veil and Snow Cloak (accuracy).
 

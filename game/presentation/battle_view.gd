@@ -955,6 +955,26 @@ func _play_events() -> void:
 					_event_view(event, true).play_role("recoil")
 			"dodged":
 				_fx.on_dodge(_event_view(event))
+			"support":
+				var helped := _event_view(event, true)
+				_move_fx.aura(helped, RISE_COLOUR, true)
+				if event.effect == "helping":
+					_fx.announce(helped, "Helping Hand!", RISE_COLOUR, 52)
+				elif event.effect == "cheer":
+					_fx.announce(helped, "Pumped up!", RISE_COLOUR, 52)
+			"redirect":
+				_move_fx.aura(_event_view(event), Color(1.0, 0.85, 0.4), true)
+				_fx.announce(_event_view(event), "Center of attention!", Color(1.0, 0.85, 0.4), 52)
+			"wide_guard":
+				for index in _views.size():
+					if battle.fighters[index].side == int(event.side) and not battle.fighters[index].is_knocked_out():
+						_move_fx.guard(_views[index])
+				_fx.announce(_event_view(event), "Wide Guard!", GUARD_CALLOUT, 56)
+			"wide_guarded":
+				_move_fx.guard(_event_view(event), true)
+				_fx.announce(_event_view(event), "Protected!", GUARD_CALLOUT, 52)
+			"failed":
+				_fx.announce(_event_view(event), "But it failed!", Color(0.85, 0.85, 0.9), 48)
 			"knockout":
 				# Only the final knockout ends the battle: the winner celebrates and the music cuts.
 				var final := int(event.get("left", 0)) == 0

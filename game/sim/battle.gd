@@ -60,8 +60,10 @@ const FIGHTER_STATE_SIZE := 32
 ## Values hashed per side for team battles: the slot out, the send-out countdown, the shield,
 ## the switch cooldown and the layers of each entry hazard.
 const TEAM_STATE_SIZE := 8
-## Values hashed per place in doubles: its slot out, send-out countdown, shield and target.
-const PLACE_STATE_SIZE := 4
+## Values hashed per place in doubles: its slot out, send-out countdown, shield and target, and
+## its fighter's Helping Hand and Dragon Cheer timers and whether its move is helped (then per
+## side, the pull's and Wide Guard's ticks left).
+const PLACE_STATE_SIZE := 7
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
@@ -75,6 +77,10 @@ var _switch_cooldown := PackedInt32Array([0, 0])
 ## doubles only those aimed at the fighters knocked out, by index).
 var _drop_projectiles := false
 var _dropped_targets: Array[int] = []
+## Doubles' ally moves, per side: Follow Me's or Rage Powder's pull ({"fighter", "ticks",
+## "powder"}, {} for none) and ticks left of Wide Guard.
+var _redirects: Array[Dictionary] = [{}, {}]
+var _wide_guard := PackedInt32Array([0, 0])
 ## Whether the state hashed includes the teams' (only when a side has more than one member,
 ## so one-on-one battles hash exactly as before).
 var _hash_teams := false
@@ -274,11 +280,15 @@ func ally_of(fighter: Fighter) -> Fighter:
 	return fighters[(1 - fighter.place) * 2 + fighter.side] if doubles else null
 
 
-## The foe `fighter` is aimed at: in singles the one foe out; in doubles the foe in its target's
+## The foe `fighter` is aimed at: in singles the one foe out; in doubles a foe drawing attacks
+## (Follow Me, Rage Powder, which Grass types and Overcoat ignore), else the foe in its target's
 ## place, or the other foe while that one is down (until a newcomer takes its place).
 func target_of(fighter: Fighter) -> Fighter:
 	if not doubles:
 		return fighters[1 - fighter.side]
+	var pull: Dictionary = _redirects[1 - fighter.side]
+	if not pull.is_empty() and not (pull.powder and ("Grass" in fighter.types or fighter.ability == "overcoat")):
+		return pull.fighter
 	var locked := fighters[fighter.target_place * 2 + 1 - fighter.side]
 	if not locked.is_knocked_out():
 		return locked
@@ -381,6 +391,8 @@ func step() -> void:
 		var index := i if tick % 2 == 0 else i ^ 1
 		_act(fighters[index], intents[index])
 	_move_projectiles()
+	if doubles:
+		_tick_side_moves()
 	if _drop_projectiles:
 		_drop_projectiles = false
 		projectiles.clear()
@@ -423,6 +435,8 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 		fighter.cooldowns[i] = maxi(0, fighter.cooldowns[i] - 1)
 	fighter.feint_cooldown = maxi(0, fighter.feint_cooldown - 1)
 	fighter.guard_cooldown = maxi(0, fighter.guard_cooldown - 1)
+	fighter.helping_ticks = maxi(0, fighter.helping_ticks - 1)
+	fighter.cheer_ticks = maxi(0, fighter.cheer_ticks - 1)
 	if fighter.dodge_charges < Rules.DODGE_CHARGES:
 		fighter.dodge_recharge_ticks += 1
 		if fighter.dodge_recharge_ticks >= fighter.dodge_recharge_total:
@@ -532,6 +546,10 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 				fighter.action_ticks = conditions.windup_against(foe, move, fighter.windup_ticks(move))
 				fighter.action_move = use
 				fighter.cooldowns[use] = move.cooldown_ticks
+				# Helping Hand boosts the next damaging move (every hit of it).
+				fighter.helped = fighter.helping_ticks > 0 and move.is_damaging()
+				if fighter.helped:
+					fighter.helping_ticks = 0
 				_fevent("windup", fighter, _aimed(foe, {"move": move.id}))
 			elif fighter.can_feint(feint) and _gap(fighter, foe) <= fighter.moves[feint].reach():
 				var move := fighter.moves[feint]
@@ -628,8 +646,20 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 	fighter.action = Fighter.Action.RECOVERY
 	fighter.action_ticks = move.recovery_ticks
 	if move.is_self():
-		if move.kind == BattleMove.Kind.HEAL:
+		if move.kind == BattleMove.Kind.HEAL and move.team_heal:
+			_team_heal(fighter, move)
+		elif move.kind == BattleMove.Kind.HEAL:
 			_heal(fighter, roundi(fighter.max_hp * conditions.heal_share(fighter, move)), move.id)
+		elif move.kind == BattleMove.Kind.ALLY:
+			_support(fighter, move)
+		elif move.kind == BattleMove.Kind.REDIRECT:
+			_draw_attacks(fighter, move)
+		elif move.kind == BattleMove.Kind.ARENA and move.wide_guard:
+			if doubles:
+				_wide_guard[fighter.side] = Rules.seconds_to_ticks(Rules.WIDE_GUARD_SECONDS)
+				_fevent("wide_guard", fighter, {"move": move.id})
+			else:
+				_fevent("failed", fighter, {"move": move.id})
 		elif move.kind == BattleMove.Kind.ARENA and not move.hazard.is_empty():
 			_lay_hazard(fighter, move)
 		elif move.kind == BattleMove.Kind.ARENA and move.clears == "both":
@@ -728,6 +758,73 @@ func _fire(fighter: Fighter, foe: Fighter, move_index: int, direction: Vector2) 
 	_fevent("fire", fighter, _aimed(foe, {"move": move.id}))
 
 
+## An ALLY move (doubles): boosts or a boon for the ally (and the user, for Howl). Without an
+## ally up it fails.
+func _support(fighter: Fighter, move: BattleMove) -> void:
+	var helped: Array[Fighter] = []
+	if move.with_user:
+		helped.append(fighter)
+	var ally := ally_of(fighter)
+	if ally != null and not ally.is_knocked_out():
+		helped.append(ally)
+	if helped.is_empty() or (helped == [fighter] and move.ally_effect != ""):
+		_fevent("failed", fighter, {"move": move.id})
+		return
+	for target in helped:
+		if target != fighter:
+			_fevent("support", fighter, _aimed(target, {"move": move.id, "effect": move.ally_effect}))
+		if not move.boosts.is_empty():
+			_boost(target, move.boosts, move.id)
+		match move.ally_effect:
+			"helping":
+				target.helping_ticks = Rules.seconds_to_ticks(Rules.HELPING_HAND_SECONDS)
+			"cheer":
+				target.cheer_ticks = Rules.seconds_to_ticks(Rules.CHEER_SECONDS)
+
+
+## A team heal: the user and its ally up each heal their share, and with Jungle Healing or Lunar
+## Blessing lose their status condition.
+func _team_heal(fighter: Fighter, move: BattleMove) -> void:
+	var healed: Array[Fighter] = [fighter]
+	var ally := ally_of(fighter)
+	if ally != null and not ally.is_knocked_out():
+		healed.append(ally)
+	for target in healed:
+		_heal(target, roundi(target.max_hp * conditions.heal_share(target, move)), move.id)
+		if move.cures and not target.status.is_empty():
+			_end_status(target)
+
+
+## Follow Me and Rage Powder: in doubles every foe's attacks go for the user for a while.
+func _draw_attacks(fighter: Fighter, move: BattleMove) -> void:
+	if not doubles:
+		_fevent("failed", fighter, {"move": move.id})
+		return
+	_redirects[fighter.side] = {"fighter": fighter, "ticks": Rules.seconds_to_ticks(Rules.REDIRECT_SECONDS),
+		"powder": move.flags.has("powder")}
+	_fevent("redirect", fighter, {"move": move.id})
+
+
+## Doubles' side moves running down: a pull ends with its time or its fighter (knocked out or
+## recalled), Wide Guard with its time.
+func _tick_side_moves() -> void:
+	for side in 2:
+		_wide_guard[side] = maxi(0, _wide_guard[side] - 1)
+		var pull := _redirects[side]
+		if pull.is_empty():
+			continue
+		pull.ticks -= 1
+		var fighter: Fighter = pull.fighter
+		if pull.ticks <= 0 or fighter.is_knocked_out() or not fighters.has(fighter):
+			_redirects[side] = {}
+			_fevent("redirect_end", fighter, {})
+
+
+## Whether Wide Guard is up on `side` (doubles).
+func wide_guarded(side: int) -> bool:
+	return doubles and _wide_guard[side] > 0
+
+
 ## A spread (area) move going off in doubles: it hits every foe in its ring, and the ally too for
 ## "all" moves, at Rules.SPREAD_FACTOR each when it hits more than one.
 func _strike_area(fighter: Fighter, move: BattleMove) -> void:
@@ -748,6 +845,9 @@ func _strike_area(fighter: Fighter, move: BattleMove) -> void:
 		if other.is_invulnerable():
 			_fevent("miss", fighter, {"move": move.id})
 			_fevent("dodged", other, {"move": move.id})
+		elif wide_guarded(other.side):
+			_fevent("miss", fighter, _aimed(other, {"move": move.id}))
+			_fevent("wide_guarded", other, {"move": move.id})
 		elif other.guards_against(fighter.position - other.position):
 			_guarded(fighter, other, move)
 		else:
@@ -783,6 +883,10 @@ func _move_projectiles() -> void:
 		if closest.distance_to(target.position) <= target.radius + Rules.PROJECTILE_RADIUS and not target.is_knocked_out() and level:
 			if target.guards_against(-(projectile.velocity as Vector2)):
 				_guarded(owner, target, move)
+				continue
+			if move.spread != "" and wide_guarded(target.side):
+				_fevent("miss", owner, _aimed(target, {"move": move.id}))
+				_fevent("wide_guarded", target, {"move": move.id})
 				continue
 			if not target.is_invulnerable():
 				if move.is_damaging():
@@ -1091,6 +1195,9 @@ static func _leave(fighter: Fighter) -> void:
 	fighter.intimidate_ticks = 0
 	fighter.speed_boost_ticks = 0
 	fighter.weak_armor_ticks = 0
+	fighter.helping_ticks = 0
+	fighter.cheer_ticks = 0
+	fighter.helped = false
 
 
 ## The team slot `side` sends out next: its first member healthy and on the bench, or -1.
@@ -1486,7 +1593,7 @@ static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data:
 	if move.fixed_damage > 0:
 		return {"damage": move.fixed_damage, "crit": false, "effectiveness": 1.0}
 	var parts := damage_parts(attacker, defender, move, data)
-	var crit := random.chance(Rules.CRIT_CHANCE)
+	var crit := random.chance(Rules.CHEER_CRIT_CHANCE if attacker.cheer_ticks > 0 else Rules.CRIT_CHANCE)
 	var roll := random.range_float(Rules.ROLL_MIN, Rules.ROLL_MAX)
 	# Critical hits get through screens.
 	var total: float = parts.base * parts.factor * (Rules.CRIT_MULTIPLIER if crit else parts.screen) * roll
@@ -1506,6 +1613,8 @@ static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove,
 	var main_series := Abilities.effectiveness(attacker, defender, move, data.effectiveness(move.type, defender.types))
 	var effectiveness := Rules.compressed_effectiveness(main_series)
 	var factor := stab * effectiveness * Abilities.taken_factor(defender, move, main_series) * Items.power_factor(attacker, move, main_series) 		* attacker.arena.damage_factor(attacker, defender, move)
+	if attacker.helped:
+		factor *= Rules.HELPING_HAND_FACTOR
 	return {"base": base, "factor": factor, "screen": attacker.arena.screen_factor(attacker, defender, move),
 		"effectiveness": effectiveness}
 
@@ -1548,7 +1657,7 @@ func _time_up_result() -> Result:
 ## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
 func _record_state() -> void:
 	_state.resize(FIGHTER_STATE_SIZE * fighters.size() + 4 + 2 * ArenaConditions.SCREENS.size() + projectiles.size() * 3
-		+ (TEAM_STATE_SIZE * 2 if _hash_teams else 0) + (PLACE_STATE_SIZE * fighters.size() if doubles else 0))
+		+ (TEAM_STATE_SIZE * 2 if _hash_teams else 0) + ((PLACE_STATE_SIZE * fighters.size() + 4) if doubles else 0))
 	var i := 0
 	for fighter in fighters:
 		_state[i] = fighter.position.x
@@ -1613,7 +1722,14 @@ func _record_state() -> void:
 			_state[i + 1] = _send_out_ticks[index]
 			_state[i + 2] = 1.0 if fighters[index].shielded else 0.0
 			_state[i + 3] = fighters[index].target_place
+			_state[i + 4] = fighters[index].helping_ticks
+			_state[i + 5] = fighters[index].cheer_ticks
+			_state[i + 6] = 1.0 if fighters[index].helped else 0.0
 			i += PLACE_STATE_SIZE
+		for side in 2:
+			_state[i] = _redirects[side].get("ticks", 0)
+			_state[i + 1] = _wide_guard[side]
+			i += 2
 	_hash.update(_state.to_byte_array())
 
 
