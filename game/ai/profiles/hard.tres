@@ -10,3 +10,4 @@ mistake_chance = 0.02
 dodge_chance = 0.8
 feint_chance = 0.4
 guard_chance = 0.9
+switch_chance = 0.7

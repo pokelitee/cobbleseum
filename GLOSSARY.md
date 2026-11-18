@@ -196,6 +196,10 @@ _Avoid_: simple profile
 How much of a fighter's damage comes from close range, from 0 to 1: its melee and area moves' share of the damage per second its whole moveset would deal the foe. It sets the utility AI's spacing: a **kiter** (under 0.5) keeps its range, a **brawler** presses in.
 _Avoid_: style score, aggression
 
+**Trade**:
+How a fighter fares against its foe, as the utility AI weighs it for switching: how much faster it would wear the foe down than be worn down, from both sides' expected damage, its HP and its status.
+_Avoid_: matchup (that's two species set against each other)
+
 **Opening**:
 A moment a kiter goes in for a melee strike: the foe recovering, asleep, frozen, stunned, or out of dodges with its guard on cooldown, or a feint about to be thrown.
 _Avoid_: window (alone), chance

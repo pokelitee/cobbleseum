@@ -9,3 +9,4 @@ decision_interval_ticks = 4
 mistake_chance = 0.1
 dodge_chance = 0.5
 guard_chance = 0.3
+switch_chance = 0.3
