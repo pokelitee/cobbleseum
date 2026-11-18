@@ -70,6 +70,8 @@ static func flags_for(setup: Dictionary) -> Dictionary:
 		for key: String in ["form", "moves", "ability", "item"]:
 			if not str(sides[side].get(key, "")).is_empty():
 				flags[prefix + key] = str(sides[side][key])
+		if not str(sides[side].get("bench", "")).is_empty():
+			flags[prefix + "team"] = "%s,%s" % [sides[side].species, sides[side].bench]
 	return flags
 
 

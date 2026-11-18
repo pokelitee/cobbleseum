@@ -90,3 +90,27 @@ func test_flags_without_a_seed_stay_without_one() -> void:
 	spec.erase("seed")
 	assert_eq(SpecFlags.to_flags(spec), flags, "so each battle from them gets a new seed")
 	assert_eq(Array(SpecFlags.to_args(flags)), ["--watch=garchomp", "--vs=hydreigon", "--ai=hard", "--vs-ai=easy", "--arena=cave"])
+
+
+func test_team_flags_list_each_side_s_whole_team() -> void:
+	var parsed := SpecFlags.parse(PackedStringArray(["--watch", "--team=Pikachu,charizard", "--vs-team=garchomp,gengar,venusaur",
+		"--moves=thunderbolt", "--shiny=a", "--seed=4"]))
+	assert_eq(parsed.rest.size(), 0, "a bare --watch is a flag")
+	var spec := SpecFlags.to_spec(parsed.flags)
+	assert_false(spec.has("error"), str(spec.get("error", "")))
+	assert_eq(spec.fighters[0].team.map(func(m: Dictionary) -> String: return m.species), ["pikachu", "charizard"])
+	assert_eq(spec.fighters[0].team[0].moves, ["thunderbolt"], "lead flags go to the first member")
+	assert_true(spec.fighters[0].team[0].shiny)
+	assert_false(spec.fighters[0].team[1].has("moves"))
+	assert_eq(spec.fighters[1].team.size(), 3)
+	assert_eq(spec.fighters[0].ai, "ranked")
+	# The flags round-trip, so a battle from them can be handed on.
+	var again := SpecFlags.to_spec(SpecFlags.parse(SpecFlags.from_spec(spec)).flags)
+	assert_eq(again, spec)
+
+
+func test_team_flags_are_checked() -> void:
+	assert_true(SpecFlags.to_spec({"watch": "pikachu", "team": "raichu,pichu"}).error.contains("starts with raichu"))
+	assert_true(SpecFlags.to_spec({"watch": "", "team": "a,b,c,d,e,f,g"}).error.contains("1-6"))
+	assert_true(SpecFlags.to_spec({"watch": ""}).error.contains("--team"))
+	assert_eq(SpecFlags.to_spec({"watch": "pikachu", "team": "pikachu"}).fighters[0].team.size(), 1)

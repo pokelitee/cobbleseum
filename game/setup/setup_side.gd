@@ -8,7 +8,10 @@ extends PanelContainer
 signal changed
 
 ## The member's keys, matching SetupScreen.flags_for(): "" for each one's default.
-const DEFAULT_MEMBER := {"species": "", "form": "", "shiny": "", "ability": "", "item": "", "moves": "", "ai": Controllers.DEFAULT_AI}
+## A side's choices: its first member's species and settings, its AI, and "bench", the rest of
+## its team (team battles) as comma-separated species IDs.
+const DEFAULT_MEMBER := {"species": "", "form": "", "shiny": "", "ability": "", "item": "", "moves": "", "ai": Controllers.DEFAULT_AI,
+	"bench": ""}
 const ROLLED := "Rolled by the seed"
 const SHINY_CHOICES := {"": ROLLED, "no": "No", "yes": "Yes"}
 const PREVIEW_DELAY := 0.15
@@ -33,6 +36,13 @@ var _moves: LineEdit
 var _moves_hint: Label
 var _preview_wait := -1.0
 var _player := false
+## Team slots: buttons for the first member and the bench, the slot being picked (0 for the
+## first member, whose settings the details edit), and the details grid, which bench members
+## don't use (they bring their standard moves, ability and item).
+var _slot_buttons: Array[Button] = []
+var _slot := 0
+var _grid: GridContainer
+var _bench_hint: Label
 
 
 func _init(side_index: int, data: BattleData) -> void:
@@ -59,6 +69,25 @@ func _init(side_index: int, data: BattleData) -> void:
 	_types.add_theme_constant_override("separation", 8)
 	_types.alignment = BoxContainer.ALIGNMENT_CENTER
 	header.add_child(_types)
+
+	var slots := HBoxContainer.new()
+	slots.add_theme_constant_override("separation", 6)
+	column.add_child(slots)
+	slots.add_child(_caption("Team"))
+	for i in Rules.MAX_TEAM:
+		var button := Button.new()
+		button.toggle_mode = true
+		button.clip_text = true
+		button.custom_minimum_size.x = 92
+		button.tooltip_text = "Pick this team slot's species from the list"
+		button.pressed.connect(_pick_slot.bind(i))
+		slots.add_child(button)
+		_slot_buttons.append(button)
+	var remove := Button.new()
+	remove.text = "Remove"
+	remove.tooltip_text = "Takes the selected bench member out of the team"
+	remove.pressed.connect(_remove_slot)
+	slots.add_child(remove)
 
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 20)
@@ -88,7 +117,11 @@ func _init(side_index: int, data: BattleData) -> void:
 	_preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_preview.custom_minimum_size.y = 240
 	details.add_child(_preview)
+	_bench_hint = _caption("Bench members bring their standard moves, ability and item.")
+	_bench_hint.visible = false
+	details.add_child(_bench_hint)
 	var grid := GridContainer.new()
+	_grid = grid
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 14)
 	grid.add_theme_constant_override("v_separation", 8)
@@ -118,6 +151,7 @@ func _init(side_index: int, data: BattleData) -> void:
 	_moves_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_child(_moves_hint)
 	_filter()
+	_refresh_slots()
 
 
 ## The member as chosen: DEFAULT_MEMBER's keys.
@@ -140,6 +174,67 @@ func set_member(chosen: Dictionary) -> void:
 	_choose(_form, _member.form)
 	_choose(_ability, _member.ability)
 	_choose(_item, _member.item)
+	_slot = 0
+	_refresh_slots()
+
+
+## The bench's species IDs, in team order.
+func bench() -> Array[String]:
+	var ids: Array[String] = []
+	for id in str(_member.bench).split(",", false):
+		ids.append(id)
+	return ids
+
+
+## Picks team slot `index` for the species list: the first member (the details edit it) or a
+## bench member, the next empty slot included.
+func _pick_slot(index: int) -> void:
+	_slot = mini(index, bench().size() + 1)
+	_refresh_slots()
+	_show_slot_species()
+
+
+func _remove_slot() -> void:
+	var ids := bench()
+	if _slot == 0 or _slot > ids.size():
+		return
+	ids.remove_at(_slot - 1)
+	_member.bench = ",".join(ids)
+	_slot = mini(_slot, ids.size())
+	_refresh_slots()
+	_show_slot_species()
+	changed.emit()
+
+
+## The slot buttons: each member's name, "+" on the next empty slot (while the team has room),
+## the picked one pressed; the details only for the first member.
+func _refresh_slots() -> void:
+	var ids := bench()
+	for i in _slot_buttons.size():
+		var button := _slot_buttons[i]
+		var id: String = _member.species if i == 0 else (ids[i - 1] if i - 1 < ids.size() else "")
+		button.visible = i <= ids.size() + 1
+		button.text = "%d %s" % [i + 1, _data.species.get(id, {}).get("name", id)] if not id.is_empty() else "%d +" % (i + 1)
+		button.set_pressed_no_signal(i == _slot)
+	_grid.visible = _slot == 0
+	_bench_hint.visible = _slot > 0
+
+
+## The name, types and preview for the picked slot's species, and its entry selected in the list.
+func _show_slot_species() -> void:
+	var ids := bench()
+	var id: String = _member.species if _slot == 0 or _slot > ids.size() else ids[_slot - 1]
+	if _slot == 0:
+		var index := _species.find_custom(func(entry: Array) -> bool: return entry[1] == id)
+		if index >= 0:
+			_select_species(index, false)
+		return
+	_name.text = str(_data.species.get(id, {}).get("name", "Pick a species")) if not id.is_empty() else "Pick a species"
+	for child in _types.get_children():
+		child.queue_free()
+	for type: String in _data.species.get(id, {}).get("types", []):
+		_types.add_child(_pill(type))
+	_preview_wait = PREVIEW_DELAY
 
 
 ## Whether a player controls this side (play mode), which leaves it without an AI.
@@ -197,6 +292,18 @@ func _on_search_input(event: InputEvent) -> void:
 
 func _on_species_selected(index: int) -> void:
 	var id: String = _list.get_item_metadata(index)
+	if _slot > 0:
+		var ids := bench()
+		if _slot > ids.size():
+			ids.append(id)
+			_slot = ids.size()
+		else:
+			ids[_slot - 1] = id
+		_member.bench = ",".join(ids)
+		_refresh_slots()
+		_show_slot_species()
+		changed.emit()
+		return
 	if id == _member.species:
 		return
 	_select_species(_species.find_custom(func(entry: Array) -> bool: return entry[1] == id), true)
@@ -256,10 +363,18 @@ func _select_species(index: int, reset: bool) -> void:
 	_moves_hint.text = "Comma-separated names, e.g. %s" % ", ".join(names.slice(0, 2)) if not names.is_empty() \
 		else str(moveset.get("error", ""))
 	_preview_wait = PREVIEW_DELAY
+	if not _slot_buttons.is_empty():
+		_refresh_slots()
 	changed.emit()
 
 
 func _show_preview() -> void:
+	var ids := bench()
+	if _slot > 0:
+		var entry: Dictionary = _data.roster.get(ids[_slot - 1] if _slot <= ids.size() else "", {})
+		if not entry.is_empty():
+			_preview.show_model(entry, Appearance.resolve(entry, {}, BattleView.MODELS_DIR))
+		return
 	var entry: Dictionary = _data.roster.get(_member.species, {})
 	if entry.is_empty():
 		return
