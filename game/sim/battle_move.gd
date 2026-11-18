@@ -93,6 +93,10 @@ var fixed_damage := 0
 var self_destructs := false
 ## Secondary effects rolled on hit: {"chance": 0-100, "status"?, "confuses"?, "boosts"?, "self_boosts"?}.
 var secondaries: Array[Dictionary] = []
+## Doubles (M17): which fighters a spread move reaches: "foes" (Showdown's allAdjacentFoes: every
+## foe, and for status moves a projectile at each), "all" (allAdjacent: the ally too) or "" for a
+## single-target move. Singles reads it as one opponent either way.
+var spread := ""
 
 
 ## The attacking stat this move's damage uses, after stages (and burn for Attack).
@@ -116,6 +120,7 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 	move.physical = data.get("category") == "Physical"
 	move.power = int(data.get("basePower", 0))
 	var target: String = data.get("target", "normal")
+	move.spread = {"allAdjacentFoes": "foes", "allAdjacent": "all"}.get(target, "")
 	var flags: Dictionary = data.get("flags", {})
 	move.flags = flags
 	var priority := int(data.get("priority", 0))

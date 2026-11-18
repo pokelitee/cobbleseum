@@ -51,7 +51,23 @@ Recalling the fighter out for a healthy member of its team on the bench, which l
 _Avoid_: swap, substitute
 
 **Side**:
-One of a battle's two places, A or B. Every matchup is played from both sides.
+One of a battle's two halves, A or B. Every matchup is played from both sides.
+
+**Doubles**:
+A battle with two of each side's team out at once. A battle with one out a side is **singles**.
+_Avoid_: double battle, 2v2 (that's a team size), format (that's a clip's shape)
+
+**Place**:
+Where one of a side's fighters out stands in doubles, 0 or 1; a send-out after a knockout refills the same place.
+_Avoid_: slot (that's a member's position in its team), position
+
+**Target**:
+The foe a fighter in doubles is locked onto, by its place. Its facing, melee dash, projectiles, feints and guards follow it.
+_Avoid_: focus, aggro
+
+**Spread move**:
+An area move in doubles: it hits every foe in its ring, at ×0.75 each when it hits more than one, and the ally too if it's an "all adjacent" move such as Earthquake.
+_Avoid_: AoE, multi-target move
 
 **Tick**:
 One step of a battle. There are 30 ticks a second.

@@ -13,6 +13,10 @@ const STATUS_CODES: Array[String] = ["", "brn", "par", "psn", "tox", "slp", "frz
 var side: int
 ## Its place in its side's team (Battle.teams), 0 for the first.
 var slot := 0
+## Doubles (M17): its place on the field, 0 or 1 (always 0 in singles), and the place of the foe
+## it's locked onto (Battle.target_of).
+var place := 0
+var target_place := 0
 ## Landing from its ball after a knockout: it can't be hit until it lands.
 var shielded := false
 var species_id: String
