@@ -64,7 +64,8 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 		var move: BattleMove = converted.move
 		# Entry hazards and the moves that clear both sides only matter in team battles, so the
 		# one policy (rankings are one-on-one) never picks them.
-		if not move.hazard.is_empty() or move.clears == "both":
+		# Doubles' ally moves likewise.
+		if not move.hazard.is_empty() or move.clears == "both" or move.is_ally_move():
 			continue
 		if move.kind == BattleMove.Kind.ARENA:
 			arena_moves.append(move)

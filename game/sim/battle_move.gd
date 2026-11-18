@@ -12,9 +12,12 @@ extends RefCounted
 ## - DEBUFF and STATUS: status moves fired at the opponent as projectiles, lowering its stats
 ##   or inflicting a status condition or confusion;
 ## - ARENA: arena moves (§9.11), applied on release like a self-buff, setting a weather, a
-##   surge or a screen on the user's side.
+##   surge or a screen on the user's side (or Wide Guard, M17);
+## - ALLY and REDIRECT (M17, doubles): applied on release to the ally (boosts, Helping Hand,
+##   Dragon Cheer; Howl the user too) or drawing the foes' attacks (Follow Me, Rage Powder).
+##   Team heals are HEAL moves that heal the ally too.
 
-enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA, ARENA }
+enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA, ARENA, ALLY, REDIRECT }
 
 ## Showdown targets that mean "one opponent" in a one-on-one battle.
 const SINGLE_TARGETS: Array[String] = ["normal", "any", "adjacentFoe", "randomNormal"]
@@ -40,6 +43,13 @@ const DAMAGING_EXCLUDED: Array[String] = ["focuspunch", "lastresort", "futuresig
 	"dragonenergy", "steelroller", "poltergeist"]
 ## Heal amounts Showdown computes in code, as [numerator, denominator] of max HP.
 const HEAL_OVERRIDES := {"morningsun": [1, 2], "synthesis": [1, 2], "moonlight": [1, 2], "shoreup": [1, 2]}
+## Doubles' ally moves (M17): what each does to the ally ("helping": Helping Hand, "cheer":
+## Dragon Cheer, "": only its boosts), the team heals (shares of max HP, Jungle Healing's and Lunar
+## Blessing's from Showdown's code, which also cure a status), and the redirecting moves.
+const ALLY_MOVES := {"helpinghand": "helping", "dragoncheer": "cheer", "coaching": "", "aromaticmist": "", "howl": ""}
+const TEAM_HEALS := {"lifedew": [1, 4], "junglehealing": [1, 4], "lunarblessing": [1, 4]}
+const CURING_HEALS: Array[String] = ["junglehealing", "lunarblessing"]
+const REDIRECTS: Array[String] = ["followme", "ragepowder"]
 
 var id: String
 var name: String
@@ -97,6 +107,14 @@ var secondaries: Array[Dictionary] = []
 ## foe, and for status moves a projectile at each), "all" (allAdjacent: the ally too) or "" for a
 ## single-target move. Singles reads it as one opponent either way.
 var spread := ""
+## Doubles' ally moves: an ALLY move's effect on the ally ("helping", "cheer" or "") and whether
+## it boosts the user too (Howl); a team heal (HEAL, healing the ally too) and whether it cures
+## a status; Wide Guard (ARENA).
+var ally_effect := ""
+var with_user := false
+var team_heal := false
+var cures := false
+var wide_guard := false
 
 
 ## The attacking stat this move's damage uses, after stages (and burn for Attack).
@@ -141,6 +159,10 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 			cooldown = Rules.SCREEN_COOLDOWN if not move.screen.is_empty() else Rules.ARENA_MOVE_COOLDOWN
 			if not move.hazard.is_empty():
 				cooldown = Rules.HAZARD_COOLDOWN
+			if move.wide_guard:
+				cooldown = Rules.WIDE_GUARD_COOLDOWN
+		if move.kind == Kind.REDIRECT:
+			cooldown = Rules.REDIRECT_COOLDOWN
 		move.cooldown_ticks = Rules.seconds_to_ticks(cooldown)
 		move.projectile_speed = Rules.projectile_speed(data.get("accuracy", 100))
 		return {"move": move}
@@ -218,6 +240,25 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 static func _classify_status_move(id: String, data: Dictionary, move: BattleMove) -> String:
 	if id in EXCLUDED:
 		return "%s needs move-specific code, not supported yet" % id
+	if ALLY_MOVES.has(id):
+		move.kind = Kind.ALLY
+		move.ally_effect = ALLY_MOVES[id]
+		move.boosts = _stat_changes(data.get("boosts", {}))
+		move.with_user = data.get("target", "") == "allies"
+		return ""
+	if TEAM_HEALS.has(id):
+		move.kind = Kind.HEAL
+		move.team_heal = true
+		move.heal_share = _share(TEAM_HEALS[id])
+		move.cures = id in CURING_HEALS
+		return ""
+	if id in REDIRECTS:
+		move.kind = Kind.REDIRECT
+		return ""
+	if id == "wideguard":
+		move.kind = Kind.ARENA
+		move.wide_guard = true
+		return ""
 	var weather := ArenaConditions.weather_of_move(data)
 	var surge := ArenaConditions.surge_of_move(data)
 	var screen := str(data.get("sideCondition", ""))
@@ -288,9 +329,15 @@ func is_projectile() -> bool:
 	return kind == Kind.PROJECTILE or kind == Kind.DEBUFF or kind == Kind.STATUS
 
 
-## True for kinds applied on release without reaching the foe (to the user or the arena).
+## True for kinds applied on release without reaching the foe (to the user, its ally or the
+## arena).
 func is_self() -> bool:
-	return kind == Kind.SELF_BUFF or kind == Kind.HEAL or kind == Kind.ARENA
+	return kind == Kind.SELF_BUFF or kind == Kind.HEAL or kind == Kind.ARENA or kind == Kind.ALLY or kind == Kind.REDIRECT
+
+
+## True for doubles' ally moves, which standard movesets never pick (§9.6).
+func is_ally_move() -> bool:
+	return kind == Kind.ALLY or kind == Kind.REDIRECT or team_heal or wide_guard
 
 
 func is_damaging() -> bool:

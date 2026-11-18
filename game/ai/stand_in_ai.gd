@@ -118,6 +118,9 @@ func decide(battle: Battle, index: int) -> Dictionary:
 
 ## How much the AI wants a move now; 0 means not at all.
 static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
+	# Doubles' ally moves are the utility AI's (UtilityAI.ally_move_value); the stand-in never uses them.
+	if move.is_ally_move():
+		return 0.0
 	if move.is_damaging():
 		# Hitting into an absorbing ability only helps the foe.
 		if Abilities.absorbs(foe, move):

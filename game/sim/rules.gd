@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 31
+const RULES_VERSION := 32
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -37,6 +37,18 @@ const SWITCH_COOLDOWN_SECONDS := 5.0
 const MIN_DOUBLES_TEAM := 2
 const DOUBLES_SPREAD := 2.5
 const SPREAD_FACTOR := 0.75
+## Doubles' ally moves (§9.11): Helping Hand boosts the ally's next damaging move (if it comes
+## within HELPING_HAND_SECONDS); Dragon Cheer raises its critical-hit chance for a while; Follow
+## Me and Rage Powder draw every foe's attacks, and Wide Guard blocks spread moves on the side,
+## each with a cooldown longer than it lasts.
+const HELPING_HAND_FACTOR := 1.5
+const HELPING_HAND_SECONDS := 4.0
+const CHEER_CRIT_CHANCE := 1.0 / 8.0
+const CHEER_SECONDS := 12.0
+const REDIRECT_SECONDS := 4.0
+const REDIRECT_COOLDOWN := 12.0
+const WIDE_GUARD_SECONDS := 1.0
+const WIDE_GUARD_COOLDOWN := 12.0
 
 const ARENA_RADIUS := 14.0
 ## Terrain (§9.8): the most a fighter can step up (fliers more); projectiles leave and aim at
