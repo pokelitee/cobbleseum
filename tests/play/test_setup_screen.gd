@@ -62,3 +62,11 @@ func test_the_command_line_shown_runs_the_same_battle() -> void:
 	assert_true(SetupScreen.command_line(args, true).begins_with("godot --headless --path . --script res://tools/record.gd -- --watch="))
 	assert_eq(SpecFlags.parse(args).flags, SetupScreen.flags_for(_setup("watch", {"moves": "water gun"}, {}, {"seed": "3"})),
 		"the arguments the battle view gets parse back to the same flags")
+
+
+func test_a_bench_becomes_the_team_flag() -> void:
+	var flags := SetupScreen.flags_for(_setup("watch", {"bench": "charmander"}, {"bench": "squirtle,charmander"}))
+	assert_eq(flags.team, "squirtle,charmander")
+	assert_eq(flags["vs-team"], "charmander,squirtle,charmander")
+	var spec := SpecFlags.to_spec(flags)
+	assert_eq(Battle.members_of(spec.fighters[1]).size(), 3)

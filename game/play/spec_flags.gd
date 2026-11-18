@@ -12,12 +12,18 @@ extends RefCounted
 ## What each fighter brings (§9.6, §9.9, §9.10): --moves=<a,b,...>, --ability=<ability> and
 ## --item=<item> for the first, --vs-moves, --vs-ability and --vs-item for its foe; "none" for no
 ## ability or item. Left out, a fighter brings its species' standard ones.
+## Team battles (§9.1): --team=<a,b,...> and --vs-team=<a,b,...> list each side's whole team in
+## order (1-6); --watch and --play may then come without a species (or name the team's first),
+## and --vs may be left out. The flags about moves, ability, item and looks apply to each side's
+## first member; the rest bring their standard ones.
 ## Species, moves, abilities and items may be written as names ("Mr. Mime", "Life Orb"); they
 ## become Showdown IDs. Cli checks them against the data.
 
 const DEFAULT_FOE := "blastoise"
-const KEYS: Array[String] = ["play", "watch", "vs", "ai", "vs-ai", "seed", "arena", "weather", "shiny", "form", "vs-form",
-	"moves", "vs-moves", "ability", "vs-ability", "item", "vs-item"]
+const KEYS: Array[String] = ["play", "watch", "vs", "team", "vs-team", "ai", "vs-ai", "seed", "arena", "weather", "shiny",
+	"form", "vs-form", "moves", "vs-moves", "ability", "vs-ability", "item", "vs-item"]
+## Flags that may come without a value: the mode, when --team names the species.
+const BARE_KEYS: Array[String] = ["play", "watch"]
 ## The value of --ability, --item and --weather for none.
 const NONE := "none"
 ## Which sides --shiny makes shiny.
@@ -32,6 +38,8 @@ static func parse(args: PackedStringArray) -> Dictionary:
 		var key := arg.trim_prefix("--").get_slice("=", 0)
 		if arg.begins_with("--") and arg.contains("=") and key in KEYS:
 			flags[key] = arg.get_slice("=", 1)
+		elif arg.begins_with("--") and not arg.contains("=") and key in BARE_KEYS:
+			flags[key] = ""
 		else:
 			rest.append(arg)
 	return {"flags": flags, "rest": rest}
@@ -40,23 +48,37 @@ static func parse(args: PackedStringArray) -> Dictionary:
 ## The spec the flags describe, {} when they name no battle (neither --play nor --watch), or
 ## {"error": String}.
 static func to_spec(flags: Dictionary) -> Dictionary:
-	var play: String = flags.get("play", "")
-	var watch: String = flags.get("watch", "")
-	if play.is_empty() and watch.is_empty():
+	if not flags.has("play") and not flags.has("watch"):
 		return {}
-	if not play.is_empty() and not watch.is_empty():
+	if flags.has("play") and flags.has("watch"):
 		return {"error": "use --play or --watch, not both"}
-	if not play.is_empty() and flags.has("vs-ai"):
+	var playing := flags.has("play")
+	if playing and flags.has("vs-ai"):
 		return {"error": "--vs-ai is for --watch; with --play, --ai sets the foe's AI"}
 	var seed := str(flags.get("seed", ""))
 	if flags.has("seed") and not seed.is_valid_int():
 		return {"error": "--seed must be a whole number, not '%s'" % seed}
 	var ai: String = flags.get("ai", Controllers.DEFAULT_AI)
-	var foe: String = flags.get("vs", DEFAULT_FOE)
-	var spec := {"seed": seed.to_int() if seed.is_valid_int() else int(Time.get_ticks_usec() % 1000000), "fighters": [
-		{"species": BattleData.to_id(play if watch.is_empty() else watch), "ai": "player" if watch.is_empty() else ai},
-		{"species": BattleData.to_id(foe), "ai": ai if watch.is_empty() else flags.get("vs-ai", ai)},
-	]}
+	var sides := [{"ai": "player" if playing else ai}, {"ai": ai if playing else flags.get("vs-ai", ai)}]
+	for side in 2:
+		var species_key: String = (["play" if playing else "watch", "vs"])[side]
+		var team_key: String = ["team", "vs-team"][side]
+		var named := BattleData.to_id(str(flags.get(species_key, "")))
+		if flags.has(team_key):
+			var team: Array = []
+			for name in str(flags[team_key]).split(","):
+				if not BattleData.to_id(name).is_empty():
+					team.append({"species": BattleData.to_id(name)})
+			if team.is_empty() or team.size() > Rules.MAX_TEAM:
+				return {"error": "--%s lists 1-%d species, not %d" % [team_key, Rules.MAX_TEAM, team.size()]}
+			if not named.is_empty() and named != team[0].species:
+				return {"error": "--%s names %s, but --%s starts with %s" % [species_key, named, team_key, team[0].species]}
+			sides[side].team = team
+		elif side == 0 and named.is_empty():
+			return {"error": "--%s needs a species, or --team to list side A's team" % species_key}
+		else:
+			sides[side].species = named if not named.is_empty() else DEFAULT_FOE
+	var spec := {"seed": seed.to_int() if seed.is_valid_int() else int(Time.get_ticks_usec() % 1000000), "fighters": sides}
 	if flags.has("arena"):
 		spec.arena = flags.arena
 	if flags.has("weather"):
@@ -65,11 +87,11 @@ static func to_spec(flags: Dictionary) -> Dictionary:
 		if not SHINY_SIDES.has(flags.shiny):
 			return {"error": "--shiny must be a, b, both or none, not '%s'" % flags.shiny}
 		for side in 2:
-			spec.fighters[side].shiny = SHINY_SIDES[flags.shiny][side]
+			lead(spec, side).shiny = SHINY_SIDES[flags.shiny][side]
 	for side in 2:
 		var key: String = ["form", "vs-form"][side]
 		if flags.has(key):
-			spec.fighters[side].form = "" if flags[key] == Appearance.BASE_FORM else str(flags[key])
+			lead(spec, side).form = "" if flags[key] == Appearance.BASE_FORM else str(flags[key])
 	for side in 2:
 		var prefix: String = ["", "vs-"][side]
 		if flags.has(prefix + "moves"):
@@ -79,12 +101,17 @@ static func to_spec(flags: Dictionary) -> Dictionary:
 					moves.append(BattleData.to_id(name))
 			if moves.is_empty():
 				return {"error": "--%smoves names no moves" % prefix}
-			spec.fighters[side].moves = moves
+			lead(spec, side).moves = moves
 		for key: String in ["ability", "item"]:
 			if flags.has(prefix + key):
 				var value := str(flags[prefix + key])
-				spec.fighters[side][key] = "" if value == NONE else BattleData.to_id(value)
+				lead(spec, side)[key] = "" if value == NONE else BattleData.to_id(value)
 	return spec
+
+
+## The spec entry of `side`'s first team member (the side's own entry for a team of one).
+static func lead(spec: Dictionary, side: int) -> Dictionary:
+	return Battle.members_of(spec.fighters[side])[0]
 
 
 ## Flags that describe `spec` exactly (seed included), for passing a battle on to another process.
@@ -94,13 +121,18 @@ static func from_spec(spec: Dictionary) -> PackedStringArray:
 
 
 ## The flags {key: value} that describe `spec` (see from_spec()). A spec without a seed gives
-## flags without one, so each battle they start gets a new seed.
+## flags without one, so each battle they start gets a new seed. Of a team's members past the
+## first, only the species are kept.
 static func to_flags(spec: Dictionary) -> Dictionary:
-	var fighters: Array = spec.fighters
-	var ais: Array = fighters.map(func(f: Dictionary) -> String: return str(f.get("ai", Controllers.DEFAULT_AI)))
+	var sides: Array = spec.fighters
+	var ais: Array = sides.map(func(f: Dictionary) -> String: return str(f.get("ai", Controllers.DEFAULT_AI)))
 	var playing: bool = ais[0] == "player"
+	var fighters: Array = [lead(spec, 0), lead(spec, 1)]
 	var flags := {("play" if playing else "watch"): fighters[0].species, "vs": fighters[1].species,
 		"ai": ais[1] if playing else ais[0]}
+	for side in 2:
+		if sides[side].get("team") is Array:
+			flags[["team", "vs-team"][side]] = ",".join(sides[side].team.map(func(m: Dictionary) -> String: return str(m.species)))
 	if not playing:
 		flags["vs-ai"] = ais[1]
 	if spec.has("seed"):

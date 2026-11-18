@@ -9,6 +9,8 @@ cache/
 override.cfg
 recordings/
 results/
+# Hand-written battle specs kept locally, such as recreations of battles from the games or the anime
+specs/
 
 # OS and editor files
 .DS_Store

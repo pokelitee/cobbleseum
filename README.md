@@ -71,7 +71,7 @@ Record a battle as video clips (needs a display and ffmpeg; output goes to `reco
 godot --headless --path . --script res://tools/record.gd -- game/data/battles/showcase.json --seconds=10 --format=both
 ```
 
-Instead of a spec file, flags can describe an AI-vs-AI battle, here and in the window below: `--watch=<species>` against `--vs=<species>` (default Blastoise), with `--ai=<profile>` for the first and `--vs-ai=<profile>` for the second (default: the same as `--ai`). `--seed=N` picks the battle; without it, each run is a new one:
+Instead of a spec file, flags can describe an AI-vs-AI battle, here and in the window below: `--watch=<species>` against `--vs=<species>` (default Blastoise), with `--ai=<profile>` for the first and `--vs-ai=<profile>` for the second (default: the same as `--ai`). `--seed=N` picks the battle; without it, each run is a new one. For a team battle, `--team=<a,b,...>` and `--vs-team=<a,b,...>` list each side's team of 1–6 in order (then `--watch` needs no species); hand-written team specs, such as recreations of battles from the games or the anime, go in the git-ignored `specs/` folder:
 
 ```bash
 godot --headless --path . --script res://tools/record.gd -- --watch=garchomp --vs=hydreigon --ai=hard --vs-ai=easy --seed=7

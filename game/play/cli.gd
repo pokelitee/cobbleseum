@@ -15,7 +15,10 @@ const SUGGESTIONS := 3
 const SPEC_FLAGS_HELP := """Battle flags (instead of a spec file):
   --watch=<species>        an AI-vs-AI battle with this species as side A
   --play=<species>         you play side A against the AI (the game only)
+  --team=<a,b,...>         side A's whole team, 1-6 species in order; then --watch or --play
+                           needs no species
   --vs=<species>           side B (default blastoise)
+  --vs-team=<a,b,...>      side B's whole team instead of --vs
   --ai=<profile>           side A's AI; with --play, the foe's (default ranked)
   --vs-ai=<profile>        side B's AI with --watch (default: --ai)
   --seed=<N>               the battle; without it each run is a new one
@@ -26,7 +29,8 @@ const SPEC_FLAGS_HELP := """Battle flags (instead of a spec file):
   --item=<item>            side A's held item, or none (default: its standard); --vs-item for B
   --shiny=a|b|both|none    which sides are shiny (default: rolled from the seed)
   --form=<form>            side A's cosmetic form, or base (default: rolled); --vs-form for B
-Names may be written as IDs (mrmime, lifeorb) or as names ("Mr. Mime", "Life Orb")."""
+Moves, ability, item and looks apply to a team's first member; the rest bring their standard
+ones. Names may be written as IDs (mrmime, lifeorb) or as names ("Mr. Mime", "Life Orb")."""
 const INFO_HELP := """Information:
   --list=<kind>            prints the species, arenas, moves, abilities, items or profiles
   --help                   prints this help"""
