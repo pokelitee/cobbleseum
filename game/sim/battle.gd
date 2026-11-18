@@ -124,7 +124,7 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 	battle._random = SimRandom.stream(int(battle_spec.seed), Stream.BATTLE)
 	var team_size := maxi(members[0].size(), members[1].size())
 	battle._hash_teams = team_size > 1
-	battle.pace = Rules.team_hp_factor(team_size)
+	battle.pace = Rules.doubles_hp_factor() if battle.doubles else Rules.team_hp_factor(team_size)
 	battle._start_stretch(0)
 	var types: Array = []
 	for team: Array in members:
