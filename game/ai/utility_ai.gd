@@ -335,6 +335,9 @@ static func spread_value(battle: Battle, me: Fighter, move: BattleMove) -> Dicti
 	for other in battle.fighters:
 		if other == me or other.is_knocked_out() or (other.side == me.side and move.spread != "all"):
 			continue
+		# Telepathy keeps the ally out of its own side's spread moves.
+		if other.side == me.side and other.ability_effect.get("ally_immune", false):
+			continue
 		if Battle._gap(me, other) <= Rules.AREA_RADIUS and absf(other.ground - me.ground) <= Rules.AREA_HEIGHT:
 			hit.append(other)
 			if other.side != me.side:
@@ -391,9 +394,11 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			# Expected damage covers power, STAB, stats, stages and type at once; the stand-in's
 			# move value still vetoes self-destructing early and discounts charge, recharge and
 			# self-lowering moves.
-			var expected := expected_damage(me, foe, move, battle.data())
-			var adjusted := StandInAI.move_score(me, foe, move) / maxf(move.power * move.expected_hits(), 1.0) if move.fixed_damage == 0 else 1.0
-			var share := expected / maxf(foe.max_hp, 1.0)
+			# A Lightning Rod or Storm Drain foe draws the move to itself (doubles).
+			var aim := battle.drawn_to(me, foe, move)
+			var expected := expected_damage(me, aim, move, battle.data())
+			var adjusted := StandInAI.move_score(me, aim, move) / maxf(move.power * move.expected_hits(), 1.0) if move.fixed_damage == 0 else 1.0
+			var share := expected / maxf(aim.max_hp, 1.0)
 			if _doubles and move.kind == BattleMove.Kind.AREA:
 				var spread := spread_value(battle, me, move)
 				share = spread.share

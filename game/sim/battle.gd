@@ -160,6 +160,7 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 			lead.target_place = place
 			battle._place_at_start(lead)
 			battle.fighters.append(lead)
+	battle._link_allies()
 	var out := battle.fighters.size()
 	battle._send_out_ticks.resize(out)
 	battle._send_out_ticks.fill(0)
@@ -278,6 +279,26 @@ func out(side: int) -> Array[Fighter]:
 ## `fighter`'s ally out in doubles (knocked out or not), else null.
 func ally_of(fighter: Fighter) -> Fighter:
 	return fighters[(1 - fighter.place) * 2 + fighter.side] if doubles else null
+
+
+## Doubles: points each fighter out at its ally (Fighter.ally, for Friend Guard), after the
+## start and every send-out.
+func _link_allies() -> void:
+	if not doubles:
+		return
+	for fighter in fighters:
+		fighter.ally = ally_of(fighter)
+
+
+## The fighter `fighter`'s single-target `move` would reach if aimed at `foe`: in doubles a foe
+## whose ability draws moves of its type (Lightning Rod, Storm Drain), else `foe`.
+func drawn_to(fighter: Fighter, foe: Fighter, move: BattleMove) -> Fighter:
+	if not doubles or move.spread != "" or not move.is_projectile():
+		return foe
+	for other in out(1 - fighter.side):
+		if other != foe and not other.is_knocked_out() and str(other.ability_effect.get("draws", "")) == move.type:
+			return other
+	return foe
 
 
 ## The foe `fighter` is aimed at: in singles the one foe out; in doubles a foe drawing attacks
@@ -712,6 +733,11 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> bool:
 			else:
 				_hit(fighter, foe, move)
 		_:
+			var drawn := drawn_to(fighter, foe, move)
+			if drawn != foe:
+				_ability_event(drawn)
+				_fire(fighter, drawn, move_index, (drawn.position - fighter.position).normalized())
+				return false
 			_fire(fighter, foe, move_index, fighter.facing)
 			# A spread status or debuff move fires at the other foe too, if it's in range and sight.
 			var other := _other_foe(fighter, foe)
@@ -834,6 +860,10 @@ func _strike_area(fighter: Fighter, move: BattleMove) -> void:
 		if other == fighter or other.is_knocked_out() or (other.side == fighter.side and move.spread != "all"):
 			continue
 		if _gap(fighter, other) <= Rules.AREA_RADIUS and absf(other.ground - fighter.ground) <= Rules.AREA_HEIGHT:
+			# Telepathy: the ally's moves pass it by.
+			if other.side == fighter.side and other.ability_effect.get("ally_immune", false):
+				_ability_event(other)
+				continue
 			reached.append(other)
 	if reached.is_empty():
 		_fevent("miss", fighter, {"move": move.id})
@@ -1103,10 +1133,18 @@ func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
 		if fighter.intimidate_ticks <= 0:
 			fighter.intimidate_ticks = Rules.seconds_to_ticks(Abilities.INTIMIDATE_SECONDS)
 			_ability_event(fighter)
-			if foe.ability_effect.get("intimidate_immune", false):
-				_ability_event(foe)
-			else:
-				_boost(foe, {"atk": -1}, fighter.ability, fighter)
+			# In doubles it reaches both foes up.
+			var scared: Array[Fighter] = [foe]
+			if doubles:
+				scared = []
+				for other in out(1 - fighter.side):
+					if not other.is_knocked_out() and not is_waiting(index_of(other)):
+						scared.append(other)
+			for other in scared:
+				if other.ability_effect.get("intimidate_immune", false):
+					_ability_event(other)
+				else:
+					_boost(other, {"atk": -1}, fighter.ability, fighter)
 	var speed_boost: Dictionary = entry.get("speed_boost", {})
 	if not speed_boost.is_empty():
 		fighter.speed_boost_ticks += 1
@@ -1232,6 +1270,7 @@ func _send_out(fighter: Fighter, after_knockout := true, place := 0) -> void:
 	fighter.action = Fighter.Action.SEND_OUT
 	fighter.action_ticks = Rules.seconds_to_ticks(Rules.SEND_OUT_SECONDS if after_knockout else Rules.SWITCH_SECONDS)
 	fighter.shielded = after_knockout
+	_link_allies()
 	_switch_cooldown[fighter.side] = Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS)
 	_fevent("send_out", fighter, {"species": fighter.species_id, "switch": not after_knockout})
 	_count_benches()
@@ -1615,6 +1654,9 @@ static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove,
 	var factor := stab * effectiveness * Abilities.taken_factor(defender, move, main_series) * Items.power_factor(attacker, move, main_series) 		* attacker.arena.damage_factor(attacker, defender, move)
 	if attacker.helped:
 		factor *= Rules.HELPING_HAND_FACTOR
+	# Friend Guard: the defender's ally (doubles) softens hits on it.
+	if defender.ally != null and not defender.ally.is_knocked_out() and defender.ally.ability_effect.has("ally_taken"):
+		factor *= float(defender.ally.ability_effect.ally_taken)
 	return {"base": base, "factor": factor, "screen": attacker.arena.screen_factor(attacker, defender, move),
 		"effectiveness": effectiveness}
 
