@@ -152,13 +152,13 @@ A fighter's HP reaching zero. The battle ends when a side's last fighter is knoc
 _Avoid_: faint, KO (in prose), defeat
 
 **Overtime**:
-The stretch from 60 seconds (times the larger team's size) to time-up, in which hits grow stronger every second.
+The stretch from 60 seconds to time-up, in which hits grow stronger every second. In a team battle the clock restarts at each send-out after a knockout.
 
 **Time-up**:
-A battle reaching its cap: 90 seconds times the larger team's size.
+A battle reaching its 90-second cap (in a team battle, 90 seconds since the last send-out after a knockout). A team battle then goes to the side with more Pokémon left.
 
 **Draw**:
-A battle with no winner: both sides' last fighters knocked out on the same tick, or time-up.
+A battle with no winner: both sides' last fighters knocked out on the same tick, or a one-on-one time-up (a team battle's only when both sides are even).
 _Avoid_: tie, stalemate
 
 **Arena move**:
