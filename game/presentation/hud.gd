@@ -30,8 +30,8 @@ const SHINY_MARK_GAP := 10.0
 const PLATE_PAD := Vector2(18, 12)
 const BAR_TOP := 80.0
 const BAR_HEIGHT := 36.0
-## The team balls' top on the plate, level with the name.
-const TEAM_BALLS_TOP := 22.0
+## Room kept between the effect row and the team balls.
+const TEAM_BALLS_GAP := 16.0
 ## The fighter's portrait fills the plate's height on its outer end, this far from the name.
 const PORTRAIT_SIZE := BAR_TOP + BAR_HEIGHT
 const PORTRAIT_GAP := 16.0
@@ -92,6 +92,8 @@ var _effect_rows: Array[HBoxContainer] = []
 var _effects: Array[Dictionary] = [{}, {}]
 var _effect_anchors: Array[float] = []
 var _effect_room := 0.0
+## Per side, the effect row's room: the bar's width, less the team balls' in a team battle.
+var _effect_rooms: Array[float] = []
 var _intro: Control
 var _intro_age := 0
 var _winner: Label
@@ -224,6 +226,7 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 		_effect_rows.append(effects)
 		_effect_anchors.append(left + bar_width if mirrored else left)
 		_effect_room = bar_width
+		_effect_rooms.append(bar_width)
 		_panels.append(panel)
 		_panel_homes.append(home)
 		_bars.append(bar)
@@ -289,8 +292,9 @@ func set_fighter(side: int, name: String, types: Array, portrait: Texture2D, shi
 	_type_rows[side] = row
 
 
-## Shows `team` (a team battle's side, Battle.teams[side]) as a row of balls at the end of the
-## name's row on the side's plate: healthy, statused or fainted, the one out raised.
+## Shows `team` (a team battle's side, Battle.teams[side]) as a row of balls at the inner end of
+## the effect row under the side's HP bar, which leaves the effects the rest: healthy, statused
+## or fainted, the one out raised.
 func show_team(side: int, team: Array, out: Fighter) -> void:
 	if team.size() < 2:
 		return
@@ -301,13 +305,10 @@ func show_team(side: int, team: Array, out: Fighter) -> void:
 		_team_balls[side] = balls
 	balls.show_team(team, out)
 	var mirrored := not _portrait and side == 1
-	var inset := (PORTRAIT_SIZE + PORTRAIT_GAP) * _scale
-	# At the end of the name's row, short of the portrait on a mirrored plate.
-	balls.position = Vector2(_content_width - balls.size.x - (inset if mirrored else 0.0), TEAM_BALLS_TOP * _scale)
-	# Type pills that would run into the balls give way to them.
-	var row: HBoxContainer = _type_rows[side]
-	if row != null:
-		row.visible = row.position.x + row.get_combined_minimum_size().x <= balls.position.x
+	var bar_end := _effect_anchors[side] + (0.0 if mirrored else _effect_room)
+	var top := (BAR_TOP + BAR_HEIGHT + EFFECT_ROW_GAP) * _scale
+	balls.position = Vector2(bar_end - _effect_room if mirrored else bar_end - balls.size.x, top)
+	_effect_rooms[side] = _effect_room - balls.size.x - TEAM_BALLS_GAP * _scale
 
 
 ## Sets the HP fraction shown for a side. The lagging segment holds, then drains to match;
@@ -351,7 +352,7 @@ func set_effects(side: int, entries: Array[Dictionary]) -> void:
 		row.move_child(shown[entry.key], i)
 		(shown[entry.key] as HudBadge).set_left(float(entry.get("left", -1.0)))
 	row.size = row.get_combined_minimum_size()
-	row.scale = Vector2.ONE * minf(1.0, _effect_room / maxf(row.size.x, 1.0))
+	row.scale = Vector2.ONE * minf(1.0, _effect_rooms[side] / maxf(row.size.x, 1.0))
 	var mirrored := not _portrait and side == 1
 	row.position.x = _effect_anchors[side] - row.size.x * row.scale.x if mirrored else _effect_anchors[side]
 

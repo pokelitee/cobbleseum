@@ -49,6 +49,12 @@ func _use(battle: Battle, script: Scripted, move: int) -> void:
 		battle.step()
 
 
+## Steps past the switch cooldown the leads' send-out starts.
+func _until_switch_allowed(battle: Battle, side := 0) -> void:
+	while battle.switch_cooldown(side) > 0:
+		battle.step()
+
+
 func _events(battle: Battle, type: String) -> Array:
 	return battle.events.filter(func(e: Dictionary) -> bool: return e.type == type)
 
@@ -69,7 +75,7 @@ func test_stealth_rock_and_spikes_hurt_on_send_out_by_type_and_layers() -> void:
 	var b := Scripted.new()
 	var battle := _battle([_member("squirt")], [_member("squirt"), _member("blaze"), _member("bird")], Scripted.new(), b)
 	battle.conditions.hazards[1] = {"stealthrock": 1, "spikes": 2}
-	battle.step()
+	_until_switch_allowed(battle, 1)
 	b.plan[battle.tick] = {"switch": 1}
 	battle.step()
 	var blaze: Fighter = battle.teams[1][1]
@@ -90,7 +96,7 @@ func test_toxic_spikes_poison_and_a_grounded_poison_type_absorbs_them() -> void:
 	var b := Scripted.new()
 	var battle := _battle([_member("squirt")], [_member("squirt"), _member("blaze"), _member("sludge")], Scripted.new(), b)
 	battle.conditions.hazards[1] = {"toxicspikes": 2, "stickyweb": 1}
-	battle.step()
+	_until_switch_allowed(battle, 1)
 	b.plan[battle.tick] = {"switch": 1}
 	battle.step()
 	assert_eq(battle.teams[1][1].status, "tox", "two layers poison badly")

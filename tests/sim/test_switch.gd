@@ -36,6 +36,12 @@ func _battle(a: Scripted, b: Scripted) -> Battle:
 	return created.battle
 
 
+## Steps past the switch cooldown the leads' send-out starts.
+func _until_switch_allowed(battle: Battle, side := 0) -> void:
+	while battle.switch_cooldown(side) > 0:
+		battle.step()
+
+
 func _events(battle: Battle, type: String) -> Array:
 	return battle.events.filter(func(e: Dictionary) -> bool: return e.type == type)
 
@@ -43,6 +49,7 @@ func _events(battle: Battle, type: String) -> Array:
 func test_a_switch_sends_the_bench_member_out_where_the_fighter_stood() -> void:
 	var a := Scripted.new()
 	var battle := _battle(a, Scripted.new())
+	_until_switch_allowed(battle)
 	var squirt := battle.fighters[0]
 	squirt.position = Vector2(2, -3)
 	squirt.boosts.atk = 2
@@ -51,7 +58,7 @@ func test_a_switch_sends_the_bench_member_out_where_the_fighter_stood() -> void:
 	squirt.status_ticks = 100
 	squirt.hp -= 50
 	squirt.cooldowns[0] = 20
-	a.plan[0] = {"switch": 2}
+	a.plan[battle.tick] = {"switch": 2}
 	battle.step()
 	var blaze := battle.fighters[0]
 	assert_eq(blaze.slot, 2)
@@ -77,7 +84,9 @@ func test_a_switch_sends_the_bench_member_out_where_the_fighter_stood() -> void:
 func test_the_switch_cooldown_follows_every_send_out() -> void:
 	var a := Scripted.new()
 	var battle := _battle(a, Scripted.new())
-	a.plan[0] = {"switch": 1}
+	assert_false(battle.can_switch(0, 1), "the leads' send-out starts the cooldown")
+	_until_switch_allowed(battle)
+	a.plan[battle.tick] = {"switch": 1}
 	battle.step()
 	assert_false(battle.can_switch(0, 0), "landing, then on cooldown")
 	for i in Rules.seconds_to_ticks(Rules.SWITCH_SECONDS) + 1:
