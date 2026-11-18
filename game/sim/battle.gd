@@ -21,8 +21,10 @@ var result := Result.ONGOING
 var fighters: Array[Fighter] = []
 ## Each side's whole team in the spec's order (Fighter.slot), the fighters out included.
 var teams: Array = [[], []]
-## The tick overtime starts; it and the time cap scale with the larger team.
+## The tick overtime starts in the stretch since the last send-out after a knockout (or the
+## start), and the HP factor team battles scale its length and every fighter's HP by.
 var overtime_tick := 0
+var pace := 1.0
 var projectiles: Array[Dictionary] = []
 ## Events for presentation and highlight picking: {"tick", "type", "side", ...}.
 var events: Array[Dictionary] = []
@@ -98,8 +100,8 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 	battle._random = SimRandom.stream(int(battle_spec.seed), Stream.BATTLE)
 	var team_size := maxi(members[0].size(), members[1].size())
 	battle._hash_teams = team_size > 1
-	battle.overtime_tick = Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS * team_size)
-	battle._time_cap_ticks = Rules.seconds_to_ticks(Rules.TIME_CAP_SECONDS * team_size)
+	battle.pace = Rules.team_hp_factor(team_size)
+	battle._start_stretch(0)
 	var types: Array = []
 	for team: Array in members:
 		for entry: Dictionary in team:
@@ -119,6 +121,9 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 				return made
 			var fighter: Fighter = made.fighter
 			fighter.slot = slot
+			if team_size > 1:
+				fighter.max_hp = maxi(1, roundi(fighter.max_hp * battle.pace))
+				fighter.hp = fighter.max_hp
 			fighter.arena = battle.conditions
 			battle.teams[side].append(fighter)
 		var lead: Fighter = battle.teams[side][0]
@@ -167,6 +172,13 @@ static func _make_fighter(entry: Dictionary, side: int, data: BattleData) -> Dic
 	fighter.set_item(item)
 	fighter.can_evolve = Items.can_evolve(species, data)
 	return {"fighter": fighter}
+
+
+## Restarts the overtime clock at `from`: overtime and the time cap come as long after it as in
+## a one-on-one battle.
+func _start_stretch(from: int) -> void:
+	overtime_tick = from + Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS)
+	_time_cap_ticks = from + Rules.seconds_to_ticks(Rules.TIME_CAP_SECONDS)
 
 
 ## Puts a fighter on its side's start spot, facing the other side's.
@@ -927,6 +939,7 @@ func next_up(side: int) -> int:
 func _send_out(fighter: Fighter, after_knockout := true) -> void:
 	var foe := fighters[1 - fighter.side]
 	if after_knockout:
+		_start_stretch(tick)
 		_place_at_start(fighter)
 		if not foe.is_knocked_out():
 			_slide(fighter, foe, Vector2.ZERO)
@@ -1319,8 +1332,29 @@ func _check_end() -> void:
 	elif a_down:
 		result = Result.WIN_B
 	elif tick >= _time_cap_ticks:
-		result = Result.DRAW
+		result = _time_up_result()
 		_event("time_up", -1, {})
+
+
+## Who wins at time-up: in a team battle the side with more Pokémon left, then the higher share
+## of its team's HP left; otherwise (and when even) a draw.
+func _time_up_result() -> Result:
+	if not _hash_teams:
+		return Result.DRAW
+	var left := [healthy(0).size(), healthy(1).size()]
+	if left[0] != left[1]:
+		return Result.WIN_A if left[0] > left[1] else Result.WIN_B
+	var shares := [0.0, 0.0]
+	for side in 2:
+		var hp := 0
+		var full := 0
+		for fighter: Fighter in teams[side]:
+			hp += fighter.hp
+			full += fighter.max_hp
+		shares[side] = float(hp) / maxi(full, 1)
+	if is_equal_approx(shares[0], shares[1]):
+		return Result.DRAW
+	return Result.WIN_A if shares[0] > shares[1] else Result.WIN_B
 
 
 ## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
