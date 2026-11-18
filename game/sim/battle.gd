@@ -48,8 +48,8 @@ var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
 const FIGHTER_STATE_SIZE := 32
 ## Values hashed per side for team battles: the slot out, the send-out countdown, the shield,
-## the switch cooldown.
-const TEAM_STATE_SIZE := 4
+## the switch cooldown and the layers of each entry hazard.
+const TEAM_STATE_SIZE := 8
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
@@ -124,6 +124,7 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		var lead: Fighter = battle.teams[side][0]
 		battle._place_at_start(lead)
 		battle.fighters.append(lead)
+	battle._count_benches()
 	battle._hash.start(HashingContext.HASH_SHA256)
 	return {"battle": battle}
 
@@ -520,6 +521,10 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 	if move.is_self():
 		if move.kind == BattleMove.Kind.HEAL:
 			_heal(fighter, roundi(fighter.max_hp * conditions.heal_share(fighter, move)), move.id)
+		elif move.kind == BattleMove.Kind.ARENA and not move.hazard.is_empty():
+			_lay_hazard(fighter, move)
+		elif move.kind == BattleMove.Kind.ARENA and move.clears == "both":
+			_clear_hazards(fighter, move, true)
 		elif move.kind == BattleMove.Kind.ARENA and not move.screen.is_empty():
 			var ticks := ArenaConditions.screen_ticks_for(fighter)
 			conditions.set_screen(fighter.side, move.screen, ticks)
@@ -530,6 +535,8 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 			_set_weather(fighter, move.weather, {"move": move.id})
 		else:
 			_boost(fighter, move.boosts, move.id)
+			if move.clears == "both":
+				_clear_hazards(fighter, move, false)
 	else:
 		var hits := _roll_hits(fighter, move)
 		var parried := _strike(fighter, foe, fighter.action_move)
@@ -689,6 +696,8 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 		_hurt(attacker, recoil, "recoil", {"move": move.id})
 	if not move.self_boosts.is_empty() and not attacker.is_knocked_out():
 		_boost(attacker, move.self_boosts, move.id)
+	if move.clears == "own" and not attacker.is_knocked_out() and not conditions.hazards[attacker.side].is_empty():
+		_clear_side(attacker.side, move.id)
 
 
 ## A hit stopped by the defender's guard: no damage or effects. Parrying a melee strike
@@ -931,6 +940,8 @@ func _send_out(fighter: Fighter, after_knockout := true) -> void:
 	fighters[fighter.side] = fighter
 	_switch_cooldown[fighter.side] = Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS)
 	_event("send_out", fighter.side, {"species": fighter.species_id, "switch": not after_knockout})
+	_count_benches()
+	_entry_hazards(fighter)
 	var weather := Abilities.sets_weather(fighter)
 	var surge := Abilities.sets_surge(fighter)
 	if not weather.is_empty() or not surge.is_empty():
@@ -941,10 +952,75 @@ func _send_out(fighter: Fighter, after_knockout := true) -> void:
 			_set_surge(fighter, surge, {"ability": fighter.ability})
 
 
+## Keeps the arena conditions' count of each side's healthy bench, for valuing hazards.
+func _count_benches() -> void:
+	for side in 2:
+		var count := 0
+		for member: Fighter in healthy(side):
+			if member != fighters[side]:
+				count += 1
+		conditions.bench[side] = count
+
+
+## Lays a layer of `move`'s hazard on the foe's side, if it has room for one.
+func _lay_hazard(fighter: Fighter, move: BattleMove) -> void:
+	var side := 1 - fighter.side
+	var layers := int(conditions.hazards[side].get(move.hazard, 0))
+	if layers >= int(ArenaConditions.HAZARDS[move.hazard]):
+		_event("hazard_failed", fighter.side, {"hazard": move.hazard, "move": move.id})
+		return
+	conditions.hazards[side][move.hazard] = layers + 1
+	_event("hazard", fighter.side, {"hazard": move.hazard, "layers": layers + 1, "target_side": side, "move": move.id})
+
+
+## Defog and Tidy Up: every hazard on both sides goes, and with Defog (`screens`) the foe's
+## screens.
+func _clear_hazards(fighter: Fighter, move: BattleMove, screens: bool) -> void:
+	for side in 2:
+		if not conditions.hazards[side].is_empty():
+			_clear_side(side, move.id)
+	if screens:
+		var foe_side := 1 - fighter.side
+		for screen: String in conditions.screens[foe_side].keys():
+			conditions.screens[foe_side].erase(screen)
+			_event("screen_end", foe_side, {"screen": screen, "cleared": true})
+
+
+func _clear_side(side: int, move_id: String) -> void:
+	_event("hazards_cleared", side, {"hazards": conditions.hazards[side].keys(), "move": move_id})
+	conditions.hazards[side] = {}
+
+
+## The hazards on `fighter`'s side acting as it comes out (§9.11).
+func _entry_hazards(fighter: Fighter) -> void:
+	var laid: Dictionary = conditions.hazards[fighter.side]
+	if laid.is_empty():
+		return
+	var grounded := ArenaConditions.grounded(fighter)
+	var guarded := Abilities.magic_guard(fighter)
+	if laid.has("stealthrock") and not guarded:
+		var effectiveness := Rules.compressed_effectiveness(_data.effectiveness("Rock", fighter.types))
+		_hurt(fighter, maxi(1, roundi(fighter.max_hp * ArenaConditions.ROCK_SHARE * effectiveness)), "hazard_damage",
+			{"hazard": "stealthrock"})
+	if laid.has("spikes") and grounded and not guarded and not fighter.is_knocked_out():
+		_hurt(fighter, maxi(1, roundi(fighter.max_hp * ArenaConditions.SPIKES_SHARES[int(laid.spikes)])), "hazard_damage",
+			{"hazard": "spikes"})
+	if laid.has("toxicspikes") and grounded and not fighter.is_knocked_out():
+		if "Poison" in fighter.types:
+			laid.erase("toxicspikes")
+			_event("hazards_cleared", fighter.side, {"hazards": ["toxicspikes"], "absorbed": true})
+		else:
+			_inflict(fighter, "tox" if int(laid.toxicspikes) > 1 else "psn")
+	if laid.has("stickyweb") and grounded and not fighter.is_knocked_out():
+		_event("hazard_hit", fighter.side, {"hazard": "stickyweb"})
+		_boost(fighter, {"spe": -1}, "stickyweb", fighters[1 - fighter.side])
+
+
 ## A fighter fainting: with more of its team to come, its side sends out the next after a lull,
 ## and every projectile in flight vanishes.
 func _knocked_out(fighter: Fighter) -> void:
 	var left := healthy(fighter.side).size()
+	_count_benches()
 	_event("knockout", fighter.side, {"left": left})
 	if left > 0:
 		_send_out_ticks[fighter.side] = Rules.seconds_to_ticks(Rules.KNOCKOUT_LULL_SECONDS)
@@ -1306,6 +1382,8 @@ func _record_state() -> void:
 			_state[i + 1] = _send_out_ticks[side]
 			_state[i + 2] = 1.0 if fighters[side].shielded else 0.0
 			_state[i + 3] = _switch_cooldown[side]
+			for h in ArenaConditions.HAZARDS.size():
+				_state[i + 4 + h] = int(conditions.hazards[side].get(ArenaConditions.HAZARDS.keys()[h], 0))
 			i += TEAM_STATE_SIZE
 	_hash.update(_state.to_byte_array())
 

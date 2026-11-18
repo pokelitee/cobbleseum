@@ -162,7 +162,7 @@ A battle with no winner: both sides' last fighters knocked out on the same tick,
 _Avoid_: tie, stalemate
 
 **Arena move**:
-A move that sets an arena condition instead of hitting a fighter: a weather move, a surge move (Electric Terrain) or a screen (Reflect). Entry hazards such as Spikes are arena moves too, but wait for team battles.
+A move that sets an arena condition instead of hitting a fighter: a weather move, a surge move (Electric Terrain) or a screen (Reflect). Entry hazards such as Spikes are arena moves too.
 _Avoid_: field move
 
 **Arena condition**:
@@ -175,6 +175,10 @@ _Avoid_: look (the arena's sky and light, which weather changes on top of)
 **Surge**:
 The arena condition on the ground under the whole battle (electric, grassy, misty or psychic), set by the moves Showdown calls Electric Terrain and so on. It affects only grounded fighters.
 _Avoid_: terrain (that's the ground's shape), field effect
+
+**Entry hazard**:
+An arena condition laid on the foe's side, such as Stealth Rock or Spikes, that hurts or hinders each Pokémon sent out there until it's cleared. Only team battles have send-outs for it to act on.
+_Avoid_: trap, field hazard
 
 **Screen**:
 An arena condition on one side that weakens hits taken: Reflect, Light Screen or Aurora Veil.

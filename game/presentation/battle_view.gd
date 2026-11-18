@@ -86,6 +86,9 @@ const WEATHER_STARTS := {"rain": "It started to rain!", "sun": "The sunlight tur
 	"sand": "A sandstorm kicked up!", "snow": "It started to snow!"}
 const WEATHER_ENDS := {"rain": "The rain stopped.", "sun": "The sunlight faded.",
 	"sand": "The sandstorm subsided.", "snow": "The snow stopped."}
+## Entry hazards: what's said over the side they're laid on.
+const HAZARD_LAID := {"stealthrock": "Pointed stones float around!", "spikes": "Spikes scattered on the ground!",
+	"toxicspikes": "Poison spikes scattered!", "stickyweb": "A sticky web spreads out!"}
 ## Surges: what's said when each starts and ends (colours from ArenaSurge).
 const SURGE_STARTS := {"electric": "The ground crackles with electricity!", "grassy": "Grass grew over the field!",
 	"misty": "Mist swirled over the field!", "psychic": "The field turned weird!"}
@@ -837,6 +840,15 @@ func _play_events() -> void:
 			"screen_end":
 				if event.get("shattered", false):
 					_fx.announce(_views[event.side], "Shattered!", ScreenPanes.COLOURS[event.screen], 56)
+			"hazard":
+				var colour: Color = Hud.STATUS_BADGES[event.hazard][1].lightened(0.3)
+				_fx.announce(_views[int(event.target_side)], HAZARD_LAID[event.hazard], colour, 52)
+			"hazard_damage":
+				_views[event.side].take_hit()
+				_fx.announce(_views[event.side], "-%d" % event.damage, Hud.STATUS_BADGES[event.hazard][1].lightened(0.3), 48)
+			"hazards_cleared":
+				_fx.announce(_views[event.side], "Absorbed the poison spikes!" if event.get("absorbed", false) else "Hazards cleared!",
+					Color(0.85, 0.95, 1.0), 48)
 			"weather_damage":
 				_fx.announce(_views[event.side], "-%d" % event.damage, WEATHER_COLOURS[event.weather], 44)
 			"stunned":
@@ -930,8 +942,9 @@ func _mark(event: Dictionary, settled := false) -> void:
 
 ## The weather and surge shown last frame, their ticks left then, and the ticks they lasted in
 ## all (for the HUD's timers).
-## Screen panes in front of shielded fighters.
+## Screen panes in front of shielded fighters, and entry hazards on the field.
 var _screen_panes: ScreenPanes
+var _hazard_marks: HazardMarks
 ## What each side's plate shows under its HP bar.
 var _plate_effects: Array[PlateEffects] = [PlateEffects.new(), PlateEffects.new()]
 var _weather_seen := ""
@@ -954,6 +967,11 @@ func _sync_conditions() -> void:
 		_screen_panes = ScreenPanes.new()
 		add_child(_screen_panes)
 	_screen_panes.sync(conditions.screens, _views, [battle.fighters[0].radius, battle.fighters[1].radius])
+	if _hazard_marks == null:
+		_hazard_marks = HazardMarks.new()
+		_hazard_marks.setup(int(battle.spec.seed))
+		add_child(_hazard_marks)
+	_hazard_marks.sync(conditions.hazards, battle)
 	for side in 2:
 		_hud.set_effects(side, _plate_effects[side].read(battle.fighters[side]))
 	var entries := []

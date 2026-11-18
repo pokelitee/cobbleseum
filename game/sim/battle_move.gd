@@ -70,6 +70,10 @@ var confuses := false
 var weather := ""
 var surge := ""
 var screen := ""
+## An entry hazard it lays on the foe's side (ArenaConditions.HAZARDS), and which sides' hazards
+## it clears: "own", "both" or "".
+var hazard := ""
+var clears := ""
 ## Showdown's priority: above 0 winds up faster (Rules.PRIORITY_WINDUP_FACTOR).
 var priority := 0
 ## Shares of max HP healed (HEAL), of damage dealt healed (drain) or taken back (recoil).
@@ -106,6 +110,7 @@ func own_stat_drop() -> int:
 static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 	var move := BattleMove.new()
 	move.id = id
+	move.clears = str(ArenaConditions.HAZARD_CLEARERS.get(id, ""))
 	move.name = data.get("name", id)
 	move.type = data.get("type", "Normal")
 	move.physical = data.get("category") == "Physical"
@@ -129,6 +134,8 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		var cooldown := Rules.status_move_cooldown_seconds(pp)
 		if move.kind == Kind.ARENA:
 			cooldown = Rules.SCREEN_COOLDOWN if not move.screen.is_empty() else Rules.ARENA_MOVE_COOLDOWN
+			if not move.hazard.is_empty():
+				cooldown = Rules.HAZARD_COOLDOWN
 		move.cooldown_ticks = Rules.seconds_to_ticks(cooldown)
 		move.projectile_speed = Rules.projectile_speed(data.get("accuracy", 100))
 		return {"move": move}
@@ -209,6 +216,14 @@ static func _classify_status_move(id: String, data: Dictionary, move: BattleMove
 	var weather := ArenaConditions.weather_of_move(data)
 	var surge := ArenaConditions.surge_of_move(data)
 	var screen := str(data.get("sideCondition", ""))
+	if screen in ArenaConditions.HAZARDS or id == "defog":
+		move.kind = Kind.ARENA
+		move.hazard = screen if screen in ArenaConditions.HAZARDS else ""
+		return ""
+	if id == "tidyup":
+		move.kind = Kind.SELF_BUFF
+		move.boosts = {"atk": 1, "spe": 1}
+		return ""
 	if not weather.is_empty() or not surge.is_empty() or screen in ArenaConditions.SCREENS:
 		move.kind = Kind.ARENA
 		move.weather = weather

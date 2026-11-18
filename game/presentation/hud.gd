@@ -49,6 +49,8 @@ const STATUS_BADGES := {
 	"confusion": ["CNF", Color("ff5f9e")],
 	"reflect": ["REFL", Color("e0559a")], "lightscreen": ["LSCR", Color("d4a51c")],
 	"auroraveil": ["VEIL", Color("3ab8d8")],
+	"stealthrock": ["ROCK", Color("b89a6a")], "spikes": ["SPK", Color("9a8f80")],
+	"toxicspikes": ["TSPK", Color("b45ad6")], "stickyweb": ["WEB", Color("c8c8a0")],
 }
 ## Stat stage badges: each stat's code, and the colours of a rise and a drop.
 const STAGE_CODES := {"atk": "ATK", "def": "DEF", "spa": "SPA", "spd": "SPD", "spe": "SPE"}
@@ -303,8 +305,8 @@ func set_effects(side: int, entries: Array[Dictionary]) -> void:
 	var keys := entries.map(func(entry: Dictionary) -> String: return entry.key)
 	var stages := {}
 	for entry in entries:
-		if entry.has("stages"):
-			stages[entry.key] = entry.stages
+		if entry.has("stages") or entry.has("layers"):
+			stages[entry.key] = entry.get("stages", entry.get("layers"))
 	for key: String in shown.keys():
 		var badge: HudBadge = shown[key]
 		if not key in keys or (stages.has(key) and badge.get_meta("stages") != stages[key]):
@@ -334,6 +336,12 @@ func _effect_badge(entry: Dictionary) -> HudBadge:
 		return stage_badge
 	var badge: Array = STATUS_BADGES[entry.key]
 	var colour: Color = badge[1]
+	if entry.has("layers"):
+		var layers: int = entry.layers
+		var hazard_badge := HudBadge.new([[entry.key, colour], [badge[0] + ("×%d" % layers if layers > 1 else ""), colour.lightened(0.35)]],
+			colour, false, _scale)
+		hazard_badge.set_meta("stages", layers)
+		return hazard_badge
 	return HudBadge.new([[entry.key, colour], [badge[0], colour.lightened(0.35)]], colour, entry.has("left"), _scale)
 
 

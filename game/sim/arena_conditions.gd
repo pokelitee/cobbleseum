@@ -55,6 +55,23 @@ const SCREENS: Array[String] = ["reflect", "lightscreen", "auroraveil"]
 const SCREEN_NAMES := {"reflect": "Reflect", "lightscreen": "Light Screen", "auroraveil": "Aurora Veil"}
 const SCREEN_FACTOR := 0.5
 const SCREEN_BREAKERS: Array[String] = ["brickbreak", "psychicfangs", "ragingbull"]
+## Entry hazards (team battles), laid on the foe's side and acting on each of its send-outs:
+## the most layers each stacks to. Stealth Rock takes ROCK_SHARE of max HP times the compressed
+## effectiveness of Rock (§9.4); Spikes take SPIKES_SHARES by layers; Toxic Spikes poison (two
+## layers: badly), and a grounded Poison type coming out absorbs them; Sticky Web lowers Speed.
+## All but Stealth Rock reach only grounded fighters. They last until cleared: the spins clear
+## the user's side, Defog and Tidy Up both sides (Defog the foe's screens too).
+const HAZARDS := {"stealthrock": 1, "spikes": 3, "toxicspikes": 2, "stickyweb": 1}
+const HAZARD_NAMES := {"stealthrock": "Stealth Rock", "spikes": "Spikes", "toxicspikes": "Toxic Spikes", "stickyweb": "Sticky Web"}
+const ROCK_SHARE := 1.0 / 8.0
+const SPIKES_SHARES: Array[float] = [0.0, 1.0 / 8.0, 1.0 / 6.0, 1.0 / 4.0]
+const HAZARD_CLEARERS := {"rapidspin": "own", "mortalspin": "own", "defog": "both", "tidyup": "both"}
+## Valuing a layer (hazard_value), as a share of HP per foe send-out to come: Toxic Spikes'
+## poison and Sticky Web's Speed drop, and the send-outs expected beyond the foe's bench.
+const POISON_WORTH := 0.08
+const BAD_POISON_WORTH := 0.04
+const WEB_WORTH := 0.04
+const EXTRA_ENTRIES := 0.5
 ## Valuing a weather (weather_gain): a fighter deals about its foe's whole HP in a battle of
 ## this many seconds, so a damage factor is worth that rate over the weather's time; doubling
 ## walking speed is worth this share of HP a second.
@@ -68,6 +85,10 @@ var surge := ""
 var surge_ticks := 0
 ## Each side's screens: {name: ticks left}.
 var screens: Array[Dictionary] = [{}, {}]
+## The entry hazards on each side: {name: layers}. They act on that side's send-outs.
+var hazards: Array[Dictionary] = [{}, {}]
+## Each side's healthy Pokémon on the bench, kept by the battle, for valuing hazards.
+var bench := PackedInt32Array([0, 0])
 
 
 ## The weather a Showdown move sets ("" for none).
@@ -198,6 +219,44 @@ static func _grounded(types: Array, ability_id: String) -> bool:
 ## The surge acting on `fighter`, or "" if there's none or it isn't grounded.
 func surge_for(fighter: Fighter) -> String:
 	return surge if grounded(fighter) else ""
+
+
+## What laying one more layer of hazard `name` on `side` is worth, as a share of HP: what the
+## layer takes from each send-out to come there (its bench, and a few switches). 0 at the most
+## layers, or with no one left to send out.
+func hazard_value(side: int, name: String, foe: Fighter) -> float:
+	var layers := int(hazards[side].get(name, 0))
+	if layers >= int(HAZARDS.get(name, 0)) or bench[side] == 0:
+		return 0.0
+	var entries := bench[side] + EXTRA_ENTRIES
+	match name:
+		"stealthrock":
+			return ROCK_SHARE * entries
+		"spikes":
+			return (SPIKES_SHARES[layers + 1] - SPIKES_SHARES[layers]) * entries
+		"toxicspikes":
+			return (POISON_WORTH if layers == 0 else BAD_POISON_WORTH) * entries
+		"stickyweb":
+			return WEB_WORTH * entries
+	return 0.0
+
+
+## What the hazards on `side` take from each send-out there, as a share of HP (Stealth Rock at
+## neutral effectiveness), times its send-outs to come: what clearing them is worth to that side.
+func hazards_worth(side: int) -> float:
+	var share := 0.0
+	for name: String in hazards[side]:
+		var layers := int(hazards[side][name])
+		match name:
+			"stealthrock":
+				share += ROCK_SHARE
+			"spikes":
+				share += SPIKES_SHARES[layers]
+			"toxicspikes":
+				share += POISON_WORTH + (BAD_POISON_WORTH if layers > 1 else 0.0)
+			"stickyweb":
+				share += WEB_WORTH
+	return share * (bench[side] + EXTRA_ENTRIES)
 
 
 ## The weather that acts on `fighter`: a Utility Umbrella keeps rain and sun off its holder.

@@ -273,3 +273,21 @@ func test_stat_stages_show_their_arrow_and_count_and_redraw_when_it_changes() ->
 	assert_eq(row.get_child_count(), 1)
 	assert_eq((row.get_child(0).find_children("*", "Label", false, false)[1] as Label).text, "1", "redrawn with its new count")
 	hud.free()
+
+
+func test_entry_hazards_show_on_their_side_s_plate_with_layers() -> void:
+	var fighter := Fighter.new()
+	fighter.side = 1
+	fighter.arena.hazards[1] = {"spikes": 2, "stealthrock": 1}
+	var entries := PlateEffects.new().read(fighter)
+	assert_eq(entries.map(func(e: Dictionary) -> String: return e.key), ["stealthrock", "spikes"])
+	assert_eq(entries[1].layers, 2)
+	var hud := Hud.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(hud)
+	hud.setup(["Left", "Right"], Vector2(1920, 1080))
+	hud.set_effects(1, entries)
+	var first: HudBadge = hud._effects[1].spikes
+	entries[1].layers = 3
+	hud.set_effects(1, entries)
+	assert_false(is_instance_valid(first), "a new layer redraws the badge")
+	hud.free()
