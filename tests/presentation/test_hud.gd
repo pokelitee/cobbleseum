@@ -291,3 +291,33 @@ func test_entry_hazards_show_on_their_side_s_plate_with_layers() -> void:
 	hud.set_effects(1, entries)
 	assert_false(is_instance_valid(first), "a new layer redraws the badge")
 	hud.free()
+
+
+func test_a_team_shows_as_balls_on_its_plate() -> void:
+	var team: Array = []
+	for slot in 3:
+		var fighter := Fighter.new()
+		fighter.slot = slot
+		fighter.hp = 10
+		team.append(fighter)
+	team[1].status = "par"
+	team[2].hp = 0
+	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
+		var hud := Hud.new()
+		(Engine.get_main_loop() as SceneTree).root.add_child(hud)
+		hud.setup(["Left", "Right"], size)
+		for side in 2:
+			hud.show_team(side, team, team[0])
+			var balls: TeamBalls = hud._team_balls[side]
+			assert_eq([balls.state(0), balls.state(1), balls.state(2)], ["healthy", "par", "fainted"])
+			var plate: Control = hud._panels[side].get_child(0)
+			assert_true(Rect2(plate.global_position, plate.size).encloses(Rect2(balls.global_position, balls.size)),
+				"on its plate at %s" % size)
+		hud.show_team(0, [team[0]], team[0])
+		hud.free()
+	var single := Hud.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(single)
+	single.setup(["Left", "Right"], Vector2(1920, 1080))
+	single.show_team(0, [team[0]], team[0])
+	assert_eq(single._team_balls[0], null, "a side of one shows none")
+	single.free()

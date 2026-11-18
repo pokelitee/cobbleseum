@@ -7,7 +7,8 @@ extends RefCounted
 ## end on it. A window ends either where the plan ends or a short linger after a hit, so it
 ## always closes on a payoff; a window that reaches the finish always plays the whole knockout
 ## to the end, and then the victory, which comes on top of the requested length rather than
-## out of it.
+## out of it. In a team battle the window is chosen across the whole battle: one may also close
+## on an earlier knockout, once its slow-motion orbit has played.
 
 const HIT_SCORE := 1.0
 ## Added per share of the defender's max HP the hit took.
@@ -66,11 +67,17 @@ static func choose(plan_data: Dictionary, events: Array, max_hp: Array, frames: 
 			finish = mini(finish, int(event.tick))
 	var ends: Array[int] = [length]
 	for i in events.size():
+		var end := -1
 		if events[i].type == "hit":
-			var end := int(events[i].tick) + 1 + END_LINGER_TICKS
-			end = length if end > finish else end
-			if not ends.has(end):
-				ends.append(end)
+			end = int(events[i].tick) + 1 + END_LINGER_TICKS
+		elif events[i].type == "knockout" and not is_final(events[i]):
+			# A team battle's clip may close on a knockout before the last, after its orbit.
+			end = int(events[i].tick) + 1 + Director.KNOCKOUT_LINGER_TICKS
+		if end < 0:
+			continue
+		end = length if end > finish else end
+		if not ends.has(end):
+			ends.append(end)
 	var best := {}
 	for end in ends:
 		var start := _start_for(frames_at, end, frames)

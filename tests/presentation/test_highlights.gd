@@ -100,3 +100,12 @@ func test_team_hits_score_by_the_defenders_own_max_hp_and_only_the_last_knockout
 		{"tick": 800, "type": "knockout", "side": 1, "left": 0}]
 	var window := Highlights.choose(_plan(830), events, MAX_HP, 120)
 	assert_eq(window.end, 830, "a clip still ends on the last knockout")
+
+
+func test_a_team_battle_clip_may_close_on_an_earlier_knockout() -> void:
+	# A burst of hits ending in a knockout early on, then a quiet stretch to the last one.
+	var events := [_hit(100, 0, 150, 250, true, 1.3), _hit(130, 0, 150, 100, true, 1.3), _hit(160, 0, 100, 0, true, 1.3),
+		{"tick": 160, "type": "knockout", "side": 1, "left": 1}, _hit(700, 0, 10, 390),
+		{"tick": 990, "type": "knockout", "side": 1, "left": 0}]
+	var window := Highlights.choose(_plan(1030), events, MAX_HP, 120)
+	assert_eq(window.end, 161 + Director.KNOCKOUT_LINGER_TICKS, "the orbit after the earlier knockout plays out")

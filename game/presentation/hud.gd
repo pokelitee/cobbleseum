@@ -30,6 +30,8 @@ const SHINY_MARK_GAP := 10.0
 const PLATE_PAD := Vector2(18, 12)
 const BAR_TOP := 80.0
 const BAR_HEIGHT := 36.0
+## The team balls' top on the plate, level with the name.
+const TEAM_BALLS_TOP := 22.0
 ## The fighter's portrait fills the plate's height on its outer end, this far from the name.
 const PORTRAIT_SIZE := BAR_TOP + BAR_HEIGHT
 const PORTRAIT_GAP := 16.0
@@ -82,6 +84,8 @@ var _type_rows: Array[HBoxContainer] = []
 ## Per side, the plate's part naming its fighter (portrait, name, shiny mark, type pills), rebuilt
 ## when a team battle sends out another (set_fighter()).
 var _identities: Array[Control] = []
+## Per side in a team battle, its team as balls on the plate (TeamBalls), or null.
+var _team_balls: Array = [null, null]
 ## Per side: the effect row under the HP bar, its badges by key, the x its start lines up with
 ## (the bar's end nearer the portrait), and the width it may take (the bar's).
 var _effect_rows: Array[HBoxContainer] = []
@@ -283,6 +287,27 @@ func set_fighter(side: int, name: String, types: Array, portrait: Texture2D, shi
 	for type: String in types:
 		row.add_child(_pill(type.to_upper(), TypeColors.of(type)))
 	_type_rows[side] = row
+
+
+## Shows `team` (a team battle's side, Battle.teams[side]) as a row of balls at the end of the
+## name's row on the side's plate: healthy, statused or fainted, the one out raised.
+func show_team(side: int, team: Array, out: Fighter) -> void:
+	if team.size() < 2:
+		return
+	var balls: TeamBalls = _team_balls[side]
+	if balls == null:
+		balls = TeamBalls.new(_scale)
+		_panels[side].add_child(balls)
+		_team_balls[side] = balls
+	balls.show_team(team, out)
+	var mirrored := not _portrait and side == 1
+	var inset := (PORTRAIT_SIZE + PORTRAIT_GAP) * _scale
+	# At the end of the name's row, short of the portrait on a mirrored plate.
+	balls.position = Vector2(_content_width - balls.size.x - (inset if mirrored else 0.0), TEAM_BALLS_TOP * _scale)
+	# Type pills that would run into the balls give way to them.
+	var row: HBoxContainer = _type_rows[side]
+	if row != null:
+		row.visible = row.position.x + row.get_combined_minimum_size().x <= balls.position.x
 
 
 ## Sets the HP fraction shown for a side. The lagging segment holds, then drains to match;
