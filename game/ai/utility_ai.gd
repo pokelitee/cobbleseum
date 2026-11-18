@@ -110,6 +110,9 @@ var _flank_spot := Vector2.INF
 ## This chance to feint's roll: -1 until rolled, then 0 (don't) or 1 (do). The chance lasts
 ## while the foe stays on its last dodge charge.
 var _feint_roll := -1
+## The fighters it last decided for and against; a team battle's send-out changes them.
+var _me: Fighter
+var _foe: Fighter
 
 static var _curves := {}
 
@@ -122,6 +125,10 @@ func _init(ai_profile: AIProfile, stream: SimRandom) -> void:
 func decide(battle: Battle, side: int) -> Dictionary:
 	var me := battle.fighters[side]
 	var foe := battle.fighters[1 - side]
+	_meet(me, foe)
+	if battle.is_waiting(1 - side):
+		_intent = {}
+		return {}
 	_remember(foe)
 	_held += 1
 	_since_decision += 1
@@ -152,6 +159,28 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		_:
 			_intent = _around_terrain(battle, me, _movement_intent(me, seen, _current))
 	return _intent
+
+
+## Starts afresh for a new fighter of its own (everything it was planning) or a new foe (what
+## it remembers seeing), after a send-out.
+func _meet(me: Fighter, foe: Fighter) -> void:
+	if _foe != null and foe != _foe:
+		_history.clear()
+		_history_count = 0
+		_judged.clear()
+		_dodge_allowed.clear()
+		_guard_allowed.clear()
+		_feint_roll = -1
+	if _me != null and me != _me:
+		_intent = {}
+		_current = ""
+		_held = 0
+		_since_decision = 0
+		_feint_roll = -1
+		_cover_spot = Vector2.INF
+		_flank_spot = Vector2.INF
+	_me = me
+	_foe = foe
 
 
 ## The intent's walking direction turned, if needed, so it doesn't run into ground the fighter
@@ -513,10 +542,11 @@ func _threat(battle: Battle, me: Fighter, seen: Dictionary, side: int) -> Dictio
 			continue
 		if (start + velocity * t).distance_to(me.position) > me.radius + Rules.PROJECTILE_RADIUS:
 			continue
-		var move := foe.moves[projectile.move]
+		var shooter: Fighter = battle.teams[projectile.owner][projectile.slot]
+		var move := shooter.moves[projectile.move]
 		var threat := {"key": "p%d" % int(projectile.id),
 			"direction": velocity.normalized(), "ticks": t, "melee": false,
-			"danger": expected_damage(foe, me, move, data) / maxf(me.hp, 1.0) if move.is_damaging() else 0.1}
+			"danger": expected_damage(shooter, me, move, data) / maxf(me.hp, 1.0) if move.is_damaging() else 0.1}
 		if best.is_empty() or threat.ticks < best.ticks:
 			best = threat
 	if seen.action == Fighter.Action.WINDUP:
@@ -553,7 +583,7 @@ func _band(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary) -> Vecto
 		else:
 			melee = true
 	var lean := melee_lean(me, foe, battle.data())
-	var overtime := battle.tick >= Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS)
+	var overtime := battle.tick >= battle.overtime_tick
 	var close := melee and (lean >= KITER_LEAN or overtime or _opening(foe, seen))
 	var band: Vector2
 	if close:

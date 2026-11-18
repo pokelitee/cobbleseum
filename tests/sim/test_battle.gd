@@ -108,7 +108,7 @@ func test_bad_specs_are_reported() -> void:
 	var controllers := [StandInAI.new(SimRandom.new(1)), StandInAI.new(SimRandom.new(2))]
 	assert_true(Battle.create(_spec(1, "nobody"), _data(), controllers).error.contains("unknown species"))
 	assert_true(Battle.create(_spec(1, "squirt", "blaze", ["nothing"]), _data(), controllers).error.contains("unknown move"))
-	assert_true(Battle.create({"seed": 1, "fighters": []}, _data(), controllers).error.contains("two fighters"))
+	assert_true(Battle.create({"seed": 1, "fighters": []}, _data(), controllers).error.contains("two sides"))
 
 
 func test_a_spec_plays_only_under_the_versions_it_names() -> void:

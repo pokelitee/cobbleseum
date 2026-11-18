@@ -61,7 +61,12 @@ func setup(controllers: Array, names: Array, viewport_size: Vector2, hud_bands: 
 			var line := _label("", 19, OTHER)
 			rows.add_child(line)
 			lines.append(line)
-		_panels.append({"panel": panel, "lines": lines})
+		_panels.append({"panel": panel, "lines": lines, "title": title})
+
+
+## Names `side`'s panel after the fighter it now controls (a team battle's send-out).
+func name_side(side: int, name: String) -> void:
+	(_panels[side].title as Label).text = "%s · %s" % [name, describe_controller(_controllers[side])]
 
 
 ## Refreshes the rows from each AI's latest scores. Cheap enough to run every frame.

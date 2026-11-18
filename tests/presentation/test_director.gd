@@ -202,3 +202,24 @@ func test_close_ups_leave_room_between_them() -> void:
 	var plan := Director.plan(events, 400, MAX_HP, power, SimRandom.new(1))
 	assert_eq(Director.shot_for(plan.shots, 105).shot, Director.Shot.CLOSE_UP)
 	assert_true(Director.shot_for(plan.shots, 135).shot != Director.Shot.CLOSE_UP, "no second close-up straight after")
+
+
+func test_every_knockout_gets_its_orbit_but_only_the_last_the_victory() -> void:
+	var events := [
+		{"tick": 90, "type": "windup", "side": 0, "move": "jet"},
+		{"tick": 100, "type": "hit", "side": 0, "move": "jet", "damage": 200, "crit": false, "effectiveness": 1.0, "hp": 0,
+			"slot": 0, "target_side": 1, "target_slot": 0},
+		{"tick": 100, "type": "knockout", "side": 1, "slot": 0, "left": 1},
+		{"tick": 160, "type": "send_out", "side": 1, "slot": 1},
+		{"tick": 280, "type": "windup", "side": 0, "move": "cannon"},
+		{"tick": 300, "type": "hit", "side": 0, "move": "cannon", "damage": 300, "crit": false, "effectiveness": 1.0, "hp": 0,
+			"slot": 0, "target_side": 1, "target_slot": 1},
+		{"tick": 300, "type": "knockout", "side": 1, "slot": 1, "left": 0},
+	]
+	var plan := Director.plan(events, 301, [[400], [200, 300]], MOVE_POWER, SimRandom.new(1))
+	assert_eq(plan.slow[95], Director.KNOCKOUT_FRAMES_PER_TICK, "the first knockout plays in slow motion")
+	assert_eq(plan.slow[100 + Director.KNOCKOUT_LINGER_TICKS + 5], 1, "then back to normal speed for the send-out")
+	assert_eq(Director.shot_for(plan.shots, 100).shot, Director.Shot.KNOCKOUT)
+	assert_eq(plan.victory.start, 301 + Director.KNOCKOUT_LINGER_TICKS, "the victory follows the last knockout")
+	assert_eq(plan.replay.knockout, 300)
+	assert_eq(plan.hitstop[300], Director.HEAVY_HITSTOP_FRAMES, "a heavy hit by the defender's own max HP")

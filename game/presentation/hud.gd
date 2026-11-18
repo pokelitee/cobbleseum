@@ -75,6 +75,9 @@ var _shakes: Array[int] = [0, 0]
 var _banners: Array[Dictionary] = []
 ## Per side: the type pills after the name.
 var _type_rows: Array[HBoxContainer] = []
+## Per side, the plate's part naming its fighter (portrait, name, shiny mark, type pills), rebuilt
+## when a team battle sends out another (set_fighter()).
+var _identities: Array[Control] = []
 ## Per side: the effect row under the HP bar, its badges by key, the x its start lines up with
 ## (the bar's end nearer the portrait), and the width it may take (the bar's).
 var _effect_rows: Array[HBoxContainer] = []
@@ -165,28 +168,14 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 		plate.add_theme_stylebox_override("panel", _plate_style(side, mirrored))
 		plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(plate)
-		var slot := _portrait_slot(side, names[side], portraits[side] if side < portraits.size() else null, mirrored)
-		slot.position.x = _content_width - slot.size.x if mirrored else 0.0
-		panel.add_child(slot)
+		var identity := Control.new()
+		identity.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(identity)
+		_identities.append(identity)
+		_type_rows.append(null)
+		set_fighter(side, names[side], types[side] if side < types.size() else [],
+			portraits[side] if side < portraits.size() else null, side < shiny.size() and shiny[side])
 		var left := 0.0 if mirrored else inset
-		var name_label := _label(names[side], 56, Color.WHITE, true)
-		name_label.position.x = left
-		panel.add_child(name_label)
-		var after_name := left + name_label.get_minimum_size().x
-		if side < shiny.size() and shiny[side]:
-			var mark := ShinyMark.new()
-			mark.size = Vector2.ONE * SHINY_MARK_SIZE * _scale
-			mark.position = Vector2(after_name + SHINY_MARK_GAP * _scale, (name_label.get_minimum_size().y - mark.size.y) * 0.5)
-			panel.add_child(mark)
-			after_name = mark.position.x + mark.size.x
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", roundi(8 * _scale))
-		row.position = Vector2(after_name + 16 * _scale, 14 * _scale)
-		panel.add_child(row)
-		var own_types: Array = types[side] if side < types.size() else []
-		for type: String in own_types:
-			row.add_child(_pill(type.to_upper(), TypeColors.of(type)))
-		_type_rows.append(row)
 		var track := Panel.new()
 		track.position = Vector2(left, BAR_TOP * _scale)
 		track.size = Vector2(bar_width / _scale, BAR_HEIGHT) * _scale
@@ -251,6 +240,38 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 	_condition_row.add_theme_constant_override("separation", roundi(8 * _scale))
 	_condition_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_condition_row)
+
+
+## Shows `name` on a side's plate, with its `types`, `portrait` (a null one shows the name's
+## initial) and shiny mark: at setup, and when a team battle sends out another Pokémon.
+func set_fighter(side: int, name: String, types: Array, portrait: Texture2D, shiny: bool) -> void:
+	var identity := _identities[side]
+	for child in identity.get_children():
+		identity.remove_child(child)
+		child.queue_free()
+	var mirrored := not _portrait and side == 1
+	var inset := (PORTRAIT_SIZE + PORTRAIT_GAP) * _scale
+	var slot := _portrait_slot(side, name, portrait, mirrored)
+	slot.position.x = _content_width - slot.size.x if mirrored else 0.0
+	identity.add_child(slot)
+	var left := 0.0 if mirrored else inset
+	var name_label := _label(name, 56, Color.WHITE, true)
+	name_label.position.x = left
+	identity.add_child(name_label)
+	var after_name := left + name_label.get_minimum_size().x
+	if shiny:
+		var mark := ShinyMark.new()
+		mark.size = Vector2.ONE * SHINY_MARK_SIZE * _scale
+		mark.position = Vector2(after_name + SHINY_MARK_GAP * _scale, (name_label.get_minimum_size().y - mark.size.y) * 0.5)
+		identity.add_child(mark)
+		after_name = mark.position.x + mark.size.x
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", roundi(8 * _scale))
+	row.position = Vector2(after_name + 16 * _scale, 14 * _scale)
+	identity.add_child(row)
+	for type: String in types:
+		row.add_child(_pill(type.to_upper(), TypeColors.of(type)))
+	_type_rows[side] = row
 
 
 ## Sets the HP fraction shown for a side. The lagging segment holds, then drains to match;
@@ -696,6 +717,14 @@ func _matchup(names: Array) -> Control:
 	box.position = (_size - box.size) * 0.5
 	_intro_box = box
 	return card
+
+
+## Names `side`'s fighter on the intro card: a clip starting mid-way through a team battle
+## opens on the fighters out then.
+func set_matchup_name(side: int, name: String) -> void:
+	(_intro_box.get_child(0 if side == 0 else 2) as Label).text = name
+	_intro_box.size = _intro_box.get_minimum_size()
+	_intro_box.position = (_size - _intro_box.size) * 0.5
 
 
 ## A small rounded tag in a type's colour.

@@ -60,6 +60,11 @@ var _blend_seconds := 0.0
 
 
 ## `random` seeds the handheld wobble; give it its own stream so it can't shift other choices.
+## The height of `side`'s fighter, after a team battle sends out another.
+func set_height(side: int, height: float) -> void:
+	_heights[side] = height
+
+
 func _init(is_portrait: bool, fighter_heights: Array, random: SimRandom) -> void:
 	portrait = is_portrait
 	_heights = fighter_heights

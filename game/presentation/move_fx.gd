@@ -381,7 +381,7 @@ func sync_projectiles(battle: Battle) -> void:
 	for projectile in flying:
 		var visual := _visual_for(projectile)
 		if visual.is_empty():
-			var move := battle.fighters[projectile.owner].moves[projectile.move]
+			var move := battle.projectile_move(projectile)
 			var target: Vector2 = battle.fighters[1 - int(projectile.owner)].position
 			visual = _new_projectile(projectile, move, target)
 		_update_projectile(visual, Vector3(projectile.position.x, projectile.get("height", PROJECTILE_HEIGHT), projectile.position.y))

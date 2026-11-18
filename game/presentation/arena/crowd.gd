@@ -114,6 +114,13 @@ func add_watcher(view: FighterView, seat: Transform3D, fighter: FighterView) -> 
 	_seats = _seats.filter(func(s: Transform3D) -> bool: return s.origin.distance_to(seat.origin) > WATCHER_ROOM)
 
 
+## Watchers watching any of `old` (a side's team) watch `fighter` instead, once it's sent out.
+func rewatch(old: Array, fighter: FighterView) -> void:
+	for watcher in watchers:
+		if watcher._watched in old:
+			watcher.watch(fighter)
+
+
 ## Places the figures in a share of the remaining seats.
 func build() -> void:
 	var taken: Array[Transform3D] = []

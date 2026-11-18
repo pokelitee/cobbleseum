@@ -143,7 +143,7 @@ func test_each_plate_holds_a_portrait_or_the_initial_beside_the_bar() -> void:
 		hud.setup(["Left", "Right"], size, [[], []], [picture, null])
 		for side in 2:
 			var panel: Control = hud._panels[side]
-			var slot: Control = panel.get_child(1)
+			var slot: Control = hud._identities[side].get_child(0)
 			var slot_rect := Rect2(slot.global_position, slot.size)
 			var track: Control = hud._bars[side].get_parent()
 			var track_rect := Rect2(track.global_position, track.size)
@@ -151,16 +151,16 @@ func test_each_plate_holds_a_portrait_or_the_initial_beside_the_bar() -> void:
 			assert_true(Rect2(Vector2.ZERO, size).encloses(slot_rect), "slot %d on screen at %s" % [side, size])
 			var plate: Control = panel.get_child(0)
 			assert_true(Rect2(plate.global_position, plate.size).encloses(slot_rect), "slot %d on its plate at %s" % [side, size])
-		var shown: TextureRect = hud._panels[0].get_child(1).get_child(0)
+		var shown: TextureRect = hud._identities[0].get_child(0).get_child(0)
 		assert_eq(shown.texture, picture)
 		assert_false(shown.flip_h, "side A faces the middle as rendered")
-		var initial: Label = hud._panels[1].get_child(1).get_child(0)
+		var initial: Label = hud._identities[1].get_child(0).get_child(0)
 		assert_eq(initial.text, "R", "no portrait: the initial")
 		hud.free()
 	var hud := Hud.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(hud)
 	hud.setup(["Left", "Right"], Vector2(1920, 1080), [[], []], [picture, picture])
-	assert_true((hud._panels[1].get_child(1).get_child(0) as TextureRect).flip_h, "the right-hand plate's portrait faces the middle")
+	assert_true((hud._identities[1].get_child(0).get_child(0) as TextureRect).flip_h, "the right-hand plate's portrait faces the middle")
 	hud.free()
 
 
@@ -169,14 +169,28 @@ func test_a_shiny_has_a_sparkle_on_its_plate_in_both_formats() -> void:
 		var hud := Hud.new()
 		(Engine.get_main_loop() as SceneTree).root.add_child(hud)
 		hud.setup(["Left", "Right"], size, [["Fire"], ["Water"]], [null, null], [false, true])
-		var marks := hud._panels.map(func(p: Control) -> Array: return p.get_children().filter(func(c: Node) -> bool: return c is Hud.ShinyMark))
+		var marks := hud._identities.map(func(p: Control) -> Array: return p.get_children().filter(func(c: Node) -> bool: return c is Hud.ShinyMark))
 		assert_eq(marks.map(func(m: Array) -> int: return m.size()), [0, 1], "only the shiny side at %s" % size)
 		var mark: Control = marks[1][0]
 		var row: Control = hud._type_rows[1]
 		assert_true(mark.position.x + mark.size.x <= row.position.x, "the type pills make room for it at %s" % size)
-		var name_label: Label = hud._panels[1].get_children().filter(func(c: Node) -> bool: return c is Label)[0]
+		var name_label: Label = hud._identities[1].get_children().filter(func(c: Node) -> bool: return c is Label)[0]
 		assert_true(mark.position.x >= name_label.position.x + name_label.get_minimum_size().x, "after the name at %s" % size)
 		hud.free()
+
+
+func test_a_send_out_puts_the_new_fighter_on_its_plate() -> void:
+	var hud := Hud.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(hud)
+	hud.setup(["Left", "Right"], Vector2(1920, 1080), [["Fire"], ["Water"]], [null, null], [false, true])
+	hud.set_fighter(1, "Next", ["Grass", "Poison"], null, false)
+	var labels := hud._identities[1].get_children().filter(func(c: Node) -> bool: return c is Label)
+	assert_eq((labels[0] as Label).text, "Next")
+	assert_eq(hud._type_rows[1].get_child_count(), 2)
+	assert_true(hud._identities[1].get_children().filter(func(c: Node) -> bool: return c is Hud.ShinyMark).is_empty(),
+		"the shiny mark went with the shiny one")
+	assert_eq(hud._identities[1].get_child_count(), 3, "the old plate's parts are gone")
+	hud.free()
 
 
 ## Every effect at once, as PlateEffects would give them.

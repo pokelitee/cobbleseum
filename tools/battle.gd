@@ -86,6 +86,7 @@ static func run(spec: Dictionary, data: BattleData, describe := false, from_flag
 		"seconds": snappedf(float(ticks) / Rules.TICK_RATE, 0.01),
 		"arena": battle.arena,
 		"hp": [battle.fighters[0].hp, battle.fighters[1].hp],
+		"left": [battle.healthy(0).size(), battle.healthy(1).size()],
 		"hits": battle.events.filter(func(e: Dictionary) -> bool: return e.type == "hit").size(),
 		"checksum": battle.checksum(),
 	}

@@ -35,6 +35,16 @@ func setup(species: Array, root := SOUNDS_DIR) -> void:
 		_species[side] = str(species[side])
 
 
+## The species whose cry plays for `side`, after a team battle sends out another.
+func set_species(side: int, species: String) -> void:
+	_species[side] = species
+
+
+## The cry of `side`'s fighter, as it comes out.
+func cry(side: int) -> void:
+	_schedule(0, cry_path(side), CRY_DB)
+
+
 func intro() -> void:
 	_schedule(0, cry_path(0), CRY_DB)
 	_schedule(INTRO_CRY_GAP, cry_path(1), CRY_DB)

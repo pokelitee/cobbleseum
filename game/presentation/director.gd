@@ -49,13 +49,21 @@ const COMEBACK_CAPTION := "COMEBACK!"
 const FINAL_BLOW_CAPTION := "FINAL BLOW"
 
 
-## events: the battle's event log. end_tick: the tick the battle ended. max_hp: per side.
+## Before a knockout that isn't the last, slow motion starts no earlier than this many ticks
+## before it (a knockout by a status condition has no wind-up of its own).
+const KNOCKOUT_LEAD_TICKS := 45
+
+
+## events: the battle's event log. end_tick: the tick the battle ended. max_hp: per side, or per
+## side and team slot (Battle.team_max_hp()).
 ## move_power: per side, move id -> base power. Covers ticks [0, end_tick + linger), plus the
 ## victory after a knockout; ticks from end_tick on are presentation-only (the battle is over,
 ## the knockout plays out, the winner celebrates). Returns:
 ##   "hitstop": PackedInt32Array, frozen frames shown before each tick advances
 ##   "slow": PackedInt32Array, frames each tick lasts after any hit-stop (1, or more in slow motion)
 ##   "shots": Array of {"start", "end", "shot", "side"}
+## Every knockout gets its slow-motion orbit; only the last one (its side has no one left) gets
+## the victory and the instant replay.
 ##   "victory": {"start": tick, "side": the winner} after a knockout, else {}
 ##   "replay": after a knockout, the instant replay that plays just before the victory:
 ##     {"at": the victory's start tick, "start", "end": the replayed ticks [start, end),
@@ -95,13 +103,19 @@ static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array,
 				if landed - event.tick >= TRACKING_MIN_TICKS:
 					_overlay(shot_at, side_at, event.tick, landed, Shot.TRACKING, event.side)
 			"hit":
-				var defender := 1 - int(event.side)
-				var heavy: bool = event.crit or event.effectiveness > 1.0 or float(event.damage) >= HEAVY_HIT_SHARE * float(max_hp[defender])
+				var defender := Highlights.defender(event)
+				var heavy: bool = event.crit or event.effectiveness > 1.0 \
+					or float(event.damage) >= HEAVY_HIT_SHARE * Highlights.max_hp_of(max_hp, defender, int(event.get("target_slot", 0)))
 				if event.tick < length:
 					hitstop[event.tick] += HEAVY_HITSTOP_FRAMES if heavy else HITSTOP_FRAMES
 				if heavy:
 					_overlay(shot_at, side_at, event.tick, event.tick + IMPACT_TICKS, Shot.IMPACT, defender)
 					busy_until = maxi(busy_until, event.tick + IMPACT_TICKS)
+	for earlier: Dictionary in _earlier_knockouts(events):
+		var orbit_end: int = mini(int(earlier.tick) + KNOCKOUT_LINGER_TICKS, length)
+		_overlay(shot_at, side_at, earlier.start, orbit_end, Shot.KNOCKOUT, earlier.loser)
+		for tick in range(earlier.start, orbit_end):
+			slow[tick] = KNOCKOUT_FRAMES_PER_TICK
 	var victory := {}
 	if not knockout.is_empty():
 		_overlay(shot_at, side_at, knockout.start, victory_start, Shot.KNOCKOUT, knockout.loser)
@@ -153,12 +167,30 @@ static func _overlay(shot_at: PackedInt32Array, side_at: PackedInt32Array, start
 			side_at[t] = side
 
 
+## The knockouts before the final one, each as {"start", "loser", "tick"}: slow motion from
+## the finishing move's wind-up, at most KNOCKOUT_LEAD_TICKS before the knockout.
+static func _earlier_knockouts(events: Array) -> Array:
+	var found: Array = []
+	for i in events.size():
+		var event: Dictionary = events[i]
+		if event.type != "knockout" or Highlights.is_final(event):
+			continue
+		var start := maxi(0, int(event.tick) - 15)
+		for j in range(i - 1, -1, -1):
+			if events[j].type == "windup" and events[j].side == 1 - int(event.side):
+				if int(events[j].tick) >= int(event.tick) - KNOCKOUT_LEAD_TICKS:
+					start = events[j].tick
+				break
+		found.append({"start": start, "loser": event.side, "tick": event.tick})
+	return found
+
+
 ## Slow motion starts at the wind-up of the move that caused the knockout ("windup" is -1
-## when there was none).
+## when there was none). Only the final knockout counts.
 static func _knockout_window(events: Array, end_tick: int) -> Dictionary:
 	for i in range(events.size() - 1, -1, -1):
 		var event: Dictionary = events[i]
-		if event.type != "knockout":
+		if event.type != "knockout" or not Highlights.is_final(event):
 			continue
 		var loser: int = event.side
 		for j in range(i - 1, -1, -1):

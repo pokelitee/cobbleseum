@@ -89,3 +89,14 @@ func test_the_victory_comes_on_top_of_the_clip() -> void:
 func test_comeback_hits_are_hits_by_a_fighter_low_on_hp() -> void:
 	var events := [_hit(10, 0, 300, 100), _hit(20, 1, 40, 360), {"tick": 25, "type": "miss", "side": 1}, _hit(30, 0, 40, 60), _hit(40, 1, 40, 320)]
 	assert_eq(Highlights.comeback_hits(events, MAX_HP), [1, 4])
+
+
+func test_team_hits_score_by_the_defenders_own_max_hp_and_only_the_last_knockout_ends_clips() -> void:
+	var hit := _hit(100, 0, 100, 100)
+	hit.merge({"slot": 0, "target_side": 1, "target_slot": 1})
+	var scores := Highlights.event_scores([hit], [[400], [100, 200]])
+	assert_almost_eq(scores[0], Highlights.HIT_SCORE + Highlights.DAMAGE_SCORE * 0.5, 1e-4)
+	var events := [_hit(100, 0, 40, 360), {"tick": 300, "type": "knockout", "side": 1, "left": 2}, _hit(800, 0, 360, 0),
+		{"tick": 800, "type": "knockout", "side": 1, "left": 0}]
+	var window := Highlights.choose(_plan(830), events, MAX_HP, 120)
+	assert_eq(window.end, 830, "a clip still ends on the last knockout")

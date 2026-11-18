@@ -3,13 +3,18 @@ extends RefCounted
 ## One side's state in the simulation. Positions are on the arena floor (x, z) in metres.
 
 ## GUARD covers the guard's active window and then, if it blocked nothing, its recovery.
-enum Action { READY, WINDUP, RECOVERY, DODGE, GUARD }
+## SEND_OUT is a team member landing from its ball (Rules.SEND_OUT_SECONDS).
+enum Action { READY, WINDUP, RECOVERY, DODGE, GUARD, SEND_OUT }
 
 const DEFAULT_RADIUS := 0.5
 ## Major statuses, indexed for the battle checksum.
 const STATUS_CODES: Array[String] = ["", "brn", "par", "psn", "tox", "slp", "frz"]
 
 var side: int
+## Its place in its side's team (Battle.teams), 0 for the first.
+var slot := 0
+## Landing from its ball after a knockout: it can't be hit until it lands.
+var shielded := false
 var species_id: String
 var name: String
 var types: Array
@@ -133,9 +138,9 @@ func is_incapacitated() -> bool:
 	return status == "slp" or status == "frz" or stun_ticks > 0
 
 
-## While dodging a fighter can't be hit.
+## While dodging, or landing shielded after a knockout, a fighter can't be hit.
 func is_invulnerable() -> bool:
-	return action == Action.DODGE
+	return action == Action.DODGE or (action == Action.SEND_OUT and shielded)
 
 
 func can_dodge() -> bool:

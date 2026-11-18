@@ -69,7 +69,7 @@ func decide(battle: Battle, side: int) -> Dictionary:
 	var me := battle.fighters[side]
 	var foe := battle.fighters[1 - side]
 	var intent := {"use": -1, "move": Vector2.ZERO, "dodge": Vector2.ZERO}
-	if not me.can_act():
+	if not me.can_act() or battle.is_waiting(1 - side):
 		return intent
 	var threat := incoming_threat(battle, side)
 	if not threat.is_empty() and me.can_dodge() and _first_look(battle, threat) and random.chance(DODGE_CHANCE):

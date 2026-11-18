@@ -31,8 +31,16 @@ _Avoid_: pairing
 ### Battles
 
 **Battle**:
-One fight between two fighters, from the start to a knockout or a draw.
+One fight between two sides, from the start until a side has no one left, or a draw.
 _Avoid_: game, match
+
+**Team**:
+The 1–6 Pokémon a side brings to a battle, in order. One fighter of each team is out at a time; a battle of one Pokémon a side is a team battle with teams of one.
+_Avoid_: party, roster (that's every species)
+
+**Send-out**:
+A team member coming into the battle, landing from its ball at its side's start spot. After a knockout with more of the team to come, it comes after a short lull and can't be hit until it lands.
+_Avoid_: switch-in (for this), spawn
 
 **Side**:
 One of a battle's two places, A or B. Every matchup is played from both sides.
@@ -51,7 +59,7 @@ The number a battle's luck, arena and terrain come from.
 The number of one set of battle rules. Every change that can change how a battle turns out gets a new one.
 
 **Battle spec**:
-Everything needed to reproduce a battle exactly: the rules and data versions, the two fighters with their movesets, abilities and held items, each side's AI profile, the arena and the seed, plus every tick's intents for a player's side. It also says how each fighter looks (shiny, cosmetic form), which only the presentation reads.
+Everything needed to reproduce a battle exactly: the rules and data versions, each side's team (its fighters with their movesets, abilities and held items), each side's AI profile, the arena and the seed, plus every tick's intents for a player's side. It also says how each fighter looks (shiny, cosmetic form), which only the presentation reads.
 _Avoid_: replay file, config
 
 **Battle flags**:
@@ -136,17 +144,17 @@ A lasting effect on a fighter: burn, poison, bad poison, paralysis, sleep, freez
 _Avoid_: status effect, ailment
 
 **Knockout**:
-A fighter's HP reaching zero, which ends the battle.
+A fighter's HP reaching zero. The battle ends when a side's last fighter is knocked out.
 _Avoid_: faint, KO (in prose), defeat
 
 **Overtime**:
-The stretch from 60 seconds to time-up, in which hits grow stronger every second.
+The stretch from 60 seconds (times the larger team's size) to time-up, in which hits grow stronger every second.
 
 **Time-up**:
-A battle reaching its 90-second cap.
+A battle reaching its cap: 90 seconds times the larger team's size.
 
 **Draw**:
-A battle with no winner: both fighters knocked out on the same tick, or time-up.
+A battle with no winner: both sides' last fighters knocked out on the same tick, or time-up.
 _Avoid_: tie, stalemate
 
 **Arena move**:

@@ -6,13 +6,23 @@ extends RefCounted
 ##
 ## Each tick: controllers produce intents, then both sides act in an order that alternates
 ## every tick, projectiles move, and the battle checks for a knockout or the time cap.
+##
+## A side brings a team of 1-Rules.MAX_TEAM Pokémon (§9.1), one out at a time: `teams` holds
+## every member and `fighters` each side's one out now. After a knockout with more to come,
+## the side's next one is sent out (Rules.KNOCKOUT_LULL_SECONDS later, at its start spot); the
+## battle ends when a side has no one left.
 
 enum Stream { BATTLE, SIDE_A, SIDE_B, COSMETIC, TERRAIN }
 enum Result { ONGOING, WIN_A, WIN_B, DRAW }
 
 var tick := 0
 var result := Result.ONGOING
+## Each side's fighter out now, indexed by side.
 var fighters: Array[Fighter] = []
+## Each side's whole team in the spec's order (Fighter.slot), the fighters out included.
+var teams: Array = [[], []]
+## The tick overtime starts; it and the time cap scale with the larger team.
+var overtime_tick := 0
 var projectiles: Array[Dictionary] = []
 ## Events for presentation and highlight picking: {"tick", "type", "side", ...}.
 var events: Array[Dictionary] = []
@@ -36,12 +46,22 @@ var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
 const FIGHTER_STATE_SIZE := 32
+## Values hashed per side for team battles: the slot out, the send-out countdown, the shield.
+const TEAM_STATE_SIZE := 3
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
+## Per side, ticks until its next Pokémon is sent out after a knockout (0 for none pending).
+var _send_out_ticks := PackedInt32Array([0, 0])
+## Set by a knockout with more to come: projectiles in flight vanish at the end of the tick.
+var _drop_projectiles := false
+## Whether the state hashed includes the teams' (only when a side has more than one member,
+## so one-on-one battles hash exactly as before).
+var _hash_teams := false
 
 
-## `spec` = {"seed": int, "fighters": [{"species", "moves"?: [ids], "radius"?}, x2],
+## `spec` = {"seed": int, "fighters": [{"species", "moves"?: [ids], "radius"?}, x2] (one per
+## side; a side's entry may instead hold "team": [members like that], 1-Rules.MAX_TEAM of them),
 ## "arena"?: preset, "weather"?: a starting weather ("" for none, else the preset's),
 ## "rules_version"?: int, "data_versions"?: {source: SHA-256}}. Without
 ## "moves" a fighter gets its species' standard moveset (Movesets). The
@@ -58,16 +78,26 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 		return {"error": version_problem}
 	var entries: Array = battle_spec.get("fighters", [])
 	if entries.size() != 2 or controllers.size() != 2:
-		return {"error": "a battle needs exactly two fighters and two controllers"}
+		return {"error": "a battle needs exactly two sides (fighters) and two controllers"}
+	var members: Array = []
+	for entry: Dictionary in entries:
+		var team := members_of(entry)
+		if team.is_empty() or team.size() > Rules.MAX_TEAM:
+			return {"error": "a team has 1-%d Pokémon, not %d" % [Rules.MAX_TEAM, team.size()]}
+		members.append(team)
 	var battle := Battle.new()
 	battle.spec = battle_spec
 	battle._data = data
 	battle._controllers = controllers
 	battle._random = SimRandom.stream(int(battle_spec.seed), Stream.BATTLE)
-	battle._time_cap_ticks = Rules.seconds_to_ticks(Rules.TIME_CAP_SECONDS)
+	var team_size := maxi(members[0].size(), members[1].size())
+	battle._hash_teams = team_size > 1
+	battle.overtime_tick = Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS * team_size)
+	battle._time_cap_ticks = Rules.seconds_to_ticks(Rules.TIME_CAP_SECONDS * team_size)
 	var types: Array = []
-	for entry: Dictionary in entries:
-		types.append_array(data.species.get(entry.get("species", ""), {}).get("types", []))
+	for team: Array in members:
+		for entry: Dictionary in team:
+			types.append_array(data.species.get(entry.get("species", ""), {}).get("types", []))
 	battle.arena = Arenas.choose(str(battle_spec.get("arena", "")), types, int(battle_spec.seed))
 	battle.terrain = Terrain.generate(Arenas.preset(battle.arena).field, SimRandom.stream(int(battle_spec.seed), Stream.TERRAIN),
 		Arenas.enclosed(battle.arena))
@@ -77,44 +107,92 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 	if not weather.is_empty():
 		battle.conditions.set_weather(weather, -1)
 	for side in 2:
-		var entry: Dictionary = entries[side]
-		var species: Variant = data.species.get(entry.get("species", ""))
-		if not species is Dictionary:
-			return {"error": "unknown species '%s'" % entry.get("species", "")}
-		if not data.roster.is_empty() and not data.roster.has(entry.species):
-			return {"error": "'%s' is not in the roster (no Cobblemon model)" % entry.species}
-		var radius := float(entry.get("radius", data.roster.get(entry.species, {}).get("radius", Fighter.DEFAULT_RADIUS)))
-		var move_ids: Array = entry.get("moves", [])
-		if move_ids.is_empty():
-			var generated := data.standard_moveset(entry.species)
-			if generated.has("error"):
-				return generated
-			move_ids = generated.moves
-		var battle_moves: Array[BattleMove] = []
-		for move_id: String in move_ids:
-			var converted := data.convert_move(move_id)
-			if converted.has("error"):
-				return converted
-			battle_moves.append(converted.move)
-		if battle_moves.is_empty():
-			return {"error": "%s has no moves" % entry.species}
-		var fighter := Fighter.create(side, entry.species, species, battle_moves, radius)
-		var ability := str(entry.get("ability", data.standard_ability(entry.species)))
-		if not ability.is_empty() and not Abilities.is_known(ability):
-			return {"error": "ability '%s' isn't supported (see %s)" % [ability, Abilities.TABLE_FILE]}
-		fighter.set_ability(ability)
-		var item := str(entry.get("item", Items.standard(species, battle_moves, data, data.standard_ability(entry.species))))
-		if not item.is_empty() and not Items.is_known(item):
-			return {"error": "item '%s' isn't supported (see %s)" % [item, Items.TABLE_FILE]}
-		fighter.set_item(item)
-		fighter.can_evolve = Items.can_evolve(species, data)
-		fighter.arena = battle.conditions
-		fighter.position = Vector2(0, (-0.5 if side == 0 else 0.5) * Rules.START_DISTANCE)
-		fighter.facing = Vector2(0, 1 if side == 0 else -1)
-		fighter.ground = battle.terrain.height_at(fighter.position)
-		battle.fighters.append(fighter)
+		for slot in members[side].size():
+			var made := _make_fighter(members[side][slot], side, data)
+			if made.has("error"):
+				return made
+			var fighter: Fighter = made.fighter
+			fighter.slot = slot
+			fighter.arena = battle.conditions
+			battle.teams[side].append(fighter)
+		var lead: Fighter = battle.teams[side][0]
+		battle._place_at_start(lead)
+		battle.fighters.append(lead)
 	battle._hash.start(HashingContext.HASH_SHA256)
 	return {"battle": battle}
+
+
+## A side's team members from its spec entry: its "team", or the entry itself for one.
+static func members_of(entry: Dictionary) -> Array:
+	return entry.team if entry.get("team") is Array else [entry]
+
+
+## One team member from its spec entry: {"fighter": Fighter} or {"error": String}.
+static func _make_fighter(entry: Dictionary, side: int, data: BattleData) -> Dictionary:
+	var species: Variant = data.species.get(entry.get("species", ""))
+	if not species is Dictionary:
+		return {"error": "unknown species '%s'" % entry.get("species", "")}
+	if not data.roster.is_empty() and not data.roster.has(entry.species):
+		return {"error": "'%s' is not in the roster (no Cobblemon model)" % entry.species}
+	var radius := float(entry.get("radius", data.roster.get(entry.species, {}).get("radius", Fighter.DEFAULT_RADIUS)))
+	var move_ids: Array = entry.get("moves", [])
+	if move_ids.is_empty():
+		var generated := data.standard_moveset(entry.species)
+		if generated.has("error"):
+			return generated
+		move_ids = generated.moves
+	var battle_moves: Array[BattleMove] = []
+	for move_id: String in move_ids:
+		var converted := data.convert_move(move_id)
+		if converted.has("error"):
+			return converted
+		battle_moves.append(converted.move)
+	if battle_moves.is_empty():
+		return {"error": "%s has no moves" % entry.species}
+	var fighter := Fighter.create(side, entry.species, species, battle_moves, radius)
+	var ability := str(entry.get("ability", data.standard_ability(entry.species)))
+	if not ability.is_empty() and not Abilities.is_known(ability):
+		return {"error": "ability '%s' isn't supported (see %s)" % [ability, Abilities.TABLE_FILE]}
+	fighter.set_ability(ability)
+	var item := str(entry.get("item", Items.standard(species, battle_moves, data, data.standard_ability(entry.species))))
+	if not item.is_empty() and not Items.is_known(item):
+		return {"error": "item '%s' isn't supported (see %s)" % [item, Items.TABLE_FILE]}
+	fighter.set_item(item)
+	fighter.can_evolve = Items.can_evolve(species, data)
+	return {"fighter": fighter}
+
+
+## Puts a fighter on its side's start spot, facing the other side's.
+func _place_at_start(fighter: Fighter) -> void:
+	fighter.position = Vector2(0, (-0.5 if fighter.side == 0 else 0.5) * Rules.START_DISTANCE)
+	fighter.facing = Vector2(0, 1 if fighter.side == 0 else -1)
+	fighter.velocity = Vector2.ZERO
+	fighter.ground = terrain.height_at(fighter.position)
+
+
+## Each side's team's max HP by slot, [[side A's], [side B's]], for reading hit events.
+func team_max_hp() -> Array:
+	return teams.map(func(team: Array) -> Array: return team.map(func(f: Fighter) -> int: return f.max_hp))
+
+
+## The move a projectile carries (its owner may be off the field since).
+func projectile_move(projectile: Dictionary) -> BattleMove:
+	return (teams[projectile.owner][projectile.slot] as Fighter).moves[projectile.move]
+
+
+## Team members of `side` not knocked out, in team order.
+func healthy(side: int) -> Array[Fighter]:
+	var left: Array[Fighter] = []
+	for fighter: Fighter in teams[side]:
+		if not fighter.is_knocked_out():
+			left.append(fighter)
+	return left
+
+
+## Whether `side` is between Pokémon: its fighter is down and the next is on its way, or
+## landing shielded. Meanwhile the foe can only walk.
+func is_waiting(side: int) -> bool:
+	return _send_out_ticks[side] > 0 or (fighters[side].action == Fighter.Action.SEND_OUT and fighters[side].shielded)
 
 
 static func _version_problem(battle_spec: Dictionary, data: BattleData) -> String:
@@ -191,16 +269,20 @@ func step() -> void:
 			intent_log[side].append(intent_to_log(intent))
 	if tick == 0:
 		_start_conditions()
+	_tick_send_outs()
 	var order := [0, 1] if tick % 2 == 0 else [1, 0]
 	for side: int in order:
 		_act(fighters[side], fighters[1 - side], intents[side])
 	_move_projectiles()
+	if _drop_projectiles:
+		_drop_projectiles = false
+		projectiles.clear()
 	for ended in conditions.tick():
 		if ended.has("screen"):
 			_event("screen_end", int(ended.side), {"screen": ended.screen})
 		else:
 			_event("weather_end" if ended.has("weather") else "surge_end", -1, ended)
-	if tick == Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS):
+	if tick == overtime_tick:
 		_event("overtime", -1, {})
 	_record_state()
 	tick += 1
@@ -239,6 +321,15 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 	_tick_item(fighter)
 	_tick_weather(fighter)
 	_tick_surge(fighter)
+	if fighter.action == Fighter.Action.SEND_OUT:
+		fighter.action_ticks -= 1
+		if fighter.action_ticks <= 0:
+			fighter.action = Fighter.Action.READY
+			fighter.shielded = false
+			_event("landed_out", fighter.side, {})
+		return
+	if is_waiting(foe.side):
+		intent = {"move": intent.get("move", Vector2.ZERO)}
 	if fighter.is_knocked_out() or fighter.is_incapacitated():
 		fighter.followups.clear()
 		if not fighter.is_knocked_out():
@@ -392,7 +483,8 @@ func _slide(fighter: Fighter, foe: Fighter, delta: Vector2) -> void:
 	var next := fighter.position + delta
 	var contact := fighter.radius + foe.radius
 	var away := next - foe.position
-	if away.length() < contact:
+	# A fainted foe whose next Pokémon is on its way is no obstacle.
+	if away.length() < contact and not (foe.is_knocked_out() and _send_out_ticks[foe.side] > 0):
 		if away.length_squared() < 1e-8:
 			away = fighter.position - foe.position
 		next = foe.position + away.normalized() * contact
@@ -466,6 +558,7 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> bool:
 			projectiles.append({
 				"id": _projectile_count,
 				"owner": fighter.side,
+				"slot": fighter.slot,
 				"move": move_index,
 				"position": start,
 				"velocity": fighter.facing * speed,
@@ -495,7 +588,7 @@ func _roll_hits(fighter: Fighter, move: BattleMove) -> int:
 func _move_projectiles() -> void:
 	var remaining: Array[Dictionary] = []
 	for projectile in projectiles:
-		var owner := fighters[projectile.owner]
+		var owner: Fighter = teams[projectile.owner][projectile.slot]
 		var target := fighters[1 - projectile.owner]
 		var start: Vector2 = projectile.position
 		var end: Vector2 = start + projectile.velocity
@@ -535,7 +628,7 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 			conditions.screens[defender.side].erase(screen)
 			_event("screen_end", defender.side, {"screen": screen, "shattered": true})
 	var outcome := damage(attacker, defender, move, _data, _random)
-	outcome.damage = maxi(1, floori(outcome.damage * Rules.overtime_factor(tick)))
+	outcome.damage = maxi(1, floori(outcome.damage * Rules.overtime_factor(tick, overtime_tick / float(Rules.TICK_RATE))))
 	var immune := Abilities.immune(defender, move)
 	var dealt := mini(outcome.damage, defender.hp)
 	var lethal: bool = dealt >= defender.hp and defender.hp > 1
@@ -549,7 +642,8 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 		defender.item_used = defender.item_used or sash
 	defender.hp -= dealt
 	_event("hit", attacker.side, {"move": move.id, "damage": dealt if holds or sash else outcome.damage, "crit": outcome.crit,
-		"effectiveness": outcome.effectiveness, "hp": defender.hp})
+		"effectiveness": outcome.effectiveness, "hp": defender.hp, "slot": attacker.slot, "target_side": defender.side,
+		"target_slot": defender.slot})
 	if holds:
 		_ability_event(defender)
 	if sash:
@@ -559,7 +653,7 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	_ability_on_hit(attacker, defender, move)
 	_item_on_hit(attacker, defender, move, dealt)
 	if defender.is_knocked_out():
-		_event("knockout", defender.side, {})
+		_knocked_out(defender)
 	else:
 		var push := (defender.position - attacker.position).normalized()
 		defender.velocity += push * Rules.knockback_speed(float(dealt) / defender.max_hp, defender.weight_kg)
@@ -711,7 +805,7 @@ func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
 		return
 	fighter.flash_fire_ticks = maxi(0, fighter.flash_fire_ticks - 1)
 	fighter.weak_armor_ticks = maxi(0, fighter.weak_armor_ticks - 1)
-	if entry.get("intimidate", false):
+	if entry.get("intimidate", false) and not is_waiting(foe.side):
 		fighter.intimidate_ticks -= 1
 		if fighter.intimidate_ticks <= 0:
 			fighter.intimidate_ticks = Rules.seconds_to_ticks(Abilities.INTIMIDATE_SECONDS)
@@ -728,6 +822,59 @@ func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
 			if fighter.boosts.spe < int(speed_boost.max):
 				_ability_event(fighter)
 				_boost(fighter, {"spe": 1}, fighter.ability)
+
+
+## Sends out each side's next Pokémon once its lull after a knockout is over.
+func _tick_send_outs() -> void:
+	for side in 2:
+		if _send_out_ticks[side] > 0:
+			_send_out_ticks[side] -= 1
+			if _send_out_ticks[side] == 0:
+				_send_out(teams[side][next_up(side)])
+
+
+## The team slot `side` sends out next: its first member not knocked out, or -1.
+func next_up(side: int) -> int:
+	var left := healthy(side)
+	return left[0].slot if not left.is_empty() else -1
+
+
+## `fighter` comes out at its side's start spot (pushed clear of the foe), landing from its
+## ball shielded; projectiles in flight vanish. Abilities that act on entry (weather and surge
+## setters) do; Intimidate strikes on its first tick.
+func _send_out(fighter: Fighter) -> void:
+	var foe := fighters[1 - fighter.side]
+	_place_at_start(fighter)
+	if not foe.is_knocked_out():
+		_slide(fighter, foe, Vector2.ZERO)
+		var to_foe := foe.position - fighter.position
+		if to_foe.length_squared() > 1e-8:
+			fighter.facing = to_foe.normalized()
+	fighter.action = Fighter.Action.SEND_OUT
+	fighter.action_ticks = Rules.seconds_to_ticks(Rules.SEND_OUT_SECONDS)
+	fighter.shielded = true
+	fighters[fighter.side] = fighter
+	projectiles.clear()
+	_event("send_out", fighter.side, {"species": fighter.species_id})
+	var weather := Abilities.sets_weather(fighter)
+	var surge := Abilities.sets_surge(fighter)
+	if not weather.is_empty() or not surge.is_empty():
+		_ability_event(fighter)
+		if not weather.is_empty():
+			_set_weather(fighter, weather, {"ability": fighter.ability})
+		else:
+			_set_surge(fighter, surge, {"ability": fighter.ability})
+
+
+## A fighter fainting: with more of its team to come, its side sends out the next after a lull,
+## and every projectile in flight vanishes.
+func _knocked_out(fighter: Fighter) -> void:
+	var left := healthy(fighter.side).size()
+	_event("knockout", fighter.side, {"left": left})
+	if left > 0:
+		_send_out_ticks[fighter.side] = Rules.seconds_to_ticks(Rules.KNOCKOUT_LULL_SECONDS)
+		_drop_projectiles = true
+		fighter.followups.clear()
 
 
 ## The conditions a battle starts with, on its first tick: the arena's or spec's weather, then
@@ -919,7 +1066,7 @@ func _hurt(fighter: Fighter, amount: int, type: String, details: Dictionary) -> 
 	details.merge({"damage": amount, "hp": fighter.hp})
 	_event(type, fighter.side, details)
 	if fighter.is_knocked_out():
-		_event("knockout", fighter.side, {})
+		_knocked_out(fighter)
 	else:
 		_check_berry(fighter)
 
@@ -1008,8 +1155,8 @@ static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove,
 
 
 func _check_end() -> void:
-	var a_down := fighters[0].is_knocked_out()
-	var b_down := fighters[1].is_knocked_out()
+	var a_down := healthy(0).is_empty()
+	var b_down := healthy(1).is_empty()
 	if a_down and b_down:
 		result = Result.DRAW
 	elif b_down:
@@ -1023,7 +1170,8 @@ func _check_end() -> void:
 
 ## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
 func _record_state() -> void:
-	_state.resize(FIGHTER_STATE_SIZE * 2 + 4 + 2 * ArenaConditions.SCREENS.size() + projectiles.size() * 3)
+	_state.resize(FIGHTER_STATE_SIZE * 2 + 4 + 2 * ArenaConditions.SCREENS.size() + projectiles.size() * 3
+		+ (TEAM_STATE_SIZE * 2 if _hash_teams else 0))
 	var i := 0
 	for fighter in fighters:
 		_state[i] = fighter.position.x
@@ -1073,10 +1221,20 @@ func _record_state() -> void:
 		_state[i + 1] = projectile.position.y
 		_state[i + 2] = projectile.height
 		i += 3
+	if _hash_teams:
+		for side in 2:
+			_state[i] = fighters[side].slot
+			_state[i + 1] = _send_out_ticks[side]
+			_state[i + 2] = 1.0 if fighters[side].shielded else 0.0
+			i += TEAM_STATE_SIZE
 	_hash.update(_state.to_byte_array())
 
 
+## Records an event. One by a side names its fighter's team slot ("slot"), the one out unless
+## `details` says otherwise.
 func _event(type: String, side: int, details: Dictionary) -> void:
 	var event := {"tick": tick, "type": type, "side": side}
-	event.merge(details)
+	if side >= 0:
+		event.slot = fighters[side].slot
+	event.merge(details, true)
 	events.append(event)
