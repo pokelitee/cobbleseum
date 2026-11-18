@@ -73,6 +73,10 @@ var _frame := 0
 var cobblemon: CobblemonMoveFX = null
 ## The fighters by side, so converted effects know each move's foe.
 var views: Array[FighterView] = []
+## Doubles (set by the battle view): the view a fighter's view faces (its target's), and a team
+## member's view by side and slot; singles finds the other of its two views.
+var foe_of := Callable()
+var view_of := Callable()
 ## Sparkles waiting to start: {"view": FighterView, "frames": int}.
 var _sparkles: Array[Dictionary] = []
 ## Draws projectiles between video frames in the window (BattleView's); null when recording.
@@ -117,6 +121,10 @@ func _play(move: BattleMove, phase: String, user: FighterView, foe: FighterView,
 
 
 func _foe(view: FighterView) -> FighterView:
+	if foe_of.is_valid():
+		var facing: FighterView = foe_of.call(view)
+		if facing != null:
+			return facing
 	for other in views:
 		if other != view:
 			return other
@@ -382,7 +390,7 @@ func sync_projectiles(battle: Battle) -> void:
 		var visual := _visual_for(projectile)
 		if visual.is_empty():
 			var move := battle.projectile_move(projectile)
-			var target: Vector2 = battle.fighters[1 - int(projectile.owner)].position
+			var target: Vector2 = battle.fighters[int(projectile.get("target", 1 - int(projectile.owner)))].position
 			visual = _new_projectile(projectile, move, target)
 		_update_projectile(visual, Vector3(projectile.position.x, projectile.get("height", PROJECTILE_HEIGHT), projectile.position.y))
 		alive.append(visual)
@@ -597,8 +605,8 @@ func _new_projectile(projectile: Dictionary, move: BattleMove, target: Vector2) 
 		smooth.track(root)
 	var visual := {"source": projectile, "node": root, "style": style, "colour": colour, "origin": origin,
 		"direction": direction, "reach": reach, "history": [], "parts": [], "power": move.power, "spawned": _frame}
-	if _converted(move) and views.size() == 2:
-		var user := views[int(projectile.owner)]
+	if _converted(move) and (views.size() == 2 or view_of.is_valid()):
+		var user: FighterView = views[int(projectile.owner)] if views.size() == 2 else view_of.call(int(projectile.owner), int(projectile.slot))
 		visual.style = "cobblemon"
 		visual.cobblemon = _play(move, "fire", user, _foe(user)) + cobblemon.play_riding(move, _sequence_style(move), "flight", root, user, _foe(user))
 		return visual

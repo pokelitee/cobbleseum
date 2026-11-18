@@ -6,6 +6,9 @@ extends CanvasLayer
 ## winner and credits cards, in the game's fonts (UiFonts).
 ## Layout follows the orientation: portrait has side B at the top and side A at the bottom;
 ## landscape has side A top-left and side B top-right. Everything animates per video frame.
+## Plates are indexed like Battle.fighters: by side in singles, and in doubles (four plates) by
+## place * 2 + side, each pair stacked and slimmer (DOUBLES_PLATE_SCALE), the place-0 plate
+## nearer the screen's edge.
 
 ## Frames before the lagging segment starts draining, and its drain per frame (share of bar).
 const LAG_DELAY := 12
@@ -44,6 +47,11 @@ const BANNER_ABOVE := -86.0
 ## Portrait's bottom plate sits this far above the bottom edge, leaving its effect row clear of
 ## the credit line.
 const BOTTOM_PLATE_RISE := 270.0
+## Doubles: each plate drawn at this scale, the pair's plates this far apart (reference pixels
+## before the scale), and a pair's two banners this far apart.
+const DOUBLES_PLATE_SCALE := 0.68
+const DOUBLES_PLATE_STEP := 190.0
+const DOUBLES_BANNER_STEP := 54.0
 ## Badge code and colour per status condition, confusion and screen (PlateEffects' keys).
 const STATUS_BADGES := {
 	"brn": ["BRN", Color("ff7a2e")], "par": ["PAR", Color("e8c21c")], "psn": ["PSN", Color("b45ad6")],
@@ -74,22 +82,26 @@ var _bars: Array[ColorRect] = []
 var _lags: Array[ColorRect] = []
 var _percents: Array[Label] = []
 ## HP fractions as last set. Kept here because a Control's scale can't reach exactly 0.
-var _hp_values: Array[float] = [1.0, 1.0]
-var _lag_values: Array[float] = [1.0, 1.0]
-var _lag_waits: Array[int] = [0, 0]
-var _shakes: Array[int] = [0, 0]
+var _hp_values: Array[float] = []
+var _lag_values: Array[float] = []
+var _lag_waits: Array[int] = []
+var _shakes: Array[int] = []
+## Whether there are two plates a side (doubles), and where each plate's banner goes (in its
+## panel, before the plate's scale).
+var _doubles := false
+var _banner_tops: Array[float] = []
 var _banners: Array[Dictionary] = []
 ## Per side: the type pills after the name.
 var _type_rows: Array[HBoxContainer] = []
 ## Per side, the plate's part naming its fighter (portrait, name, shiny mark, type pills), rebuilt
 ## when a team battle sends out another (set_fighter()).
 var _identities: Array[Control] = []
-## Per side in a team battle, its team as balls on the plate (TeamBalls), or null.
+## Per side in a team battle, its team as balls on a plate (TeamBalls), or null.
 var _team_balls: Array = [null, null]
 ## Per side: the effect row under the HP bar, its badges by key, the x its start lines up with
 ## (the bar's end nearer the portrait), and the width it may take (the bar's).
 var _effect_rows: Array[HBoxContainer] = []
-var _effects: Array[Dictionary] = [{}, {}]
+var _effects: Array[Dictionary] = []
 var _effect_anchors: Array[float] = []
 var _effect_room := 0.0
 ## Per side, the effect row's room: the bar's width, less the team balls' in a team battle.
@@ -153,11 +165,21 @@ static func cobblemon_credit(move_effects: bool) -> String:
 	return "Models, animations and sounds: Cobblemon (CC BY‑NC 3.0)"
 
 
-## Builds the HUD for fighters `names` (side A first), with each one's `types` for its pills,
-## its `portraits` (FighterPortrait textures; a null one shows the name's initial instead) and
-## whether it's `shiny`.
+## Builds the HUD for fighters `names` (side A first; four in doubles, by Battle.index_of), with
+## each one's `types` for its pills, its `portraits` (FighterPortrait textures; a null one shows
+## the name's initial instead) and whether it's `shiny`. `matchup` names each side on the intro
+## card (by default its fighter's name).
 func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portraits: Array = [null, null],
-		shiny: Array = [false, false]) -> void:
+		shiny: Array = [false, false], matchup: Array = []) -> void:
+	_doubles = names.size() == 4
+	for list: Array in [_hp_values, _lag_values]:
+		list.resize(names.size())
+		list.fill(1.0)
+	for list: Array in [_lag_waits, _shakes]:
+		list.resize(names.size())
+		list.fill(0)
+	for i in names.size():
+		_effects.append({})
 	_size = viewport_size
 	_portrait = VideoFormat.is_portrait(viewport_size)
 	_scale = minf(viewport_size.x, viewport_size.y) / REFERENCE_SIZE
@@ -167,21 +189,33 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 	# The name and bar make room for the portrait on the plate's outer end.
 	var inset := (PORTRAIT_SIZE + PORTRAIT_GAP) * _scale
 	bar_width -= inset
-	for side in 2:
+	for side in names.size():
+		# `side` is the plate's index: its side, and in doubles its place too.
+		var place := side / 2
+		var shrink := DOUBLES_PLATE_SCALE if _doubles else 1.0
+		var step := DOUBLES_PLATE_STEP * shrink * place
 		var panel := Control.new()
 		var home: Vector2
 		if _portrait:
-			home = Vector2(margin, (90 if side == 1 else viewport_size.y / _scale - BOTTOM_PLATE_RISE) * _scale)
+			home = Vector2(margin, (90 + step if side % 2 == 1 else viewport_size.y / _scale - BOTTOM_PLATE_RISE - step) * _scale)
 		else:
-			home = Vector2(margin if side == 0 else viewport_size.x - margin - _content_width, 40 * _scale)
+			home = Vector2(margin if side % 2 == 0 else viewport_size.x - margin - _content_width * shrink, (40 + step) * _scale)
 		panel.position = home
+		panel.scale = Vector2.ONE * shrink
 		add_child(panel)
+		var banner_top := BANNER_ABOVE if _portrait and side % 2 == 0 else BANNER_BELOW
+		if _doubles:
+			# A pair's banners sit together beyond it: under it, or above the bottom pair in portrait.
+			var above := _portrait and side % 2 == 0
+			var beyond := (DOUBLES_PLATE_STEP + DOUBLES_BANNER_STEP) * (1 - place)
+			banner_top += -beyond if above else beyond
+		_banner_tops.append(banner_top)
 		# Mirror the right-hand landscape plate so its bar drains toward the centre of the screen.
-		var mirrored := not _portrait and side == 1
+		var mirrored := not _portrait and side % 2 == 1
 		var plate := Panel.new()
 		plate.position = -PLATE_PAD * _scale
 		plate.size = (Vector2(_content_width / _scale, BAR_TOP + BAR_HEIGHT) + PLATE_PAD * 2.0) * _scale
-		plate.add_theme_stylebox_override("panel", _plate_style(side, mirrored))
+		plate.add_theme_stylebox_override("panel", _plate_style(side % 2, mirrored))
 		plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(plate)
 		var identity := Control.new()
@@ -236,7 +270,7 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 	credit.position = Vector2(margin, viewport_size.y - 60 * _scale)
 	add_child(credit)
 	_fit_width(credit, viewport_size.x - 2 * margin)
-	_intro = _matchup(names)
+	_intro = _matchup(matchup if not matchup.is_empty() else names)
 	_winner_band = ColorRect.new()
 	_winner_band.color = Color(0.04, 0.05, 0.1, 0.72)
 	_winner_band.size = Vector2(viewport_size.x, 190 * _scale)
@@ -267,9 +301,9 @@ func set_fighter(side: int, name: String, types: Array, portrait: Texture2D, shi
 	for child in identity.get_children():
 		identity.remove_child(child)
 		child.queue_free()
-	var mirrored := not _portrait and side == 1
+	var mirrored := not _portrait and side % 2 == 1
 	var inset := (PORTRAIT_SIZE + PORTRAIT_GAP) * _scale
-	var slot := _portrait_slot(side, name, portrait, mirrored)
+	var slot := _portrait_slot(side % 2, name, portrait, mirrored)
 	slot.position.x = _content_width - slot.size.x if mirrored else 0.0
 	identity.add_child(slot)
 	var left := 0.0 if mirrored else inset
@@ -294,21 +328,25 @@ func set_fighter(side: int, name: String, types: Array, portrait: Texture2D, shi
 
 ## Shows `team` (a team battle's side, Battle.teams[side]) as a row of balls at the inner end of
 ## the effect row under the side's HP bar, which leaves the effects the rest: healthy, statused
-## or fainted, the one out raised.
-func show_team(side: int, team: Array, out: Fighter) -> void:
+## or fainted, the ones `out` (Battle.out) raised. In doubles they go once, under the pair: on
+## the plate nearer the middle of the screen (the bottom one of the bottom pair in portrait).
+func show_team(side: int, team: Array, out: Array) -> void:
 	if team.size() < 2:
 		return
+	var plate := side
+	if _doubles and not (_portrait and side == 0):
+		plate = side + 2
 	var balls: TeamBalls = _team_balls[side]
 	if balls == null:
 		balls = TeamBalls.new(_scale)
-		_panels[side].add_child(balls)
+		_panels[plate].add_child(balls)
 		_team_balls[side] = balls
 	balls.show_team(team, out)
 	var mirrored := not _portrait and side == 1
-	var bar_end := _effect_anchors[side] + (0.0 if mirrored else _effect_room)
+	var bar_end := _effect_anchors[plate] + (0.0 if mirrored else _effect_room)
 	var top := (BAR_TOP + BAR_HEIGHT + EFFECT_ROW_GAP) * _scale
 	balls.position = Vector2(bar_end - _effect_room if mirrored else bar_end - balls.size.x, top)
-	_effect_rooms[side] = _effect_room - balls.size.x - TEAM_BALLS_GAP * _scale
+	_effect_rooms[plate] = _effect_room - balls.size.x - TEAM_BALLS_GAP * _scale
 
 
 ## Sets the HP fraction shown for a side. The lagging segment holds, then drains to match;
@@ -353,7 +391,7 @@ func set_effects(side: int, entries: Array[Dictionary]) -> void:
 		(shown[entry.key] as HudBadge).set_left(float(entry.get("left", -1.0)))
 	row.size = row.get_combined_minimum_size()
 	row.scale = Vector2.ONE * minf(1.0, _effect_rooms[side] / maxf(row.size.x, 1.0))
-	var mirrored := not _portrait and side == 1
+	var mirrored := not _portrait and side % 2 == 1
 	row.position.x = _effect_anchors[side] - row.size.x * row.scale.x if mirrored else _effect_anchors[side]
 
 
@@ -447,10 +485,9 @@ func banner(side: int, move_name: String, type: String) -> void:
 	tag.add_theme_stylebox_override("normal", style)
 	_panels[side].add_child(tag)
 	tag.size = tag.get_minimum_size()  # measured once the theme applies, inside the tree
-	var right_aligned := not _portrait and side == 1
-	tag.position = Vector2(_content_width - tag.size.x if right_aligned else 0.0, BANNER_BELOW * _scale)
-	if _portrait and side == 0:
-		tag.position.y = BANNER_ABOVE * _scale  # above the bottom plate, not off the screen
+	var right_aligned := not _portrait and side % 2 == 1
+	# Above the bottom plate in portrait, not off the screen (_banner_tops).
+	tag.position = Vector2(_content_width - tag.size.x if right_aligned else 0.0, _banner_tops[side] * _scale)
 	for old in _banners.filter(func(b: Dictionary) -> bool: return b.side == side):
 		old.label.queue_free()
 		_banners.erase(old)
@@ -692,7 +729,7 @@ func show_credits() -> void:
 ## Advances every animation by one video frame.
 func next_frame() -> void:
 	_frame += 1
-	for side in 2:
+	for side in _panels.size():
 		if _lag_waits[side] > 0:
 			_lag_waits[side] -= 1
 		else:
@@ -783,6 +820,9 @@ func _matchup(names: Array) -> Control:
 		label.add_theme_color_override("font_outline_color", Color.BLACK if vs else SIDE_COLOURS[part[1]].darkened(0.35))
 		label.add_theme_constant_override("outline_size", roundi(20 * _scale))
 		box.add_child(label)
+		# Long names (both of a doubles side's) shrink to fit beside the VS, or the screen's width.
+		if not vs:
+			_fit_width(label, (_size.x - 180.0 * _scale) * (1.0 if _portrait else 0.42))
 	box.size = box.get_minimum_size()
 	box.position = (_size - box.size) * 0.5
 	_intro_box = box
@@ -792,7 +832,10 @@ func _matchup(names: Array) -> Control:
 ## Names `side`'s fighter on the intro card: a clip starting mid-way through a team battle
 ## opens on the fighters out then.
 func set_matchup_name(side: int, name: String) -> void:
-	(_intro_box.get_child(0 if side == 0 else 2) as Label).text = name
+	var label := _intro_box.get_child(0 if side == 0 else 2) as Label
+	label.text = name
+	label.add_theme_font_size_override("font_size", roundi(104 * _scale))
+	_fit_width(label, (_size.x - 180.0 * _scale) * (1.0 if _portrait else 0.42))
 	_intro_box.size = _intro_box.get_minimum_size()
 	_intro_box.position = (_size - _intro_box.size) * 0.5
 

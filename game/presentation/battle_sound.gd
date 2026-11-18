@@ -31,7 +31,8 @@ var _frame := 0
 
 func setup(species: Array, root := SOUNDS_DIR) -> void:
 	_root = root
-	for side in 2:
+	_species.resize(species.size())
+	for side in species.size():
 		_species[side] = str(species[side])
 
 

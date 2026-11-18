@@ -70,3 +70,10 @@ func test_a_bench_becomes_the_team_flag() -> void:
 	assert_eq(flags["vs-team"], "charmander,squirtle,charmander")
 	var spec := SpecFlags.to_spec(flags)
 	assert_eq(Battle.members_of(spec.fighters[1]).size(), 3)
+
+
+func test_doubles_becomes_the_doubles_flag() -> void:
+	var flags := SetupScreen.flags_for(_setup("watch", {"bench": "charmander"}, {"bench": "squirtle"}, {"doubles": true}))
+	assert_true(flags.has("doubles"))
+	assert_true(SpecFlags.to_spec(flags).doubles)
+	assert_false(SetupScreen.flags_for(_setup("watch")).has("doubles"))

@@ -16,14 +16,16 @@ extends RefCounted
 ## order (1-6); --watch and --play may then come without a species (or name the team's first),
 ## and --vs may be left out. The flags about moves, ability, item and looks apply to each side's
 ## first member; the rest bring their standard ones.
+## Doubles (M17): --doubles puts two of each team out at once; both sides then need a team of
+## 2-6 (--team and --vs-team).
 ## Species, moves, abilities and items may be written as names ("Mr. Mime", "Life Orb"); they
 ## become Showdown IDs. Cli checks them against the data.
 
 const DEFAULT_FOE := "blastoise"
 const KEYS: Array[String] = ["play", "watch", "vs", "team", "vs-team", "ai", "vs-ai", "seed", "arena", "weather", "shiny",
-	"form", "vs-form", "moves", "vs-moves", "ability", "vs-ability", "item", "vs-item", "trainer", "vs-trainer"]
-## Flags that may come without a value: the mode, when --team names the species.
-const BARE_KEYS: Array[String] = ["play", "watch"]
+	"form", "vs-form", "moves", "vs-moves", "ability", "vs-ability", "item", "vs-item", "trainer", "vs-trainer", "doubles"]
+## Flags that may come without a value: the mode, when --team names the species, and --doubles.
+const BARE_KEYS: Array[String] = ["play", "watch", "doubles"]
 ## The value of --ability, --item and --weather for none.
 const NONE := "none"
 ## Which sides --shiny makes shiny.
@@ -79,6 +81,13 @@ static func to_spec(flags: Dictionary) -> Dictionary:
 		else:
 			sides[side].species = named if not named.is_empty() else DEFAULT_FOE
 	var spec := {"seed": seed.to_int() if seed.is_valid_int() else int(Time.get_ticks_usec() % 1000000), "fighters": sides}
+	if flags.has("doubles"):
+		for side in 2:
+			var size := Battle.members_of(sides[side]).size()
+			if size < Rules.MIN_DOUBLES_TEAM:
+				return {"error": "--doubles needs a team of %d-%d a side (--team and --vs-team), not %d" % [
+					Rules.MIN_DOUBLES_TEAM, Rules.MAX_TEAM, size]}
+		spec.doubles = true
 	if flags.has("arena"):
 		spec.arena = flags.arena
 	if flags.has("weather"):
@@ -140,6 +149,8 @@ static func to_flags(spec: Dictionary) -> Dictionary:
 			flags[["team", "vs-team"][side]] = ",".join(sides[side].team.map(func(m: Dictionary) -> String: return str(m.species)))
 	if not playing:
 		flags["vs-ai"] = ais[1]
+	if spec.get("doubles", false):
+		flags.doubles = ""
 	if spec.has("seed"):
 		flags.seed = str(int(spec.seed))
 	if spec.has("arena"):
@@ -162,7 +173,7 @@ static func to_args(flags: Dictionary) -> PackedStringArray:
 	var args: PackedStringArray = []
 	for key in KEYS:
 		if flags.has(key):
-			args.append("--%s=%s" % [key, flags[key]])
+			args.append("--%s" % key if key in BARE_KEYS and str(flags[key]).is_empty() else "--%s=%s" % [key, flags[key]])
 	return args
 
 

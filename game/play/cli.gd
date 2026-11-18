@@ -19,6 +19,8 @@ const SPEC_FLAGS_HELP := """Battle flags (instead of a spec file):
                            needs no species
   --vs=<species>           side B (default blastoise)
   --vs-team=<a,b,...>      side B's whole team instead of --vs
+  --doubles                two of each team out at once (teams of 2-6 a side); in play, T
+                           cycles your target and the side's AI runs your ally
   --trainer=<trainer>      side A's trainer, or none (default in team battles: one from the seed,
                            otherwise none); --vs-trainer for B
   --ai=<profile>           side A's AI; with --play, the foe's (default ranked)

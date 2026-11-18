@@ -7,6 +7,7 @@ extends RefCounted
 ## Gamepad: left stick to move, A to dodge, X Y B RB for moves, held LB to feint, RT to guard.
 ## Team battles: Q (D-pad left and right) cycles the highlighted bench member, E (D-pad up)
 ## switches to it; while the fighter is down after a knockout, the highlighted one is the pick.
+## Doubles: T (the right stick's click) locks onto the other foe.
 ## Movement is relative to the camera. Button presses are latched between frames and ticks
 ## (poll() runs every frame, decide() every tick), so no tap is lost.
 
@@ -21,6 +22,9 @@ const SWITCH_PREVIOUS_ACTION := "cobbleseum_switch_previous"
 const SWITCH_ACTION := "cobbleseum_switch"
 const CYCLE_KEY := "Q / D-pad"
 const SWITCH_KEY := "E / D-pad up"
+## Doubles: lock onto the other foe.
+const TARGET_ACTION := "cobbleseum_target"
+const TARGET_KEY := "T / R3"
 const DIRECTION_ACTIONS: Array[String] = ["cobbleseum_left", "cobbleseum_right", "cobbleseum_forward", "cobbleseum_back"]
 ## Labels shown in the move bar, in move order, and for the feint modifier and the guard.
 const MOVE_KEYS: Array[String] = ["J / X", "K / Y", "L / B", "I / RB"]
@@ -37,6 +41,7 @@ var pending_dodge := false
 var pending_guard := false
 var pending_cycle := 0
 var pending_switch := false
+var pending_target := false
 ## The highlighted bench member's team slot (-1 for none), kept in step by decide().
 var bench_choice := -1
 ## The camera's forward direction on the floor (sim x, z), for camera-relative movement.
@@ -51,13 +56,14 @@ static func ensure_input_actions() -> void:
 		"cobbleseum_left": [KEY_A, KEY_LEFT], "cobbleseum_right": [KEY_D, KEY_RIGHT],
 		"cobbleseum_forward": [KEY_W, KEY_UP], "cobbleseum_back": [KEY_S, KEY_DOWN],
 		DODGE_ACTION: [KEY_SPACE], FEINT_ACTION: [KEY_SHIFT], GUARD_ACTION: [KEY_G],
-		SWITCH_NEXT_ACTION: [KEY_Q], SWITCH_PREVIOUS_ACTION: [], SWITCH_ACTION: [KEY_E],
+		SWITCH_NEXT_ACTION: [KEY_Q], SWITCH_PREVIOUS_ACTION: [], SWITCH_ACTION: [KEY_E], TARGET_ACTION: [KEY_T],
 		"cobbleseum_move_1": [KEY_J, KEY_1], "cobbleseum_move_2": [KEY_K, KEY_2],
 		"cobbleseum_move_3": [KEY_L, KEY_3], "cobbleseum_move_4": [KEY_I, KEY_4],
 	}
 	var buttons := {DODGE_ACTION: JOY_BUTTON_A, FEINT_ACTION: JOY_BUTTON_LEFT_SHOULDER, "cobbleseum_move_1": JOY_BUTTON_X, "cobbleseum_move_2": JOY_BUTTON_Y,
 		"cobbleseum_move_3": JOY_BUTTON_B, "cobbleseum_move_4": JOY_BUTTON_RIGHT_SHOULDER,
-		SWITCH_NEXT_ACTION: JOY_BUTTON_DPAD_RIGHT, SWITCH_PREVIOUS_ACTION: JOY_BUTTON_DPAD_LEFT, SWITCH_ACTION: JOY_BUTTON_DPAD_UP}
+		SWITCH_NEXT_ACTION: JOY_BUTTON_DPAD_RIGHT, SWITCH_PREVIOUS_ACTION: JOY_BUTTON_DPAD_LEFT, SWITCH_ACTION: JOY_BUTTON_DPAD_UP,
+		TARGET_ACTION: JOY_BUTTON_RIGHT_STICK}
 	var axes := {"cobbleseum_left": [JOY_AXIS_LEFT_X, -1.0], "cobbleseum_right": [JOY_AXIS_LEFT_X, 1.0],
 		"cobbleseum_forward": [JOY_AXIS_LEFT_Y, -1.0], "cobbleseum_back": [JOY_AXIS_LEFT_Y, 1.0],
 		GUARD_ACTION: [JOY_AXIS_TRIGGER_RIGHT, 1.0]}
@@ -91,6 +97,8 @@ func poll() -> void:
 		pending_cycle -= 1
 	if Input.is_action_just_pressed(SWITCH_ACTION):
 		pending_switch = true
+	if Input.is_action_just_pressed(TARGET_ACTION):
+		pending_target = true
 	for i in MOVE_ACTIONS.size():
 		if Input.is_action_just_pressed(MOVE_ACTIONS[i]):
 			if Input.is_action_pressed(FEINT_ACTION):
@@ -111,6 +119,8 @@ func decide(battle: Battle, index: int) -> Dictionary:
 		intent.dodge = direction if direction.length_squared() > 0.01 else Vector2(-away.y, away.x).normalized()
 	if pending_guard:
 		intent.guard = true
+	if pending_target and battle.doubles:
+		intent.target = 1 - battle.fighters[index].target_place
 	if pending_use >= 0:
 		intent.use = pending_use
 	if pending_feint >= 0:
@@ -128,6 +138,7 @@ func decide(battle: Battle, index: int) -> Dictionary:
 	pending_feint = -1
 	pending_cycle = 0
 	pending_switch = false
+	pending_target = false
 	return intent
 
 

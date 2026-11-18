@@ -25,9 +25,9 @@ const OUTLINE := Color("20222a")
 const FAINTED := Color("55585f")
 const RAISE := 4.0
 
-## Per member: "healthy", "fainted" or a status code; and which is out.
+## Per member: "healthy", "fainted" or a status code; and the slots out.
 var _states: Array[String] = []
-var _out := -1
+var _out: Array[int] = []
 var _scale := 1.0
 
 
@@ -36,16 +36,18 @@ func _init(hud_scale: float) -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
-## Shows `team` (Battle.teams[side]) with `out` the fighter out now.
-func show_team(team: Array, out: Fighter) -> void:
+## Shows `team` (Battle.teams[side]) with `out` the fighters out now (Battle.out).
+func show_team(team: Array, out: Array) -> void:
 	var states: Array[String] = []
 	for fighter: Fighter in team:
 		states.append("fainted" if fighter.is_knocked_out() else (fighter.status if not fighter.status.is_empty() else "healthy"))
-	var out_slot := out.slot if out != null else -1
-	if states == _states and out_slot == _out:
+	var out_slots: Array[int] = []
+	for fighter: Fighter in out:
+		out_slots.append(fighter.slot)
+	if states == _states and out_slots == _out:
 		return
 	_states = states
-	_out = out_slot
+	_out = out_slots
 	custom_minimum_size = Vector2(width_for(states.size(), _scale), (BALL.size() * PIXEL + RAISE) * _scale)
 	size = custom_minimum_size
 	queue_redraw()
@@ -75,7 +77,7 @@ func _draw() -> void:
 			var tint: Color = Hud.STATUS_BADGES.get(state_name, ["", RED])[1]
 			top = tint
 			bottom = WHITE.lerp(tint, 0.45)
-		var origin := Vector2(i * step, 0.0 if i == _out else RAISE * _scale)
+		var origin := Vector2(i * step, 0.0 if i in _out else RAISE * _scale)
 		for y in BALL.size():
 			var row: String = BALL[y]
 			for x in row.length():
