@@ -55,7 +55,7 @@ func test_a_side_wins_once_the_other_has_no_one_left() -> void:
 	battle.run()
 	assert_true(battle.result != Battle.Result.ONGOING)
 	var loser := 1 if battle.result == Battle.Result.WIN_A else 0
-	if battle.result != Battle.Result.DRAW:
+	if battle.result != Battle.Result.DRAW and _events(battle, "time_up").is_empty():
 		assert_true(battle.healthy(loser).is_empty(), "the losing side has no one left")
 		assert_eq(_events(battle, "knockout").filter(func(e: Dictionary) -> bool: return e.side == loser).size(),
 			battle.teams[loser].size())
@@ -146,10 +146,37 @@ func test_team_sizes_are_checked() -> void:
 	assert_true(error.contains("1-6"), error)
 
 
-func test_overtime_and_the_time_cap_scale_with_the_larger_team() -> void:
+func test_team_battles_scale_hp_and_restart_the_overtime_clock_each_knockout() -> void:
+	var single := _create({"seed": 1, "fighters": [_member("squirt", ["jet"]), _member("blaze", ["ember"])]})
 	var battle := _create(_team_spec(1, [_member("squirt", ["jet"]), _member("leaf", ["kick"]), _member("blaze", ["ember"])],
-		[_member("blaze", ["ember"])]))
-	assert_eq(battle.overtime_tick, Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS * 3))
+		[_member("blaze", ["ember"]), _member("leaf", ["kick"])]))
+	var factor := Rules.team_hp_factor(3)
+	assert_almost_eq(factor, 1.0 / sqrt(3.0), 1e-6)
+	assert_eq(battle.fighters[0].max_hp, roundi(single.fighters[0].max_hp * factor), "HP by the larger team's size")
+	assert_eq(battle.fighters[0].hp, battle.fighters[0].max_hp)
+	assert_eq(battle.overtime_tick, Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS))
+	assert_eq(single.overtime_tick, Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS), "one-on-one as before")
+	for i in 100:
+		battle.step()
+	battle._hurt(battle.fighters[1], 100000, "status_damage", {"status": "psn"})
+	var knocked := battle.tick
+	while battle.fighters[1].is_knocked_out():
+		battle.step()
+	assert_eq(battle.overtime_tick, knocked + Rules.seconds_to_ticks(Rules.KNOCKOUT_LULL_SECONDS) - 1
+		+ Rules.seconds_to_ticks(Rules.OVERTIME_SECONDS), "the clock restarts at the send-out")
+
+
+func test_at_time_up_the_side_with_more_left_wins() -> void:
+	var battle := _create(_team_spec(1, [_member("squirt", ["jet"]), _member("leaf", ["kick"])],
+		[_member("blaze", ["ember"]), _member("leaf", ["kick"])]), [Scripted.new(), Scripted.new()])
+	battle.teams[1][1].hp = 0
+	assert_eq(battle._time_up_result(), Battle.Result.WIN_A)
+	battle.teams[1][1].hp = battle.teams[1][1].max_hp
+	battle.teams[0][1].hp = 1
+	assert_eq(battle._time_up_result(), Battle.Result.WIN_B, "then by the share of HP left")
+	var single := _create({"seed": 1, "fighters": [_member("squirt", ["jet"]), _member("blaze", ["ember"])]})
+	single.fighters[1].hp = 1
+	assert_eq(single._time_up_result(), Battle.Result.DRAW, "one-on-one time-up stays a draw")
 
 
 func test_hits_name_both_fighters_by_side_and_slot() -> void:

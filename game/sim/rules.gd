@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 27
+const RULES_VERSION := 28
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -18,11 +18,14 @@ const HP_MULTIPLIER := 19.0
 ## Team battles (§9.1): a side brings 1-MAX_TEAM Pokémon, one out at a time. After a knockout
 ## with more to come there's a lull of KNOCKOUT_LULL_SECONDS, then the next one is sent out at
 ## its side's start spot, taking SEND_OUT_SECONDS to land, shielded throughout. Until it lands
-## the fighter left standing can only walk. The overtime and time cap scale with the larger
-## team's size.
+## the fighter left standing can only walk.
+## Pace (§9.1): every fighter's HP is scaled by team_hp_factor() of the larger team's size, so a
+## knockout comes faster the more there are to get through, and the overtime clock restarts at
+## each send-out after a knockout, its overtime and cap scaled by the same factor.
 const MAX_TEAM := 6
 const KNOCKOUT_LULL_SECONDS := 2.0
 const SEND_OUT_SECONDS := 1.0
+const TEAM_HP_EXPONENT := 0.5
 ## Switching (§9.1): a fighter that could act can be recalled for a healthy bench member,
 ## which lands where it stood over SWITCH_SECONDS, open to hits and unable to act. Every
 ## send-out (a switch or the pick after a knockout) starts a side-wide SWITCH_COOLDOWN_SECONDS.
@@ -196,6 +199,11 @@ const COOLDOWN_PP_FACTOR := 12.0
 
 
 ## Damage multiplier at a tick: 1 until overtime, then rising.
+## The HP factor for team battles of `size` a side (at most): 1 for one-on-one.
+static func team_hp_factor(size: int) -> float:
+	return pow(maxf(size, 1.0), -TEAM_HP_EXPONENT)
+
+
 static func overtime_factor(tick: int, overtime_seconds := OVERTIME_SECONDS) -> float:
 	return 1.0 + OVERTIME_RAMP * maxf(0.0, tick / float(TICK_RATE) - overtime_seconds)
 
