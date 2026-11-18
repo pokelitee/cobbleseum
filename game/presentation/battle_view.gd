@@ -996,6 +996,7 @@ func _sync_conditions() -> void:
 	_hazard_marks.sync(conditions.hazards, battle)
 	for side in 2:
 		_hud.set_effects(side, _plate_effects[side].read(battle.fighters[side]))
+		_hud.show_team(side, battle.teams[side], battle.fighters[side])
 	var entries := []
 	if not conditions.weather.is_empty():
 		# A new weather (or a renewed one) sets the timer's full length.
