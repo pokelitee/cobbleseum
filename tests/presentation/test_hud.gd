@@ -307,7 +307,7 @@ func test_a_team_shows_as_balls_on_its_plate() -> void:
 		(Engine.get_main_loop() as SceneTree).root.add_child(hud)
 		hud.setup(["Left", "Right"], size)
 		for side in 2:
-			hud.show_team(side, team, team[0])
+			hud.show_team(side, team, [team[0]])
 			var balls: TeamBalls = hud._team_balls[side]
 			assert_eq([balls.state(0), balls.state(1), balls.state(2)], ["healthy", "par", "fainted"])
 			var rect := Rect2(balls.global_position, balls.size)
@@ -317,11 +317,32 @@ func test_a_team_shows_as_balls_on_its_plate() -> void:
 			assert_true(rect.position.x >= track.global_position.x - 1.0 and rect.end.x <= track.global_position.x + track.size.x + 1.0,
 				"within the bar's width at %s" % size)
 			assert_true(hud._effect_rooms[side] < track.size.x, "the effects make room at %s" % size)
-		hud.show_team(0, [team[0]], team[0])
+		hud.show_team(0, [team[0]], [team[0]])
 		hud.free()
 	var single := Hud.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(single)
 	single.setup(["Left", "Right"], Vector2(1920, 1080))
-	single.show_team(0, [team[0]], team[0])
+	single.show_team(0, [team[0]], [team[0]])
 	assert_eq(single._team_balls[0], null, "a side of one shows none")
 	single.free()
+
+
+func test_doubles_stacks_two_slimmer_plates_a_side_on_screen() -> void:
+	for size in [Vector2(1920, 1080), Vector2(1080, 1920)]:
+		var hud := Hud.new()
+		(Engine.get_main_loop() as SceneTree).root.add_child(hud)
+		hud.setup(["A1", "B1", "A2", "B2"], size, [[], [], [], []], [null, null, null, null], [false, false, false, false],
+			["A1 & A2", "B1 & B2"])
+		assert_eq(hud._panels.size(), 4)
+		var rects: Array[Rect2] = []
+		for index in 4:
+			var track: Control = hud._bars[index].get_parent()
+			var rect := Rect2(track.global_position, track.size * hud._panels[index].scale)
+			assert_true(Rect2(Vector2.ZERO, size).encloses(rect), "plate %d on screen at %s" % [index, size])
+			rects.append(rect)
+		for i in 4:
+			for j in range(i + 1, 4):
+				assert_false(rects[i].intersects(rects[j]), "plates %d and %d apart at %s" % [i, j, size])
+		hud.set_hp(3, 0.5)
+		assert_eq(hud._percents[3].text, "50%")
+		hud.free()

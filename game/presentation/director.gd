@@ -61,7 +61,9 @@ const KNOCKOUT_LEAD_TICKS := 45
 ## the knockout plays out, the winner celebrates). Returns:
 ##   "hitstop": PackedInt32Array, frozen frames shown before each tick advances
 ##   "slow": PackedInt32Array, frames each tick lasts after any hit-stop (1, or more in slow motion)
-##   "shots": Array of {"start", "end", "shot", "side"}
+##   "shots": Array of {"start", "end", "shot", "side"}, and in doubles "slot" for a shot on one
+##     fighter (the attacker of a close-up or tracking shot, the one hit or knocked out); a
+##     doubles shot without one (wide, over-the-shoulder, victory) is the side's
 ## Every knockout gets its slow-motion orbit; only the last one (its side has no one left) gets
 ## the victory and the instant replay.
 ##   "victory": {"start": tick, "side": the winner} after a knockout, else {}
@@ -72,7 +74,7 @@ const KNOCKOUT_LEAD_TICKS := 45
 ##   "captions": Array of {"tick", "text", "side"} in tick order: "COMEBACK!" on each
 ##     fighter's first hit while low on HP (as Highlights counts comebacks), "FINAL BLOW" on
 ##     the finishing move's wind-up
-static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array, random: SimRandom) -> Dictionary:
+static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array, random: SimRandom, doubles := false) -> Dictionary:
 	var knockout := _knockout_window(events, end_tick)
 	var victory_start := end_tick + KNOCKOUT_LINGER_TICKS
 	var length := victory_start + (VICTORY_TICKS if not knockout.is_empty() else 0)
@@ -93,15 +95,15 @@ static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array,
 		match event.type:
 			"windup":
 				if int(move_power[event.side].get(event.move, 0)) >= CLOSE_UP_POWER:
-					var release := _next_tick(events, i, event.side, ["fire", "hit", "miss"], event.tick + 15)
+					var release := _next_tick(events, i, event.side, ["fire", "hit", "miss"], event.tick + 15, _slot_of(event, doubles))
 					var start := mini(event.tick, release - CLOSE_UP_TICKS)
 					if start >= busy_until + CLOSE_UP_GAP_TICKS:
-						_overlay(shot_at, side_at, start, release, Shot.CLOSE_UP, event.side)
+						_overlay(shot_at, side_at, start, release, Shot.CLOSE_UP, _focus(event.side, _slot_of(event, doubles)))
 						busy_until = release
 			"fire":
-				var landed := _next_tick(events, i, event.side, ["hit", "miss"], -1)
+				var landed := _next_tick(events, i, event.side, ["hit", "miss"], -1, _slot_of(event, doubles))
 				if landed - event.tick >= TRACKING_MIN_TICKS:
-					_overlay(shot_at, side_at, event.tick, landed, Shot.TRACKING, event.side)
+					_overlay(shot_at, side_at, event.tick, landed, Shot.TRACKING, _focus(event.side, _slot_of(event, doubles)))
 			"hit":
 				var defender := Highlights.defender(event)
 				var heavy: bool = event.crit or event.effectiveness > 1.0 \
@@ -109,22 +111,34 @@ static func plan(events: Array, end_tick: int, max_hp: Array, move_power: Array,
 				if event.tick < length:
 					hitstop[event.tick] += HEAVY_HITSTOP_FRAMES if heavy else HITSTOP_FRAMES
 				if heavy:
-					_overlay(shot_at, side_at, event.tick, event.tick + IMPACT_TICKS, Shot.IMPACT, defender)
+					var hit_slot := int(event.get("target_slot", 0)) if doubles else -1
+					_overlay(shot_at, side_at, event.tick, event.tick + IMPACT_TICKS, Shot.IMPACT, _focus(defender, hit_slot))
 					busy_until = maxi(busy_until, event.tick + IMPACT_TICKS)
 	for earlier: Dictionary in _earlier_knockouts(events):
 		var orbit_end: int = mini(int(earlier.tick) + KNOCKOUT_LINGER_TICKS, length)
-		_overlay(shot_at, side_at, earlier.start, orbit_end, Shot.KNOCKOUT, earlier.loser)
+		_overlay(shot_at, side_at, earlier.start, orbit_end, Shot.KNOCKOUT, _focus(earlier.loser, earlier.slot if doubles else -1))
 		for tick in range(earlier.start, orbit_end):
 			slow[tick] = KNOCKOUT_FRAMES_PER_TICK
 	var victory := {}
 	if not knockout.is_empty():
-		_overlay(shot_at, side_at, knockout.start, victory_start, Shot.KNOCKOUT, knockout.loser)
+		_overlay(shot_at, side_at, knockout.start, victory_start, Shot.KNOCKOUT, _focus(knockout.loser, knockout.slot if doubles else -1))
 		for tick in range(knockout.start, victory_start):
 			slow[tick] = KNOCKOUT_FRAMES_PER_TICK
 		victory = {"start": victory_start, "side": 1 - int(knockout.loser)}
 		_overlay(shot_at, side_at, victory_start, length, Shot.VICTORY, victory.side)
 	return {"hitstop": hitstop, "slow": slow, "shots": _calm(_segments(shot_at, side_at)), "victory": victory,
-		"replay": _replay(knockout, victory_start), "captions": _captions(events, max_hp, knockout)}
+		"replay": _replay(knockout, victory_start, doubles), "captions": _captions(events, max_hp, knockout)}
+
+
+## The team slot of the fighter an event names, in doubles; -1 in singles (a shot on the side).
+static func _slot_of(event: Dictionary, doubles: bool) -> int:
+	return int(event.get("slot", 0)) if doubles else -1
+
+
+## A shot's focus as side_at keeps it: the side, or (slot >= 0, doubles) one fighter of it,
+## side + 2 * (slot + 1); _segments reads it back as "side" and "slot".
+static func _focus(side: int, slot := -1) -> int:
+	return side if slot < 0 else side + 2 * (slot + 1)
 
 
 ## Video frames from `tick` to the end of the plan.
@@ -177,12 +191,20 @@ static func _earlier_knockouts(events: Array) -> Array:
 			continue
 		var start := maxi(0, int(event.tick) - 15)
 		for j in range(i - 1, -1, -1):
-			if events[j].type == "windup" and events[j].side == 1 - int(event.side):
+			if _finishing_windup(events[j], event):
 				if int(events[j].tick) >= int(event.tick) - KNOCKOUT_LEAD_TICKS:
 					start = events[j].tick
 				break
-		found.append({"start": start, "loser": event.side, "tick": event.tick})
+		found.append({"start": start, "loser": event.side, "slot": int(event.get("slot", 0)), "tick": event.tick})
 	return found
+
+
+## Whether `windup` could be the wind-up of the move behind `knockout`: one by the other side,
+## aimed at the fighter knocked out where the event says (doubles).
+static func _finishing_windup(windup: Dictionary, knockout: Dictionary) -> bool:
+	if windup.type != "windup" or windup.side != 1 - int(knockout.side):
+		return false
+	return not windup.has("target_side") or int(windup.get("target_slot", 0)) == int(knockout.get("slot", 0))
 
 
 ## Slow motion starts at the wind-up of the move that caused the knockout ("windup" is -1
@@ -193,16 +215,18 @@ static func _knockout_window(events: Array, end_tick: int) -> Dictionary:
 		if event.type != "knockout" or not Highlights.is_final(event):
 			continue
 		var loser: int = event.side
+		var slot := int(event.get("slot", 0))
 		for j in range(i - 1, -1, -1):
-			if events[j].type == "windup" and events[j].side == 1 - loser:
-				return {"start": events[j].tick, "loser": loser, "tick": event.tick, "windup": events[j].tick}
-		return {"start": maxi(0, end_tick - 15), "loser": loser, "tick": event.tick, "windup": -1}
+			if _finishing_windup(events[j], event):
+				return {"start": events[j].tick, "loser": loser, "slot": slot, "tick": event.tick, "windup": events[j].tick,
+					"attacker": int(events[j].get("slot", 0))}
+		return {"start": maxi(0, end_tick - 15), "loser": loser, "slot": slot, "tick": event.tick, "windup": -1, "attacker": -1}
 	return {}
 
 
 ## The instant replay: the attacker's side from a low over-the-shoulder angle into the hit,
 ## then a punch-in on the loser through the faint.
-static func _replay(knockout: Dictionary, at: int) -> Dictionary:
+static func _replay(knockout: Dictionary, at: int, doubles := false) -> Dictionary:
 	if knockout.is_empty():
 		return {}
 	var hit: int = knockout.tick
@@ -211,8 +235,15 @@ static func _replay(knockout: Dictionary, at: int) -> Dictionary:
 	var loser: int = knockout.loser
 	var shots: Array = []
 	if start < hit:
-		shots.append({"start": start, "end": hit, "shot": Shot.OVER_SHOULDER, "side": 1 - loser, "low": true})
-	shots.append({"start": hit, "end": end, "shot": Shot.IMPACT, "side": loser})
+		var shoulder := {"start": start, "end": hit, "shot": Shot.OVER_SHOULDER, "side": 1 - loser, "low": true}
+		if doubles and int(knockout.attacker) >= 0:
+			shoulder.slot = int(knockout.attacker)
+			shoulder.target_slot = int(knockout.slot)
+		shots.append(shoulder)
+	var impact := {"start": hit, "end": end, "shot": Shot.IMPACT, "side": loser}
+	if doubles:
+		impact.slot = int(knockout.slot)
+	shots.append(impact)
 	return {"at": at, "start": start, "end": end, "knockout": hit, "frames_per_tick": REPLAY_FRAMES_PER_TICK, "shots": shots}
 
 
@@ -232,10 +263,11 @@ static func _captions(events: Array, max_hp: Array, knockout: Dictionary) -> Arr
 	return captions
 
 
-## Tick of the next event by `side` with one of `types` after index `from`, or `fallback`.
-static func _next_tick(events: Array, from: int, side: int, types: Array, fallback: int) -> int:
+## Tick of the next event by `side` (and in doubles its fighter in team `slot`, unless -1) with
+## one of `types` after index `from`, or `fallback`.
+static func _next_tick(events: Array, from: int, side: int, types: Array, fallback: int, slot := -1) -> int:
 	for j in range(from + 1, events.size()):
-		if events[j].side == side and events[j].type in types:
+		if events[j].side == side and events[j].type in types and (slot < 0 or int(events[j].get("slot", 0)) == slot):
 			return events[j].tick
 	return fallback
 
@@ -283,7 +315,7 @@ static func _calm(asked: Array) -> Array:
 
 
 static func _same_shot(a: Dictionary, b: Dictionary) -> bool:
-	return a.shot == b.shot and a.side == b.side
+	return a.shot == b.shot and a.side == b.side and a.get("slot", -1) == b.get("slot", -1)
 
 
 static func _rank(segment: Dictionary) -> int:
@@ -293,8 +325,14 @@ static func _rank(segment: Dictionary) -> int:
 static func _segments(shot_at: PackedInt32Array, side_at: PackedInt32Array) -> Array:
 	var segments: Array = []
 	for t in shot_at.size():
-		if segments.is_empty() or segments[-1].shot != shot_at[t] or segments[-1].side != side_at[t]:
-			segments.append({"start": t, "end": t + 1, "shot": shot_at[t], "side": side_at[t]})
+		if segments.is_empty() or segments[-1].shot != shot_at[t] or segments[-1].focus != side_at[t]:
+			segments.append({"start": t, "end": t + 1, "shot": shot_at[t], "focus": side_at[t]})
 		else:
 			segments[-1].end = t + 1
+	for segment: Dictionary in segments:
+		var focus: int = segment.focus
+		segment.erase("focus")
+		segment.side = focus % 2
+		if focus >= 2:
+			segment.slot = focus / 2 - 1
 	return segments

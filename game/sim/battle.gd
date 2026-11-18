@@ -461,7 +461,7 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 			fighter.followups.erase(followup)
 			_strike(fighter, target_of(fighter), followup.move)
 			if followup.last:
-				_fevent("multi_hit_end", fighter, {"move": fighter.moves[followup.move].id})
+				_fevent("multi_hit_end", fighter, _aimed(target_of(fighter), {"move": fighter.moves[followup.move].id}))
 	var to_foe := (foe.position - fighter.position).normalized()
 	match fighter.action:
 		Fighter.Action.DODGE:
@@ -532,7 +532,7 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 				fighter.action_ticks = conditions.windup_against(foe, move, fighter.windup_ticks(move))
 				fighter.action_move = use
 				fighter.cooldowns[use] = move.cooldown_ticks
-				_fevent("windup", fighter, {"move": move.id})
+				_fevent("windup", fighter, _aimed(foe, {"move": move.id}))
 			elif fighter.can_feint(feint) and _gap(fighter, foe) <= fighter.moves[feint].reach():
 				var move := fighter.moves[feint]
 				fighter.action = Fighter.Action.WINDUP
@@ -540,7 +540,7 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 				fighter.action_move = feint
 				fighter.feinting = true
 				fighter.feint_cooldown = Rules.seconds_to_ticks(Rules.FEINT_COOLDOWN)
-				_fevent("feint", fighter, {"move": move.id, "ticks": move.windup_ticks - Rules.FEINT_BREAK_TICKS})
+				_fevent("feint", fighter, _aimed(foe, {"move": move.id, "ticks": move.windup_ticks - Rules.FEINT_BREAK_TICKS}))
 			else:
 				_walk(fighter, intent.get("move", Vector2.ZERO))
 			var walking := fighter.velocity / maxf(fighter.move_speed, 0.1)
@@ -672,9 +672,9 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> bool:
 				_fevent("blast", fighter, {"move": move.id})
 			var reach_up := Rules.MELEE_HEIGHT if move.kind == BattleMove.Kind.MELEE else Rules.AREA_HEIGHT
 			if _gap(fighter, foe) > reach or foe.is_knocked_out() or absf(foe.ground - fighter.ground) > reach_up:
-				_fevent("miss", fighter, {"move": move.id})
+				_fevent("miss", fighter, _aimed(foe, {"move": move.id}))
 			elif foe.is_invulnerable():
-				_fevent("miss", fighter, {"move": move.id})
+				_fevent("miss", fighter, _aimed(foe, {"move": move.id}))
 				_fevent("dodged", foe, {"move": move.id})
 			elif foe.guards_against(fighter.position - foe.position):
 				_guarded(fighter, foe, move)
@@ -725,7 +725,7 @@ func _fire(fighter: Fighter, foe: Fighter, move_index: int, direction: Vector2) 
 	if doubles:
 		projectile.target = index_of(foe)
 	projectiles.append(projectile)
-	_fevent("fire", fighter, {"move": move.id})
+	_fevent("fire", fighter, _aimed(foe, {"move": move.id}))
 
 
 ## A spread (area) move going off in doubles: it hits every foe in its ring, and the ally too for
@@ -870,8 +870,8 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0)
 func _guarded(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	defender.guard_blocked = true
 	var parry := move.kind == BattleMove.Kind.MELEE
-	_fevent("miss", attacker, {"move": move.id})
-	_fevent("guarded", defender, {"move": move.id, "parry": parry})
+	_fevent("miss", attacker, _aimed(defender, {"move": move.id}))
+	_fevent("guarded", defender, _aimed(attacker, {"move": move.id, "parry": parry}))
 	if parry:
 		attacker.followups.clear()
 		if attacker.action == Fighter.Action.READY or attacker.action == Fighter.Action.RECOVERY:
@@ -1303,7 +1303,7 @@ func _tick_weather(fighter: Fighter) -> void:
 
 ## A debuff or status projectile reaching its target.
 func _land(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
-	_fevent("landed", attacker, {"move": move.id})
+	_fevent("landed", attacker, _aimed(defender, {"move": move.id}))
 	_apply_effect(attacker, defender, {"boosts": move.boosts, "status": move.status, "confuses": move.confuses}, move.id)
 
 
@@ -1625,6 +1625,15 @@ func _event(type: String, side: int, details: Dictionary) -> void:
 		event.slot = fighters[side].slot
 	event.merge(details, true)
 	events.append(event)
+
+
+## In doubles, `details` naming the fighter an event is aimed at (or, for "guarded", the attacker
+## blocked): its "target_side" and "target_slot". Singles events stay as they were.
+func _aimed(at: Fighter, details: Dictionary) -> Dictionary:
+	if doubles:
+		details.target_side = at.side
+		details.target_slot = at.slot
+	return details
 
 
 ## Records an event about one fighter: its side and team slot.

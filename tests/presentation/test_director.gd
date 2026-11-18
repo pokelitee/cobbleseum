@@ -223,3 +223,34 @@ func test_every_knockout_gets_its_orbit_but_only_the_last_the_victory() -> void:
 	assert_eq(plan.victory.start, 301 + Director.KNOCKOUT_LINGER_TICKS, "the victory follows the last knockout")
 	assert_eq(plan.replay.knockout, 300)
 	assert_eq(plan.hitstop[300], Director.HEAVY_HITSTOP_FRAMES, "a heavy hit by the defender's own max HP")
+
+
+## Doubles: side 0's second fighter (slot 1) winds up a strong move at side 1's slot 2 and
+## knocks it out, the last of its side.
+func _doubles_events() -> Array:
+	return [
+		{"tick": 100, "type": "windup", "side": 0, "slot": 1, "move": "cannon", "target_side": 1, "target_slot": 0},
+		{"tick": 115, "type": "fire", "side": 0, "slot": 1, "move": "cannon", "target_side": 1, "target_slot": 0},
+		{"tick": 120, "type": "hit", "side": 0, "slot": 1, "move": "cannon", "damage": 30, "crit": false, "effectiveness": 1.0,
+			"hp": 370, "target_side": 1, "target_slot": 0},
+		{"tick": 280, "type": "windup", "side": 0, "slot": 0, "move": "jet", "target_side": 1, "target_slot": 0},
+		{"tick": 284, "type": "windup", "side": 0, "slot": 1, "move": "cannon", "target_side": 1, "target_slot": 2},
+		{"tick": 299, "type": "fire", "side": 0, "slot": 1, "move": "cannon", "target_side": 1, "target_slot": 2},
+		{"tick": 300, "type": "hit", "side": 0, "slot": 1, "move": "cannon", "damage": 380, "crit": false, "effectiveness": 1.3,
+			"hp": 0, "target_side": 1, "target_slot": 2},
+		{"tick": 300, "type": "knockout", "side": 1, "slot": 2, "left": 0},
+	]
+
+
+func test_doubles_shots_name_the_fighter_they_are_on() -> void:
+	var plan := Director.plan(_doubles_events(), 301, [[400, 400, 400], [400, 400, 400]], MOVE_POWER, SimRandom.new(1), true)
+	var close: Array = plan.shots.filter(func(s: Dictionary) -> bool: return s.shot == Director.Shot.CLOSE_UP)
+	assert_false(close.is_empty())
+	assert_eq([close[0].side, close[0].slot], [0, 1], "the close-up is on the fighter winding up the strong move")
+	var orbit: Dictionary = Director.shot_for(plan.shots, 300)
+	assert_eq([orbit.shot, orbit.side, orbit.slot], [Director.Shot.KNOCKOUT, 1, 2])
+	assert_eq(plan.replay.shots[0].slot, 1, "the replay looks over the finisher's shoulder")
+	assert_eq(plan.replay.shots[-1].slot, 2)
+	for shot: Dictionary in plan.shots:
+		if shot.shot == Director.Shot.WIDE or shot.shot == Director.Shot.VICTORY:
+			assert_false(shot.has("slot"), "wide shots and the victory are the side's")

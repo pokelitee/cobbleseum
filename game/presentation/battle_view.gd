@@ -19,6 +19,8 @@ extends Node3D
 ## be planned ahead. A camera follows the player's fighter, heavy hits freeze play briefly,
 ## a move bar shows keys and cooldowns, and the battle spec is saved with every tick's intents
 ## and the rules and data versions in recordings/specs/, which tools/record.gd can render.
+## In doubles the player drives the side's first fighter, its ally runs on the side's AI, T (or
+## the right stick's click) cycles the player's target, and a ring marks it.
 ## After the battle in the window (play or watch), R or a button starts a rematch and Esc or a
 ## button goes back to the setup screen (SetupScreen); Esc goes back there during a battle too.
 ##
@@ -50,7 +52,8 @@ With neither, the setup screen opens; with only options, the showcase battle pla
 
 In play mode: WASD or arrows move, Space dodges, J K L I or 1-4 use moves, G guards, hold
 Shift to feint. In a team battle Q cycles the bench and E switches (after a knockout, the
-highlighted one comes out). After a battle, R starts a rematch; Esc goes back to the setup screen.
+highlighted one comes out). In doubles T cycles your target. After a battle, R starts a
+rematch; Esc goes back to the setup screen.
 Recording clips: tools/record.gd (--help there)."""
 const SPECS_DIR := "res://recordings/specs"
 ## Play mode: frames the controls hint stays up, and frames after the knockout before the
@@ -114,8 +117,11 @@ var plan: Dictionary
 ## Tick where presentation stops: the plan's end, or the clip window's end.
 var _end_tick := 0
 var _preview_events: Array = []
-## Each side's fighter out now; MoveFX shares this array, so it follows send-outs.
+## Each fighter out now's view, by Battle.index_of (by side in singles); MoveFX shares this
+## array, so it follows send-outs. HUD plates and cries are indexed the same way.
 var _views: Array[FighterView] = []
+## Play mode in doubles: the ring under the player's target.
+var _target_ring: MeshInstance3D
 ## Every team member's view [side][slot], their looks (Appearance.resolve) and HUD portraits.
 var _team_views: Array = []
 var _looks: Array = []
@@ -136,10 +142,10 @@ var _rig: CameraRig
 var _fx: ImpactFX
 var _portrait := false
 var _event_index := 0
-## Tick each side last fired a projectile, to spot ranged moves that hit as they fire.
-var _fired_tick: Array[int] = [-1, -1]
-## Hits landed by each side's current move, for "Hit N times!".
-var _hit_counts: Array[int] = [0, 0]
+## Tick each fighter (by _key) last fired a projectile, to spot ranged moves that hit as they fire.
+var _fired_tick := {}
+## Hits landed by each fighter's (by _key) current move, for "Hit N times!".
+var _hit_counts := {}
 ## Presentation position: the tick being shown and frames left before it advances.
 var _tick := 0
 var _hold_frames := 0
@@ -253,7 +259,7 @@ func _ready() -> void:
 			add_child(view)
 			# A roster built before "flies" was listed keeps every Flying type hovering, as it did.
 			view.set_hovering(view.hovers_as(fighter.types, entry.get("flies", true)))
-			view.visible = fighter == battle.fighters[side]
+			view.visible = battle.fighters.has(fighter)
 			views.append(view)
 			var portrait := FighterPortrait.create(MODELS_DIR.path_join(look.model), entry.scale, entry.height, skin_path(look))
 			if portrait != null:
@@ -262,9 +268,9 @@ func _ready() -> void:
 		_team_views.append(views)
 		_looks.append(looks)
 		_portraits.append(portraits)
-		_views.append(views[battle.fighters[side].slot])
-	for side in 2:
-		_views[side].watch(_views[1 - side])
+	for fighter in battle.fighters:
+		_views.append(_team_views[fighter.side][fighter.slot])
+	_rewatch()
 	_add_crowd(loaded.data)
 	_add_trainers(spec)
 	_marks = BattleMarks.new()
@@ -285,17 +291,23 @@ func _ready() -> void:
 		var problem := _move_fx.use_cobblemon(_views, moves)
 		if not problem.is_empty():
 			printerr("warning: drawing the mesh move styles, since " + problem)
+	if battle.doubles:
+		_move_fx.foe_of = func(view: FighterView) -> FighterView:
+			var index := _views.find(view)
+			return _views[battle.fighters.find(battle.target_of(battle.fighters[index]))] if index >= 0 else null
+		_move_fx.view_of = func(side: int, slot: int) -> FighterView: return _team_views[side][slot]
 	_hud = Hud.new()
 	_hud.move_effects_credit = _move_fx.cobblemon != null
 	_hud.trainer_credit = _trainers.any(func(t: TrainerView) -> bool: return t != null)
 	add_child(_hud)
-	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types],
-		[_portraits[0][battle.fighters[0].slot], _portraits[1][battle.fighters[1].slot]],
-		[_looks[0][battle.fighters[0].slot].shiny, _looks[1][battle.fighters[1].slot].shiny])
+	_hud.setup(battle.fighters.map(func(f: Fighter) -> String: return f.name), size,
+		battle.fighters.map(func(f: Fighter) -> Array: return f.types),
+		battle.fighters.map(func(f: Fighter) -> Texture2D: return _portraits[f.side][f.slot]),
+		battle.fighters.map(func(f: Fighter) -> bool: return _looks[f.side][f.slot].shiny), [_side_name(0), _side_name(1)])
 	var arena_name: String = Arenas.preset(battle.arena).get("name", battle.arena)
 	_sound = BattleSound.new()
 	add_child(_sound)
-	_sound.setup([battle.fighters[0].species_id, battle.fighters[1].species_id])
+	_sound.setup(battle.fighters.map(func(f: Fighter) -> String: return f.species_id))
 	_sound.intro()
 	_music = BattleMusic.new()
 	add_child(_music)
@@ -305,11 +317,12 @@ func _ready() -> void:
 	add_child(_arena_sound)
 	_arena_sound.setup(Arenas.enclosed(battle.arena), str(Arenas.preset(battle.arena).get("field", "")), _crowd.fill)
 	_arena_sound.start()
-	_views[0].play_role_after("cry", 0)
-	_views[1].play_role_after("cry", BattleSound.INTRO_CRY_GAP)
-	for side in 2:
-		if _looks[side][battle.fighters[side].slot].shiny:
-			_move_fx.sparkle(_views[side], 0 if side == 0 else BattleSound.INTRO_CRY_GAP)
+	for index in _views.size():
+		var gap := BattleSound.INTRO_CRY_GAP * index
+		_views[index].play_role_after("cry", gap)
+		var fighter := battle.fighters[index]
+		if _looks[fighter.side][fighter.slot].shiny:
+			_move_fx.sparkle(_views[index], gap)
 	_fx = ImpactFX.new()
 	_fx.layer = 2  # callouts and impact frames draw over the HUD
 	add_child(_fx)
@@ -317,10 +330,11 @@ func _ready() -> void:
 	_overlay = AIOverlay.new()
 	_overlay.layer = 3
 	add_child(_overlay)
-	_overlay.setup(controllers.controllers, [battle.fighters[0].name, battle.fighters[1].name], size, _hud_bands(size))
+	# In doubles the overlay shows each side's first fighter's AI.
+	_overlay.setup(controllers.controllers.slice(0, 2), [battle.fighters[0].name, battle.fighters[1].name], size, _hud_bands(size))
 	_overlay.visible = options.ai_debug
 	# The wobble gets its own stream so it can't change the director's choices.
-	_rig = CameraRig.new(_portrait, [_views[0].height, _views[1].height],
+	_rig = CameraRig.new(_portrait, _views.map(func(v: FighterView) -> float: return v.height),
 		SimRandom.stream(int(spec.seed), CAMERA_WOBBLE_STREAM))
 	_rig.limit = _arena.camera_limit
 	if not _is_recording():
@@ -330,10 +344,13 @@ func _ready() -> void:
 	if _live:
 		_show_player_moves()
 		_hud.show_hint("Move: WASD / stick   Dodge: Space / A   Guard: G / RT   Feint: hold Shift / LB   F3: AI scores"
-			+ ("   Switch: Q then E / D-pad" if battle.teams[_player_side].size() > 1 else ""))
+			+ ("   Switch: Q then E / D-pad" if battle.teams[_player_side].size() > 1 else "")
+			+ ("   Target: %s" % PlayerController.TARGET_KEY if battle.doubles else ""))
 		_event_index = 0
-		for side in 2:
-			_hud.set_hp(side, 1.0, true)
+		for index in _views.size():
+			_hud.set_hp(index, 1.0, true)
+		if battle.doubles:
+			_target_ring = _make_target_ring()
 		_hud.set_intro_subtitle(arena_name + _weather_subtitle())
 		_arena.weather.snap(battle.conditions.weather)
 		_arena.surge.snap(battle.conditions.surge)
@@ -365,14 +382,14 @@ func _ready() -> void:
 	while _caption_index < plan.captions.size() and int(plan.captions[_caption_index].tick) < _tick:
 		_caption_index += 1
 	_begin_tick()
-	for side in 2:
-		_show_out(side)
+	for index in _views.size():
+		_show_out(index)
 	_sync_views(_shown_tick())
-	for side in 2:
-		var fighter := battle.fighters[side]
-		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp, true)
+	for index in _views.size():
+		var fighter := battle.fighters[index]
+		_hud.set_hp(index, float(fighter.hp) / fighter.max_hp, true)
 		# A clip can start mid-battle, after conditions were inflicted.
-		_views[side].set_asleep(fighter.status == "slp")
+		_views[index].set_asleep(fighter.status == "slp")
 	_track_smoothed()
 	if start == 0:
 		_open_with_throws()
@@ -389,31 +406,85 @@ func _track_smoothed() -> void:
 	_smooth.track_camera(_camera)
 
 
-## Shows `side`'s fighter out now, if it isn't already: its model, plate, cry and the camera's
-## framing follow a team battle's send-outs (and the cuts into and out of the instant replay).
-func _show_out(side: int) -> void:
-	var fighter := battle.fighters[side]
+## Shows the fighter out now at `index` (Battle.index_of; its side in singles), if it isn't
+## already: its model, plate, cry and the camera's framing follow a team battle's send-outs (and
+## the cuts into and out of the instant replay).
+func _show_out(index: int) -> void:
+	var fighter := battle.fighters[index]
+	var side := fighter.side
 	var view: FighterView = _team_views[side][fighter.slot]
-	if _views[side] == view:
+	if _views[index] == view:
 		return
-	_views[side].visible = false
+	if not _views.slice(0, index).has(_views[index]) and not _views.slice(index + 1).has(_views[index]):
+		_views[index].visible = false
 	view.visible = true
 	view.rewind()
 	view.set_asleep(fighter.status == "slp")
-	_views[side] = view
-	for s in 2:
-		_views[s].watch(_views[1 - s])
+	_views[index] = view
+	_rewatch()
 	_crowd.rewatch(_team_views[side], view)
-	_rig.set_height(side, view.height)
-	_hud.set_fighter(side, fighter.name, fighter.types, _portraits[side][fighter.slot], _looks[side][fighter.slot].shiny)
-	_hud.set_hp(side, float(fighter.hp) / fighter.max_hp, true)
-	_plate_effects[side] = PlateEffects.new()
-	_sound.set_species(side, fighter.species_id)
-	_overlay.name_side(side, fighter.name)
-	_hud.set_matchup_name(side, fighter.name)
+	_rig.set_height(index, view.height)
+	_hud.set_fighter(index, fighter.name, fighter.types, _portraits[side][fighter.slot], _looks[side][fighter.slot].shiny)
+	_hud.set_hp(index, float(fighter.hp) / fighter.max_hp, true)
+	_plate_effects[index] = PlateEffects.new()
+	_sound.set_species(index, fighter.species_id)
+	if index < 2:
+		_overlay.name_side(side, fighter.name)
+	_hud.set_matchup_name(side, _side_name(side))
 	view.place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
 	if _smooth != null:
 		_smooth.snap_all()
+
+
+## Points each fighter's head at its target (the one foe, in singles).
+func _rewatch() -> void:
+	for index in _views.size():
+		_views[index].watch(_views[battle.fighters.find(battle.target_of(battle.fighters[index]))])
+
+
+## A side's name for the intro card and the arena's screens: its fighter's, or in doubles both
+## fighters' out.
+func _side_name(side: int) -> String:
+	return " & ".join(battle.out(side).map(func(f: Fighter) -> String: return f.name))
+
+
+## A fighter's key in per-fighter dictionaries, from its side and team slot.
+static func _key(side: int, slot: int) -> int:
+	return side * Rules.MAX_TEAM + slot
+
+
+## The view of the fighter an event is by, or (with `aimed`) the one it's aimed at: its
+## "target_side" and "target_slot" when it names one, else the other side's fighter out.
+func _event_view(event: Dictionary, aimed := false) -> FighterView:
+	if not aimed:
+		return _team_views[int(event.side)][int(event.get("slot", battle.fighters[event.side].slot))]
+	if event.has("target_side"):
+		return _team_views[int(event.target_side)][int(event.get("target_slot", 0))]
+	return _views[1 - int(event.side)]
+
+
+## The HUD plate (and cry) of the fighter in team `slot` of `side`: its index out now, else the
+## side's.
+func _plate(side: int, slot: int) -> int:
+	for index in battle.fighters.size():
+		if battle.fighters[index].side == side and battle.fighters[index].slot == slot:
+			return index
+	return side
+
+
+## Play mode in doubles: a flat ring in the player's side's colour, laid under its target.
+func _make_target_ring() -> MeshInstance3D:
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.85
+	torus.outer_radius = 1.0
+	ring.mesh = torus
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Hud.SIDE_COLOURS[_player_side].lightened(0.2)
+	ring.material_override = material
+	add_child(ring)
+	return ring
 
 
 ## Runs a copy of the battle headless and plans its presentation. A knockout's instant replay
@@ -428,7 +499,7 @@ func _plan(spec: Dictionary, data: BattleData) -> Dictionary:
 			for move in fighter.moves:
 				move_power[side][move.id] = move.power
 	var planned := Director.plan(preview.events, preview.tick, preview.team_max_hp(), move_power,
-		battle.random_stream(Battle.Stream.COSMETIC))
+		battle.random_stream(Battle.Stream.COSMETIC), battle.doubles)
 	if not planned.replay.is_empty():
 		_replay_battle = Battle.create(spec, data, Controllers.for_spec(spec).controllers).battle
 		while _replay_battle.tick < int(planned.replay.start):
@@ -538,14 +609,14 @@ func _begin_replay() -> void:
 	_replay_tick = int(plan.replay.start) - 1
 	_replay_hold = 0
 	_hold_is_hitstop = false
-	_fired_tick = [-1, -1]
-	_hit_counts = [0, 0]
+	_fired_tick = {}
+	_hit_counts = {}
 	var scale := 1.0 / int(plan.replay.frames_per_tick)
-	for side in 2:
-		_show_out(side)
-		_views[side].rewind()
-		_views[side].set_asleep(battle.fighters[side].status == "slp")
-		_views[side].set_time_scale(scale)
+	for index in _views.size():
+		_show_out(index)
+		_views[index].rewind()
+		_views[index].set_asleep(battle.fighters[index].status == "slp")
+		_views[index].set_time_scale(scale)
 	_crowd.set_time_scale(scale)
 	_hud.show_replay()
 	_fx.cut_flash()
@@ -584,8 +655,8 @@ func _end_replay() -> void:
 	battle = _main_battle
 	_event_index = _main_event_index
 	_replaying = false
-	for side in 2:
-		_show_out(side)
+	for index in _views.size():
+		_show_out(index)
 	_hud.hide_replay()
 	_fx.cut_flash()
 	if _smooth != null:
@@ -602,18 +673,18 @@ func _next_audio_frame() -> void:
 ## over the tick (melee dashes included, for leaning and swooping), and landing from a dodge.
 func _step_battle() -> void:
 	var out: Array[Fighter] = battle.fighters.duplicate()
-	var before: Array[Vector2] = [battle.fighters[0].position, battle.fighters[1].position]
-	var dodging: Array[bool] = [battle.fighters[0].action == Fighter.Action.DODGE, battle.fighters[1].action == Fighter.Action.DODGE]
+	var before: Array = battle.fighters.map(func(f: Fighter) -> Vector2: return f.position)
+	var dodging: Array = battle.fighters.map(func(f: Fighter) -> bool: return f.action == Fighter.Action.DODGE)
 	battle.step()
-	for side in 2:
-		var fighter := battle.fighters[side]
-		if fighter != out[side]:
+	for index in battle.fighters.size():
+		var fighter := battle.fighters[index]
+		if fighter != out[index]:
 			continue  # just sent out: its view takes over in _play_events
-		_views[side].set_moving(fighter.action == Fighter.Action.READY
-			and fighter.position.distance_to(before[side]) > WALK_THRESHOLD)
-		_views[side].set_velocity((fighter.position - before[side]) * Rules.TICK_RATE)
-		if dodging[side] and fighter.action != Fighter.Action.DODGE:
-			_views[side].land()
+		_views[index].set_moving(fighter.action == Fighter.Action.READY
+			and fighter.position.distance_to(before[index]) > WALK_THRESHOLD)
+		_views[index].set_velocity((fighter.position - before[index]) * Rules.TICK_RATE)
+		if dodging[index] and fighter.action != Fighter.Action.DODGE:
+			_views[index].land()
 	_play_events()
 
 
@@ -636,14 +707,20 @@ func _next_live_frame() -> void:
 	if _live_frames == HINT_FRAMES and not battle.is_over():
 		_hud.show_hint("")
 	_advance_effects()
-	for side in 2:
-		var fighter := battle.fighters[side]
-		_views[side].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
-		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
+	for index in _views.size():
+		var fighter := battle.fighters[index]
+		_views[index].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
+		_hud.set_hp(index, float(fighter.hp) / fighter.max_hp)
 	_hud.update_move_bar(battle.fighters[_player_side])
 	_update_switch_bar()
 	_move_fx.sync_projectiles(battle)
-	_player_camera.apply(_camera, _views[_player_side], _views[1 - _player_side])
+	var target := battle.target_of(battle.fighters[_player_side])
+	var target_view := _views[battle.fighters.find(target)]
+	_player_camera.apply(_camera, _views[_player_side], target_view)
+	if _target_ring != null:
+		_target_ring.visible = not target.is_knocked_out()
+		_target_ring.position = target_view.global_position + Vector3.UP * 0.05
+		_target_ring.scale = Vector3.ONE * (target.radius + 0.35)
 	_update_sight()
 
 
@@ -740,29 +817,33 @@ func _play_events() -> void:
 		match event.type:
 			"windup":
 				var move := _move(event)
-				_views[event.side].play_role(wind_up_role(move), move.windup_ticks / float(Rules.TICK_RATE))
-				_move_fx.windup(_views[event.side], move)
-				_hit_counts[event.side] = 0
-				_hud.banner(event.side, move.name, move.type)
+				_event_view(event).play_role(wind_up_role(move), move.windup_ticks / float(Rules.TICK_RATE))
+				_move_fx.windup(_event_view(event), move)
+				_hit_counts[_key(event.side, event.slot)] = 0
+				_hud.banner(_plate(event.side, event.slot), move.name, move.type)
 				_sound.windup(move)
 			"feint":
 				# Looks like the real wind-up, without the move's banner: the move never comes.
 				var move := _move(event)
-				_views[event.side].play_role(wind_up_role(move), move.windup_ticks / float(Rules.TICK_RATE))
-				_move_fx.windup(_views[event.side], move, int(event.ticks))
+				_event_view(event).play_role(wind_up_role(move), move.windup_ticks / float(Rules.TICK_RATE))
+				_move_fx.windup(_event_view(event), move, int(event.ticks))
 				_sound.windup(move)
 			"feint_end":
-				_views[event.side].break_off()
+				_event_view(event).break_off()
+			"target":
+				_rewatch()
 			"hit":
 				var defender := int(event.target_side)
+				var defender_view := _event_view(event, true)
 				var move := _move(event)
 				var share := float(event.damage) / (battle.teams[defender][int(event.target_slot)] as Fighter).max_hp
-				_hit_counts[event.side] += 1
+				var key := _key(event.side, event.slot)
+				_hit_counts[key] = int(_hit_counts.get(key, 0)) + 1
 				var big: bool = event.crit or event.effectiveness > 1.0
 				# Big hits get a shocked reaction from species that have one.
-				_views[defender].play_role("shock" if big and _views[defender].has_animation("shock") else "recoil")
-				_views[defender].take_hit(ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
-				_fx.on_hit(event, _views[defender], share, big)
+				defender_view.play_role("shock" if big and defender_view.has_animation("shock") else "recoil")
+				defender_view.take_hit(ImpactFX.IMPACT_SEQUENCE.size() if big else 0)
+				_fx.on_hit(event, defender_view, share, big)
 				if _live:
 					# Hit-stop in play pauses the battle itself, so it stays fair and replays exactly.
 					_hold_frames = Director.HEAVY_HITSTOP_FRAMES if big else Director.HITSTOP_FRAMES
@@ -770,13 +851,13 @@ func _play_events() -> void:
 						view.set_time_scale(0.0)
 					_crowd.set_time_scale(0.0)
 				if move.kind == BattleMove.Kind.MELEE:
-					_move_fx.melee(_views[event.side], _views[defender], move)
-				elif _fired_tick[event.side] == int(event.tick):
-					_move_fx.point_blank(_views[event.side], _views[defender], move)
-				_move_fx.hit(_views[defender], move, big)
+					_move_fx.melee(_event_view(event), defender_view, move)
+				elif int(_fired_tick.get(key, -1)) == int(event.tick):
+					_move_fx.point_blank(_event_view(event), defender_view, move)
+				_move_fx.hit(defender_view, move, big)
 				_sound.hit(move, big)
 				if big:
-					_hud.shake(defender)
+					_hud.shake(_plate(defender, int(event.target_slot)))
 				if (big or share >= CHEER_SHARE) and not _replaying:
 					_trainer_reacts(event.side, "hop")
 				if big or share >= CHEER_SHARE:
@@ -785,54 +866,54 @@ func _play_events() -> void:
 			"miss":
 				var move := _move(event)
 				if move.kind == BattleMove.Kind.MELEE:
-					_move_fx.melee(_views[event.side], _views[1 - int(event.side)], move)
+					_move_fx.melee(_event_view(event), _event_view(event, true), move)
 				_sound.miss(move)
 			"fire":
-				_fired_tick[event.side] = int(event.tick)
+				_fired_tick[_key(event.side, event.slot)] = int(event.tick)
 			"blast":
-				_move_fx.blast(_views[event.side], _move(event))
+				_move_fx.blast(_event_view(event), _move(event))
 			"multi_hit_end":
-				if _hit_counts[event.side] > 1:
-					_fx.announce(_views[1 - int(event.side)], "Hit %d times!" % _hit_counts[event.side], Color(1, 0.95, 0.6), 56)
+				var count := int(_hit_counts.get(_key(event.side, event.slot), 0))
+				if count > 1:
+					_fx.announce(_event_view(event, true), "Hit %d times!" % count, Color(1, 0.95, 0.6), 56)
 			"recharge":
-				_fx.announce(_views[event.side], "Must recharge!", Color(0.85, 0.85, 0.9), 48)
+				_fx.announce(_event_view(event), "Must recharge!", Color(0.85, 0.85, 0.9), 48)
 			"self_destruct":
-				_views[event.side].take_hit()
+				_event_view(event).take_hit()
 			"landed":
-				var defender := 1 - int(event.side)
 				var move := _move(event)
-				if _fired_tick[event.side] == int(event.tick):
-					_move_fx.point_blank(_views[event.side], _views[defender], move)
-				_move_fx.hit(_views[defender], move, false)
+				if int(_fired_tick.get(_key(event.side, event.slot), -1)) == int(event.tick):
+					_move_fx.point_blank(_event_view(event), _event_view(event, true), move)
+				_move_fx.hit(_event_view(event, true), move, false)
 			"boost":
 				_announce_boost(event)
 				var fell: bool = (event.boosts as Dictionary).values().any(func(stages: Variant) -> bool: return int(stages) < 0)
-				if fell and battle.fighters[event.side].action == Fighter.Action.READY:
-					_views[event.side].play_role("angry")
+				if fell and (battle.teams[event.side][int(event.slot)] as Fighter).action == Fighter.Action.READY:
+					_event_view(event).play_role("angry")
 			"heal":
-				_move_fx.aura(_views[event.side], HEAL_COLOUR, true, true)
-				_fx.announce(_views[event.side], "+%d" % event.amount, HEAL_COLOUR)
+				_move_fx.aura(_event_view(event), HEAL_COLOUR, true, true)
+				_fx.announce(_event_view(event), "+%d" % event.amount, HEAL_COLOUR)
 			"status":
-				_fx.announce(_views[event.side], STATUS_CALLOUTS.get(event.status, ""),
+				_fx.announce(_event_view(event), STATUS_CALLOUTS.get(event.status, ""),
 					Hud.STATUS_BADGES[event.status][1].lightened(0.3), 60)
 				if event.status == "slp":
-					_views[event.side].set_asleep(true)
+					_event_view(event).set_asleep(true)
 			"status_end":
 				if event.status == "slp":
-					_views[event.side].set_asleep(false)
+					_event_view(event).set_asleep(false)
 			"status_damage":
-				_fx.announce(_views[event.side], "-%d" % event.damage, Hud.STATUS_BADGES[event.status][1].lightened(0.3), 44)
+				_fx.announce(_event_view(event), "-%d" % event.damage, Hud.STATUS_BADGES[event.status][1].lightened(0.3), 44)
 			"recoil", "confusion_hit":
-				_views[event.side].take_hit()
-				_fx.announce(_views[event.side], "-%d" % event.damage if event.type == "recoil" else "It hurt itself in confusion!",
+				_event_view(event).take_hit()
+				_fx.announce(_event_view(event), "-%d" % event.damage if event.type == "recoil" else "It hurt itself in confusion!",
 					Color(1, 1, 1) if event.type == "recoil" else Hud.STATUS_BADGES.confusion[1].lightened(0.3), 48)
 			"ability":
-				_fx.announce(_views[event.side], str(event.name), ABILITY_CALLOUT, 52)
+				_fx.announce(_event_view(event), str(event.name), ABILITY_CALLOUT, 52)
 			"item":
-				_fx.announce(_views[event.side], str(event.name), ITEM_CALLOUT, 52)
+				_fx.announce(_event_view(event), str(event.name), ITEM_CALLOUT, 52)
 			"ability_damage", "item_damage":
-				_views[event.side].take_hit()
-				_fx.announce(_views[event.side], "-%d" % event.damage, Color(1, 1, 1), 44)
+				_event_view(event).take_hit()
+				_fx.announce(_event_view(event), "-%d" % event.damage, Color(1, 1, 1), 44)
 			"weather":
 				# A battle's starting weather shows on the intro card and the HUD instead, and a
 				# renewed one only refills the HUD's timer.
@@ -849,42 +930,44 @@ func _play_events() -> void:
 					_hud.flash_title(SURGE_ENDS[event.surge], ArenaSurge.COLOURS[event.surge])
 			"screen_end":
 				if event.get("shattered", false):
-					_fx.announce(_views[event.side], "Shattered!", ScreenPanes.COLOURS[event.screen], 56)
+					_fx.announce(_event_view(event), "Shattered!", ScreenPanes.COLOURS[event.screen], 56)
 			"hazard":
 				var colour: Color = Hud.STATUS_BADGES[event.hazard][1].lightened(0.3)
 				_fx.announce(_views[int(event.target_side)], HAZARD_LAID[event.hazard], colour, 52)
 			"hazard_damage":
-				_views[event.side].take_hit()
-				_fx.announce(_views[event.side], "-%d" % event.damage, Hud.STATUS_BADGES[event.hazard][1].lightened(0.3), 48)
+				_event_view(event).take_hit()
+				_fx.announce(_event_view(event), "-%d" % event.damage, Hud.STATUS_BADGES[event.hazard][1].lightened(0.3), 48)
 			"hazards_cleared":
-				_fx.announce(_views[event.side], "Absorbed the poison spikes!" if event.get("absorbed", false) else "Hazards cleared!",
+				_fx.announce(_event_view(event), "Absorbed the poison spikes!" if event.get("absorbed", false) else "Hazards cleared!",
 					Color(0.85, 0.95, 1.0), 48)
 			"weather_damage":
-				_fx.announce(_views[event.side], "-%d" % event.damage, WEATHER_COLOURS[event.weather], 44)
+				_fx.announce(_event_view(event), "-%d" % event.damage, WEATHER_COLOURS[event.weather], 44)
 			"stunned":
-				_fx.announce(_views[event.side], "Can't move!", Hud.STATUS_BADGES.par[1].lightened(0.3), 48)
+				_fx.announce(_event_view(event), "Can't move!", Hud.STATUS_BADGES.par[1].lightened(0.3), 48)
 			"dodge":
-				_move_fx.dodge(_views[event.side], Vector2(event.direction[0], event.direction[1]))
+				_move_fx.dodge(_event_view(event), Vector2(event.direction[0], event.direction[1]))
 			"guard":
-				_move_fx.guard(_views[event.side])
+				_move_fx.guard(_event_view(event))
 			"guarded":
-				_move_fx.guard(_views[event.side], true)
-				_fx.announce(_views[event.side], "Parried!" if event.parry else "Blocked!", GUARD_CALLOUT, 60)
+				_move_fx.guard(_event_view(event), true)
+				_fx.announce(_event_view(event), "Parried!" if event.parry else "Blocked!", GUARD_CALLOUT, 60)
 				if event.parry:
-					_views[1 - int(event.side)].play_role("recoil")
+					_event_view(event, true).play_role("recoil")
 			"dodged":
-				_fx.on_dodge(_views[event.side])
+				_fx.on_dodge(_event_view(event))
 			"knockout":
 				# Only the final knockout ends the battle: the winner celebrates and the music cuts.
 				var final := int(event.get("left", 0)) == 0
-				_views[event.side].play_role("faint")
+				_event_view(event).play_role("faint")
 				if final:
-					_views[1 - int(event.side)].celebrate()
+					for index in _views.size():
+						if battle.fighters[index].side != int(event.side) and not battle.fighters[index].is_knocked_out():
+							_views[index].celebrate()
 				if not _replaying:
 					_trainer_reacts(event.side, "droop_last" if final else "droop")
 					if final:
 						_trainer_reacts(1 - int(event.side), "celebrate")
-				_sound.knockout(event.side)
+				_sound.knockout(_plate(event.side, event.slot))
 				_arena_sound.cheer()
 				if _replaying:
 					# The music is already cut, and the crowd has seen this once.
@@ -896,24 +979,25 @@ func _play_events() -> void:
 					continue
 				_music.knockout()
 				if _live:
-					_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
+					_hud.show_winner("%s wins!" % _side_name(1 - int(event.side)))
 					_music.victory(BattleMusic.CUT_FRAMES)
 					_arena_sound.set_level(ArenaSound.STING_DUCK_DB, ArenaSound.DUCK_FRAMES)
 			"recall":
 				if _trainers[event.side] != null and not _replaying:
-					var leaving := _views[event.side]
+					var leaving := _event_view(event)
 					_trainers[event.side].recall_from(leaving.global_position + Vector3.UP * leaving.height * 0.5)
 			"send_out":
-				_show_out(event.side)
+				var index := _plate(event.side, event.slot)
+				_show_out(index)
 				if not _replaying:
-					_throw_out(event.side)
-				if _live and event.side == _player_side:
+					_throw_out(index)
+				if _live and index == _player_side:
 					_show_player_moves()
-				_fx.announce(_views[event.side], "Go, %s!" % (battle.teams[event.side][int(event.slot)] as Fighter).name,
+				_fx.announce(_views[index], "Go, %s!" % (battle.teams[event.side][int(event.slot)] as Fighter).name,
 					Hud.SIDE_COLOURS[event.side].lightened(0.35), 56)
-				_sound.cry(event.side)
+				_sound.cry(index)
 				if _looks[event.side][int(event.slot)].shiny:
-					_move_fx.sparkle(_views[event.side], 0)
+					_move_fx.sparkle(_views[index], 0)
 			"overtime":
 				if _replaying:
 					continue
@@ -931,24 +1015,27 @@ func _play_events() -> void:
 ## ends up, for marks made before a clip starts.
 func _mark(event: Dictionary, settled := false) -> void:
 	var side := int(event.side)
-	var key := int(event.tick) * 16 + side * 4
+	# In doubles each fighter marks on its own (a key per side and team slot).
+	var marker := _key(side, int(event.get("slot", 0))) if battle.doubles else side
+	var key := int(event.tick) * 16 + side * 4 + (int(event.get("slot", 0)) * 64 if battle.doubles else 0)
+	var attacker: Fighter = battle.teams[side][int(event.get("slot", battle.fighters[side].slot))] if side >= 0 else null
 	match event.type:
 		"windup":
-			_marked.erase(side)
+			_marked.erase(marker)
 		"hit":
 			var move := _move(event)
-			if move.kind == BattleMove.Kind.AREA or _marked.get(side, false):
+			if move.kind == BattleMove.Kind.AREA or _marked.get(marker, false):
 				return
-			_marked[side] = true
+			_marked[marker] = true
 			var defender: Fighter = battle.teams[Highlights.defender(event)][int(event.get("target_slot", 0))]
 			var share := float(event.damage) / defender.max_hp
 			var big: bool = event.crit or event.effectiveness > 1.0
-			var along := defender.position - battle.fighters[side].position
+			var along := defender.position - (attacker.position if battle.doubles else battle.fighters[side].position)
 			_marks.add(BattleMarks.describe(_move_fx.style_of(move), move.type, move.kind == BattleMove.Kind.MELEE, false, share, big),
 				move.type, defender.position, defender.ground, along.normalized(), key, settled)
 		"blast":
 			var move := _move(event)
-			var user := battle.fighters[side]
+			var user := attacker if battle.doubles else battle.fighters[side]
 			_marks.add(BattleMarks.describe(_move_fx.style_of(move), move.type, false, true, 0.0, false),
 				move.type, user.position, user.ground, Vector2.ZERO, key + 1, settled)
 		"blocked":
@@ -967,8 +1054,8 @@ var _trainers: Array = [null, null]
 ## Screen panes in front of shielded fighters, and entry hazards on the field.
 var _screen_panes: ScreenPanes
 var _hazard_marks: HazardMarks
-## What each side's plate shows under its HP bar.
-var _plate_effects: Array[PlateEffects] = [PlateEffects.new(), PlateEffects.new()]
+## What each plate (by Battle.index_of) shows under its HP bar.
+var _plate_effects: Array[PlateEffects] = [PlateEffects.new(), PlateEffects.new(), PlateEffects.new(), PlateEffects.new()]
 var _weather_seen := ""
 var _weather_left := 0
 var _weather_total := 1.0
@@ -988,15 +1075,26 @@ func _sync_conditions() -> void:
 	if _screen_panes == null:
 		_screen_panes = ScreenPanes.new()
 		add_child(_screen_panes)
-	_screen_panes.sync(conditions.screens, _views, [battle.fighters[0].radius, battle.fighters[1].radius])
+	# A side's screen stands in front of its first fighter up (in doubles).
+	var fronts: Array[FighterView] = [_views[0], _views[1]]
+	var radii: Array[float] = [battle.fighters[0].radius, battle.fighters[1].radius]
+	if battle.doubles:
+		for side in 2:
+			for fighter in battle.out(side):
+				if not fighter.is_knocked_out():
+					fronts[side] = _views[battle.fighters.find(fighter)]
+					radii[side] = fighter.radius
+					break
+	_screen_panes.sync(conditions.screens, fronts, radii)
 	if _hazard_marks == null:
 		_hazard_marks = HazardMarks.new()
 		_hazard_marks.setup(int(battle.spec.seed))
 		add_child(_hazard_marks)
 	_hazard_marks.sync(conditions.hazards, battle)
+	for index in _views.size():
+		_hud.set_effects(index, _plate_effects[index].read(battle.fighters[index]))
 	for side in 2:
-		_hud.set_effects(side, _plate_effects[side].read(battle.fighters[side]))
-		_hud.show_team(side, battle.teams[side], battle.fighters[side])
+		_hud.show_team(side, battle.teams[side], battle.out(side))
 	var entries := []
 	if not conditions.weather.is_empty():
 		# A new weather (or a renewed one) sets the timer's full length.
@@ -1037,8 +1135,17 @@ func _weather_subtitle() -> String:
 ## battle's length, the victory sting, and the crowd cheering again.
 func _show_victory(side: int) -> void:
 	_victory_shown = true
-	var winner := battle.fighters[side]
-	_hud.show_victory(side, winner.name, float(winner.hp) / winner.max_hp, battle.tick / float(Rules.TICK_RATE))
+	var hp := 0.0
+	var full := 0.0
+	var names: Array[String] = []
+	for winner in battle.out(side):
+		if not winner.is_knocked_out():
+			hp += winner.hp
+			full += winner.max_hp
+			names.append(winner.name)
+	if names.is_empty():
+		names.append(battle.fighters[side].name)
+	_hud.show_victory(side, " & ".join(names), hp / maxf(full, 1.0), battle.tick / float(Rules.TICK_RATE))
 	_crowd.cheer(1.0, KNOCKOUT_CHEER_FRAMES)
 	_arena_sound.cheer()
 	_arena_sound.roar()
@@ -1056,8 +1163,8 @@ func _announce_boost(event: Dictionary) -> void:
 	var subject: String = STAT_NAMES[changes.keys()[0]] if changes.size() == 1 else "Stats"
 	var amount := absi(int(changes.values()[0])) if changes.size() == 1 else 1
 	var verb := ("rose" if rising else "fell") + (" sharply" if amount == 2 else (" drastically" if amount >= 3 else ""))
-	_move_fx.aura(_views[event.side], RISE_COLOUR if rising else DROP_COLOUR, rising)
-	_fx.announce(_views[event.side], "%s %s!" % [subject, verb], RISE_COLOUR if rising else DROP_COLOUR, 52)
+	_move_fx.aura(_event_view(event), RISE_COLOUR if rising else DROP_COLOUR, rising)
+	_fx.announce(_event_view(event), "%s %s!" % [subject, verb], RISE_COLOUR if rising else DROP_COLOUR, 52)
 
 
 ## The animation a move plays on wind-up: damaging moves by category (area moves can be either),
@@ -1094,10 +1201,10 @@ func _sync_views(shown: int) -> void:
 		for view in _views:
 			view.set_time_scale(1.0 / plan.slow[shown])
 		_crowd.set_time_scale(1.0 / plan.slow[shown])
-	for side in 2:
-		var fighter := battle.fighters[side]
-		_views[side].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
-		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
+	for index in _views.size():
+		var fighter := battle.fighters[index]
+		_views[index].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
+		_hud.set_hp(index, float(fighter.hp) / fighter.max_hp)
 	_update_sight()
 	_move_fx.sync_projectiles(battle)
 	var span := maxi(1, int(_segment.end) - int(_segment.start))
@@ -1110,7 +1217,7 @@ func _sync_views(shown: int) -> void:
 
 ## The arena (its own sky, sun and particles) and the camera.
 func _build_stage(arena_name: String) -> void:
-	_arena = Arena.create(arena_name, int(battle.spec.seed), [battle.fighters[0].name, battle.fighters[1].name], battle.terrain)
+	_arena = Arena.create(arena_name, int(battle.spec.seed), [_side_name(0), _side_name(1)], battle.terrain)
 	add_child(_arena)
 	_camera = Camera3D.new()
 	_camera.far = Terrain.WORLD_RADIUS * 3.0
@@ -1131,23 +1238,24 @@ func _add_trainers(spec: Dictionary) -> void:
 		_trainers[side] = trainer
 
 
-## The battle opening with each trainer throwing out its first Pokémon.
+## The battle opening with each trainer throwing out its first Pokémon (two each in doubles).
 func _open_with_throws() -> void:
-	for side in 2:
-		_throw_out(side)
+	for index in _views.size():
+		_throw_out(index)
 
 
-## `side`'s trainer throws the ball for its fighter out now, which appears where the ball lands.
-func _throw_out(side: int) -> void:
-	var trainer: TrainerView = _trainers[side]
+## A trainer throws the ball for the fighter out at `index` (Battle.index_of; its side in
+## singles), which appears where the ball lands.
+func _throw_out(index: int) -> void:
+	var fighter := battle.fighters[index]
+	var trainer: TrainerView = _trainers[fighter.side]
 	if trainer == null:
 		return
-	var view := _views[side]
-	var fighter := battle.fighters[side]
+	var view := _views[index]
 	view.visible = false
 	trainer.throw_to(Vector3(fighter.position.x, _arena.surface_at(fighter.position, fighter.ground), fighter.position.y),
 		func() -> void:
-			if _views[side] == view:
+			if _views[index] == view:
 				view.visible = true
 				_move_fx.aura(view, Color(1, 1, 1), true))
 
@@ -1186,7 +1294,7 @@ func _add_crowd(data: BattleData) -> void:
 			if view == null:
 				push_warning("cannot load the model %s for a spectator" % entry.model)
 				continue
-			_crowd.add_watcher(view, seats[i], _views[i % 2])
+			_crowd.add_watcher(view, seats[i], _views[i % _views.size()])
 			view.set_hovering(view.hovers_as(data.species[ids[i]].get("types", []), entry.get("flies", true)))
 	_crowd.build()
 

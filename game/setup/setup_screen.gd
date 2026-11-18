@@ -1,7 +1,8 @@
 class_name SetupScreen
 extends Control
 ## The setup screen (concepts_brief.md §17, M13), where a plain launch starts: the mode (watch,
-## play, record), each side's fighter (SetupSide), the arena, weather and seed, and for record
+## play, record), each side's fighter (SetupSide), singles or doubles (M17: two of each team
+## out, teams of 2-6), the arena, weather and seed, and for record
 ## the clip's format and length. It builds battle flags (flags_for()) and SpecFlags turns them
 ## into the spec, exactly as on the command line; the command line it stands for shows at the
 ## bottom. Watch and play open the battle view with those flags; record runs tools/record.gd in
@@ -38,6 +39,8 @@ var _mode_buttons := {}
 var _mode_hint: Label
 var _arena: OptionButton
 var _weather: OptionButton
+## Singles ("") or doubles ("doubles").
+var _battle: OptionButton
 var _seed: LineEdit
 var _record_options: Control
 var _format: OptionButton
@@ -65,6 +68,8 @@ static func flags_for(setup: Dictionary) -> Dictionary:
 	if sides.any(func(member: Dictionary) -> bool: return not str(member.get("shiny", "")).is_empty()):
 		# A side left to the seed shows as not shiny once the other is set: --shiny names both.
 		flags.shiny = SpecFlags.SHINY_SIDES.find_key(sides.map(func(member: Dictionary) -> bool: return member.get("shiny", "") == "yes"))
+	if setup.get("doubles", false):
+		flags.doubles = ""
 	for side in 2:
 		var prefix: String = ["", "vs-"][side]
 		for key: String in ["form", "moves", "ability", "item"]:
@@ -174,6 +179,10 @@ func _build() -> void:
 	var battle_row := HBoxContainer.new()
 	battle_row.add_theme_constant_override("separation", 14)
 	rows.add_child(battle_row)
+	_battle = _option(battle_row, "Battle", 160)
+	_add(_battle, "Singles", "")
+	_add(_battle, "Doubles", "doubles")
+	_battle.tooltip_text = "Doubles puts two of each team out at once: each side needs 2-6 in its team slots"
 	_arena = _option(battle_row, "Arena", 250)
 	_add(_arena, "By type (seed)", "")
 	for name in Arenas.names():
@@ -250,20 +259,21 @@ func _build() -> void:
 	_start.tooltip_text = "F5 or Ctrl+Enter"
 	_start.pressed.connect(_on_start)
 	action_row.add_child(_start)
-	for option: OptionButton in [_arena, _weather, _format]:
+	for option: OptionButton in [_battle, _arena, _weather, _format]:
 		option.item_selected.connect(func(_index: int) -> void: _refresh())
 
 
 ## The setup as chosen (see flags_for()), with the record options.
 func _setup() -> Dictionary:
 	return {"mode": _mode, "sides": _sides.map(func(side: SetupSide) -> Dictionary: return side.member()),
-		"arena": _value(_arena), "weather": _value(_weather), "seed": _seed.text.strip_edges(),
+		"doubles": _value(_battle) == "doubles", "arena": _value(_arena), "weather": _value(_weather), "seed": _seed.text.strip_edges(),
 		"format": _value(_format), "seconds": int(_seconds.value)}
 
 
 func _restore(setup: Dictionary) -> void:
 	for side in 2:
 		_sides[side].set_member(setup.sides[side])
+	_choose(_battle, "doubles" if setup.get("doubles", false) else "")
 	_choose(_arena, str(setup.get("arena", "")))
 	_choose(_weather, str(setup.get("weather", "")))
 	_choose(_format, str(setup.get("format", "vertical")))

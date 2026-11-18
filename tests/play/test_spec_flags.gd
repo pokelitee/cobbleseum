@@ -114,3 +114,14 @@ func test_team_flags_are_checked() -> void:
 	assert_true(SpecFlags.to_spec({"watch": "", "team": "a,b,c,d,e,f,g"}).error.contains("1-6"))
 	assert_true(SpecFlags.to_spec({"watch": ""}).error.contains("--team"))
 	assert_eq(SpecFlags.to_spec({"watch": "pikachu", "team": "pikachu"}).fighters[0].team.size(), 1)
+
+
+func test_doubles_flag_needs_two_a_side_and_round_trips() -> void:
+	var parsed := SpecFlags.parse(PackedStringArray(["--watch", "--team=pikachu,charizard", "--vs-team=garchomp,gengar", "--doubles"]))
+	assert_eq(parsed.rest.size(), 0, "a bare --doubles is a flag")
+	var spec := SpecFlags.to_spec(parsed.flags)
+	assert_false(spec.has("error"), str(spec.get("error", "")))
+	assert_true(spec.doubles)
+	assert_true(SpecFlags.from_spec(spec).has("--doubles"))
+	assert_eq(SpecFlags.to_spec(SpecFlags.parse(SpecFlags.from_spec(spec)).flags), spec)
+	assert_true(SpecFlags.to_spec({"watch": "pikachu", "vs": "raichu", "doubles": ""}).error.contains("2-6"))
