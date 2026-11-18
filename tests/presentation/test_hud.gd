@@ -310,9 +310,13 @@ func test_a_team_shows_as_balls_on_its_plate() -> void:
 			hud.show_team(side, team, team[0])
 			var balls: TeamBalls = hud._team_balls[side]
 			assert_eq([balls.state(0), balls.state(1), balls.state(2)], ["healthy", "par", "fainted"])
-			var plate: Control = hud._panels[side].get_child(0)
-			assert_true(Rect2(plate.global_position, plate.size).encloses(Rect2(balls.global_position, balls.size)),
-				"on its plate at %s" % size)
+			var rect := Rect2(balls.global_position, balls.size)
+			assert_true(Rect2(Vector2.ZERO, size).encloses(rect), "on screen at %s" % size)
+			var track: Control = hud._bars[side].get_parent()
+			assert_true(rect.position.y >= track.global_position.y + track.size.y, "under the HP bar at %s" % size)
+			assert_true(rect.position.x >= track.global_position.x - 1.0 and rect.end.x <= track.global_position.x + track.size.x + 1.0,
+				"within the bar's width at %s" % size)
+			assert_true(hud._effect_rooms[side] < track.size.x, "the effects make room at %s" % size)
 		hud.show_team(0, [team[0]], team[0])
 		hud.free()
 	var single := Hud.new()
