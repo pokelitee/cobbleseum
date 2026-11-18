@@ -8,3 +8,4 @@ reaction_delay_ticks = 12
 decision_interval_ticks = 6
 mistake_chance = 0.25
 dodge_chance = 0.3
+switch_chance = 0.1

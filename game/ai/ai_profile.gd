@@ -17,3 +17,6 @@ extends Resource
 ## Chance, per threat it may react to (its dodge roll succeeded), that raising a guard is also
 ## an option.
 @export_range(0.0, 1.0) var guard_chance := 0.0
+## Chance of switching when a bench member would do clearly better against the foe (team
+## battles), rolled once per such chance.
+@export_range(0.0, 1.0) var switch_chance := 0.0

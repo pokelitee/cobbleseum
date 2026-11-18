@@ -23,7 +23,7 @@ extends RefCounted
 ## - Exact ties go to the side's random stream, never list order.
 ## With `keep_scores` set (the debug overlay), the last evaluation is kept in `last_scores`.
 
-enum Action { USE_MOVE, DODGE, FEINT, GUARD, APPROACH, RETREAT, CIRCLE, HOLD, TAKE_COVER, FLANK }
+enum Action { USE_MOVE, DODGE, FEINT, GUARD, SWITCH, APPROACH, RETREAT, CIRCLE, HOLD, TAKE_COVER, FLANK }
 
 ## Movement scores stay below a usable attack's, so ready moves in range get used; the
 ## commitment bonus only steadies the choice between ways of moving.
@@ -83,6 +83,15 @@ const INTO_GUARD := 0.1
 ## A melee move into a foe whose ability or item punishes contact (Static, Rocky Helmet) scores
 ## this much.
 const CONTACT_COST := 0.85
+## Switching (team battles): a bench member's worth is its trade against the foe (the log of
+## how much faster it would wear the foe down than be worn down), its HP first cut by what it
+## would lose while landing. A switch is a chance worth rolling for once a member beats the
+## fighter out by SWITCH_MARGIN (about a 1.5 times better trade); a rolled switch scores from
+## SWITCH_BASE up by SWITCH_SLOPE per unit of gain, so a clear gain outscores most attacks.
+const SWITCH_MARGIN := 0.4
+const SWITCH_BASE := 0.6
+const SWITCH_SLOPE := 0.3
+const SWITCH_TOP := 0.95
 
 var profile: AIProfile
 var random: SimRandom
@@ -110,6 +119,8 @@ var _flank_spot := Vector2.INF
 ## This chance to feint's roll: -1 until rolled, then 0 (don't) or 1 (do). The chance lasts
 ## while the foe stays on its last dodge charge.
 var _feint_roll := -1
+## Switch chances rolled for, by "<own slot>><bench slot>@<foe slot>": true to take it.
+var _switch_rolls := {}
 ## The fighters it last decided for and against; a team battle's send-out changes them.
 var _me: Fighter
 var _foe: Fighter
@@ -126,6 +137,10 @@ func decide(battle: Battle, side: int) -> Dictionary:
 	var me := battle.fighters[side]
 	var foe := battle.fighters[1 - side]
 	_meet(me, foe)
+	if battle.is_waiting(side) and me.is_knocked_out():
+		# Between Pokémon after a knockout: pick who comes out next.
+		var pick := best_pick(battle, side)
+		return {"switch": pick} if pick >= 0 else {}
 	if battle.is_waiting(1 - side):
 		_intent = {}
 		return {}
@@ -156,6 +171,8 @@ func decide(battle: Battle, side: int) -> Dictionary:
 			_intent = {"guard": true}
 		Action.FEINT:
 			_intent = {"feint": choice.move}
+		Action.SWITCH:
+			_intent = {"switch": choice.move}
 		_:
 			_intent = _around_terrain(battle, me, _movement_intent(me, seen, _current))
 	return _intent
@@ -164,6 +181,8 @@ func decide(battle: Battle, side: int) -> Dictionary:
 ## Starts afresh for a new fighter of its own (everything it was planning) or a new foe (what
 ## it remembers seeing), after a send-out.
 func _meet(me: Fighter, foe: Fighter) -> void:
+	if (_foe != null and foe != _foe) or (_me != null and me != _me):
+		_switch_rolls.clear()
 	if _foe != null and foe != _foe:
 		_history.clear()
 		_history_count = 0
@@ -234,6 +253,7 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			considerations.into_guard = INTO_GUARD
 		candidates.append(_scored("move:" + move.id, Action.USE_MOVE, considerations, i))
 	_add_feint(battle, me, foe, gap, urgency, candidates)
+	_add_switch(battle, me, foe, urgency, candidates)
 	if can_avoid:
 		candidates.append(_scored("dodge", Action.DODGE, {
 			"urgency": urgency,
@@ -602,6 +622,89 @@ func _band(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary) -> Vecto
 ## share of the expected damage per second of its whole moveset, ready or not. Expected damage
 ## covers its attacking stats, STAB, the foe's defences and type, and stat stages, so the lean
 ## shifts as boosts and drops come and go. Self-destructing moves don't count.
+## A switch to the bench member with the best worth (switch_worth), if it beats the fighter out
+## by SWITCH_MARGIN and the profile's roll for that chance succeeded.
+func _add_switch(battle: Battle, me: Fighter, foe: Fighter, urgency: float, candidates: Array[Dictionary]) -> void:
+	if profile.switch_chance <= 0.0 or battle.teams[me.side].size() < 2:
+		return
+	var best := -1
+	var best_gain := SWITCH_MARGIN
+	var staying := trade(me, foe, battle.data())
+	for member: Fighter in battle.healthy(me.side):
+		if not battle.can_switch(me.side, member.slot):
+			continue
+		var gain := switch_worth(member, foe, battle.data()) - staying
+		if gain > best_gain:
+			best = member.slot
+			best_gain = gain
+	if best < 0:
+		return
+	var key := "%d>%d@%d" % [me.slot, best, foe.slot]
+	if not _switch_rolls.has(key):
+		_switch_rolls[key] = random.chance(profile.switch_chance)
+	if not _switch_rolls[key]:
+		return
+	candidates.append(_scored("switch:%d" % best, Action.SWITCH, {
+		"gain": minf(SWITCH_BASE + SWITCH_SLOPE * best_gain, SWITCH_TOP),
+		"safe_to_commit": 1.0 - 0.6 * urgency,
+	}, best))
+
+
+## A bench member's worth against `foe`: its trade with the HP it would lose while it lands
+## (Rules.SWITCH_SECONDS) taken off.
+static func switch_worth(member: Fighter, foe: Fighter, data: BattleData) -> float:
+	var landing := damage_rate(foe, member, data) * Rules.SWITCH_SECONDS
+	return trade(member, foe, data, member.hp - landing)
+
+
+## How `me` fares against `foe`: the log of the share of the foe's HP it takes a second over the
+## share of its own HP (`hp`, its current HP by default) it loses a second to the foe's attacks
+## and its status condition. 0 is an even trade; each 0.7 doubles it. Its stat stages, HP and
+## status count, so a fighter that has been worn down or has dropped its stats fares worse.
+static func trade(me: Fighter, foe: Fighter, data: BattleData, hp := -1.0) -> float:
+	var dealt := damage_rate(me, foe, data) / maxf(foe.hp, 1.0)
+	var taken := (damage_rate(foe, me, data) + status_rate(me)) / maxf(hp if hp >= 0.0 else float(me.hp), 1.0)
+	return log(maxf(dealt, 1e-6) / maxf(taken, 1e-6))
+
+
+## Expected damage a second from `attacker`'s damaging moves against `defender`, each at the rate
+## its wind-up, recovery and cooldown allow (as melee_lean weighs them).
+static func damage_rate(attacker: Fighter, defender: Fighter, data: BattleData) -> float:
+	var rate := 0.0
+	for move in attacker.moves:
+		if not move.is_damaging() or move.self_destructs:
+			continue
+		var cycle := maxf(move.windup_ticks + move.recovery_ticks + move.cooldown_ticks, 1.0)
+		rate += expected_damage(attacker, defender, move, data) / cycle
+	return rate * Rules.TICK_RATE
+
+
+## HP a second `fighter` loses to its status condition.
+static func status_rate(fighter: Fighter) -> float:
+	match fighter.status:
+		"brn":
+			return fighter.max_hp * Rules.BURN_DAMAGE
+		"psn":
+			return 0.0 if fighter.ability_effect.get("poison_heal", false) else fighter.max_hp * Rules.POISON_DAMAGE
+		"tox":
+			return 0.0 if fighter.ability_effect.get("poison_heal", false) else fighter.max_hp * Rules.TOXIC_STEP * (fighter.toxic_level + 1)
+	return 0.0
+
+
+## The team slot `side` should send out after a knockout: the healthy member with the best
+## trade against the foe out, or -1 when no one is left.
+static func best_pick(battle: Battle, side: int) -> int:
+	var foe := battle.fighters[1 - side]
+	var best := -1
+	var best_worth := -INF
+	for member: Fighter in battle.healthy(side):
+		var worth := trade(member, foe, battle.data()) if not foe.is_knocked_out() else float(member.hp) / member.max_hp
+		if worth > best_worth:
+			best = member.slot
+			best_worth = worth
+	return best
+
+
 static func melee_lean(me: Fighter, foe: Fighter, data: BattleData) -> float:
 	var close := 0.0
 	var total := 0.0

@@ -288,3 +288,56 @@ func test_controllers_come_from_the_spec() -> void:
 	assert_true(Controllers.for_spec({"seed": 1, "fighters": [{"ai": "genius"}, {}]}).error.contains("unknown AI"))
 	for profile in ["easy", "normal", "hard", "ranked"]:
 		assert_true(Controllers.load_profile(profile) != null, profile)
+
+
+func _team_battle(ai: Object, seed := 1) -> Battle:
+	# Side A leads with a Fire type against a Water type's super-effective shots; its bench has a
+	# Grass attacker that hits the foe super effectively.
+	var spec := {"seed": seed, "arena": "stadium", "fighters": [
+		{"team": [{"species": "blaze", "moves": ["kick"]}, {"species": "caster", "moves": ["leaf"]}]},
+		{"species": "squirt", "moves": ["jet"]}]}
+	var created := Battle.create(spec, BattleData.new(SPECIES, MOVES, TYPES), [ai, Idle.new()])
+	assert_false(created.has("error"), str(created.get("error", "")))
+	return created.battle
+
+
+func test_trade_favours_the_member_that_hits_harder_and_takes_less() -> void:
+	var battle := _team_battle(Idle.new())
+	var data := battle.data()
+	var foe := battle.fighters[1]
+	var blaze: Fighter = battle.teams[0][0]
+	var caster: Fighter = battle.teams[0][1]
+	assert_true(UtilityAI.trade(caster, foe, data) > UtilityAI.trade(blaze, foe, data))
+	blaze.boosts.atk = 6
+	var boosted := UtilityAI.trade(blaze, foe, data)
+	blaze.boosts.atk = 0
+	assert_true(boosted > UtilityAI.trade(blaze, foe, data), "its stages count")
+
+
+func test_the_ai_switches_to_a_better_matchup_when_its_roll_succeeds() -> void:
+	var profile: AIProfile = Controllers.load_profile("ranked").duplicate()
+	profile.switch_chance = 1.0
+	profile.mistake_chance = 0.0
+	var ai := UtilityAI.new(profile, SimRandom.new(1))
+	var battle := _team_battle(ai)
+	for i in Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS) + 5:
+		battle.step()
+	assert_eq(battle.fighters[0].species_id, "caster", "switched to the Grass attacker")
+	profile.switch_chance = 0.0
+	var stays := _team_battle(UtilityAI.new(profile, SimRandom.new(1)))
+	for i in Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS) + 5:
+		stays.step()
+	assert_eq(stays.fighters[0].species_id, "blaze", "a profile without the chance never switches")
+
+
+func test_after_a_knockout_the_ai_picks_its_best_trade() -> void:
+	var spec := {"seed": 1, "arena": "stadium", "fighters": [
+		{"team": [{"species": "squirt", "moves": ["jet"]}, {"species": "blaze", "moves": ["kick"]}, {"species": "caster", "moves": ["leaf"]}]},
+		{"species": "squirt", "moves": ["jet"]}]}
+	var battle: Battle = Battle.create(spec, BattleData.new(SPECIES, MOVES, TYPES), [_ai(), Idle.new()]).battle
+	assert_eq(UtilityAI.best_pick(battle, 0) != 1, true, "not the Fire type the foe hits hard")
+	battle.step()
+	battle._hurt(battle.fighters[0], 10000, "status_damage", {"status": "psn"})
+	while battle.fighters[0].is_knocked_out():
+		battle.step()
+	assert_eq(battle.fighters[0].species_id, "caster")
