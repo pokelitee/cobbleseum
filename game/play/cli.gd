@@ -160,14 +160,15 @@ static func check_spec(spec: Dictionary, data: BattleData) -> String:
 		return unknown("weather", weather, ArenaConditions.WEATHERS + [SpecFlags.NONE])
 	var species := species_ids(data)
 	var moves: Array[String] = []
-	for fighter: Dictionary in spec.get("fighters", []):
+	for side: Dictionary in spec.get("fighters", []):
+		if not side.get("intents") is Array:
+			var ai := str(side.get("ai", Controllers.DEFAULT_AI))
+			if not ai in profiles() and not ai in OTHER_AIS:
+				return unknown("AI profile", ai, profiles() + ["stand_in"])
+	for fighter: Dictionary in Appearance.members(spec):
 		var id := str(fighter.get("species", ""))
 		if not id in species:
 			return unknown("species", id, species, BattleData.to_id)
-		if not fighter.get("intents") is Array:
-			var ai := str(fighter.get("ai", Controllers.DEFAULT_AI))
-			if not ai in profiles() and not ai in OTHER_AIS:
-				return unknown("AI profile", ai, profiles() + ["stand_in"])
 		for move: String in fighter.get("moves", []):
 			if not data.moves.has(move):
 				if moves.is_empty():
@@ -234,15 +235,19 @@ static func describe(spec: Dictionary, battle: Battle, from_flags: bool) -> Pack
 	var lines: PackedStringArray = ["battle: seed %d, arena %s, weather %s" % [int(spec.seed), battle.arena,
 		weather if not weather.is_empty() else SpecFlags.NONE]]
 	for side in 2:
-		var fighter := battle.fighters[side]
-		var entry: Dictionary = spec.fighters[side]
-		var controller := "intents" if entry.get("intents") is Array else str(entry.get("ai", Controllers.DEFAULT_AI))
-		var form := str(entry.get("form", ""))
-		lines.append("  %s: %s (%s), ability %s, item %s, moves %s, %s%s" % ["AB"[side], fighter.name, controller,
-			fighter.ability if not fighter.ability.is_empty() else SpecFlags.NONE,
-			fighter.item if not fighter.item.is_empty() else SpecFlags.NONE,
-			",".join(fighter.moves.map(func(m: BattleMove) -> String: return m.id)),
-			"form " + form if not form.is_empty() else "own look", ", shiny" if entry.get("shiny", false) else ""])
+		var side_entry: Dictionary = spec.fighters[side]
+		var controller := "intents" if side_entry.get("intents") is Array else str(side_entry.get("ai", Controllers.DEFAULT_AI))
+		var members := Battle.members_of(side_entry)
+		for fighter: Fighter in battle.teams[side]:
+			var entry: Dictionary = members[fighter.slot]
+			var form := str(entry.get("form", ""))
+			# A team's members are numbered after the side: A1, A2, ...
+			var label: String = "AB"[side] + (str(fighter.slot + 1) if members.size() > 1 else "")
+			lines.append("  %s: %s (%s), ability %s, item %s, moves %s, %s%s" % [label, fighter.name, controller,
+				fighter.ability if not fighter.ability.is_empty() else SpecFlags.NONE,
+				fighter.item if not fighter.item.is_empty() else SpecFlags.NONE,
+				",".join(fighter.moves.map(func(m: BattleMove) -> String: return m.id)),
+				"form " + form if not form.is_empty() else "own look", ", shiny" if entry.get("shiny", false) else ""])
 	if from_flags:
 		var repeat := spec.duplicate(true)
 		repeat.arena = battle.arena

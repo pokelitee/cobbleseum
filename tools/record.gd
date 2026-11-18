@@ -124,7 +124,7 @@ func _initialize() -> void:
 
 	var names: PackedStringArray = []
 	for entry: Dictionary in spec.fighters:
-		names.append(str(entry.species))
+		names.append(str(Battle.members_of(entry)[0].species))
 	var recordings := ProjectSettings.globalize_path("res://recordings")
 	_ensure_ignored(recordings)
 	var out_dir := recordings.path_join("%s_%s_%d%s" % [Time.get_date_string_from_system(), "-vs-".join(names), int(spec.seed),

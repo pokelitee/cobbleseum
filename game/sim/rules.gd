@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 23
+const RULES_VERSION := 24
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -15,6 +15,14 @@ const OVERTIME_SECONDS := 60.0
 const OVERTIME_RAMP := 0.1
 ## Multiplies the HP stat to set how long battles last (target 30-45 s).
 const HP_MULTIPLIER := 19.0
+## Team battles (§9.1): a side brings 1-MAX_TEAM Pokémon, one out at a time. After a knockout
+## with more to come there's a lull of KNOCKOUT_LULL_SECONDS, then the next one is sent out at
+## its side's start spot, taking SEND_OUT_SECONDS to land, shielded throughout. Until it lands
+## the fighter left standing can only walk. The overtime and time cap scale with the larger
+## team's size.
+const MAX_TEAM := 6
+const KNOCKOUT_LULL_SECONDS := 2.0
+const SEND_OUT_SECONDS := 1.0
 
 const ARENA_RADIUS := 14.0
 ## Terrain (§9.8): the most a fighter can step up (fliers more); projectiles leave and aim at
@@ -180,8 +188,8 @@ const COOLDOWN_PP_FACTOR := 12.0
 
 
 ## Damage multiplier at a tick: 1 until overtime, then rising.
-static func overtime_factor(tick: int) -> float:
-	return 1.0 + OVERTIME_RAMP * maxf(0.0, tick / float(TICK_RATE) - OVERTIME_SECONDS)
+static func overtime_factor(tick: int, overtime_seconds := OVERTIME_SECONDS) -> float:
+	return 1.0 + OVERTIME_RAMP * maxf(0.0, tick / float(TICK_RATE) - overtime_seconds)
 
 
 static func seconds_to_ticks(seconds: float) -> int:

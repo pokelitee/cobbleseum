@@ -44,7 +44,7 @@ func test_projectiles_still_in_flight_end_with_the_battle() -> void:
 	var moves := {"jet": {"name": "Jet", "category": "Special", "type": "Water", "basePower": 80, "accuracy": 100, "pp": 15, "priority": 0, "flags": {}, "target": "normal"}}
 	var spec := {"seed": 1, "arena": "stadium", "fighters": [{"species": "squirt", "moves": ["jet"]}, {"species": "squirt", "moves": ["jet"]}]}
 	var battle: Battle = Battle.create(spec, BattleData.new(species, moves, {}), [Idle.new(), Idle.new()]).battle
-	battle.projectiles.append({"id": 0, "owner": 0, "move": 0, "position": Vector2(0, -2), "velocity": Vector2(0, 0.5), "height": 1.0})
+	battle.projectiles.append({"id": 0, "owner": 0, "slot": 0, "move": 0, "position": Vector2(0, -2), "velocity": Vector2(0, 0.5), "height": 1.0})
 	var fx := MoveFX.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(fx)
 	fx.sync_projectiles(battle)

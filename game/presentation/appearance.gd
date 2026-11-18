@@ -17,10 +17,11 @@ const BASE_FORM := "base"
 
 
 ## Fills in "shiny" and "form" for the fighters of `spec` that lack them, rolled from its seed.
-## Each side always takes the same draws, so one fighter's species never changes the other's roll.
+## Each side always takes the same draws, so one fighter's species never changes the other's roll;
+## team members roll by slot, both sides' first members first.
 static func roll_missing(spec: Dictionary, roster: Dictionary) -> void:
 	var random := SimRandom.stream(int(spec.seed), STREAM)
-	for fighter: Dictionary in spec.fighters:
+	for fighter: Dictionary in members(spec):
 		var rolled := roll(random, roster.get(str(fighter.get("species", "")), {}))
 		if not fighter.has("form"):
 			fighter.form = rolled.form
@@ -49,9 +50,22 @@ static func roll(random: SimRandom, entry: Dictionary) -> Dictionary:
 	return {"form": form, "shiny": shiny_draw < SHINY_CHANCE}
 
 
+## Every team member's spec entry, by slot and then side: both sides' first members, then
+## their second, and so on.
+static func members(spec: Dictionary) -> Array:
+	var teams: Array = spec.get("fighters", []).map(func(entry: Dictionary) -> Array: return Battle.members_of(entry))
+	var found: Array = []
+	var size: int = teams.reduce(func(most: int, team: Array) -> int: return maxi(most, team.size()), 0)
+	for slot in size:
+		for team: Array in teams:
+			if slot < team.size():
+				found.append(team[slot])
+	return found
+
+
 ## Why the fighters' forms can't be shown, or "": every "form" must be one of its species'.
 static func check(spec: Dictionary, roster: Dictionary) -> String:
-	for fighter: Dictionary in spec.get("fighters", []):
+	for fighter: Dictionary in members(spec):
 		var form := str(fighter.get("form", ""))
 		var forms: Dictionary = roster.get(str(fighter.get("species", "")), {}).get("forms", {})
 		if not form.is_empty() and not forms.has(form):

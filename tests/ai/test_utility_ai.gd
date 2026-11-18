@@ -251,7 +251,7 @@ func test_dodges_a_telegraphed_projectile() -> void:
 		var me := battle.fighters[0]
 		var foe := battle.fighters[1]
 		var toward := (me.position - foe.position).normalized()
-		battle.projectiles.append({"id": 99, "owner": 1, "move": 0, "position": foe.position + toward * foe.radius,
+		battle.projectiles.append({"id": 99, "owner": 1, "slot": 0, "move": 0, "position": foe.position + toward * foe.radius,
 			"velocity": toward * (16.0 / Rules.TICK_RATE), "travelled": 0.0, "height": Rules.CHEST_HEIGHT, "rise": 0.0})
 		for i in 30:
 			battle.step()
@@ -271,7 +271,7 @@ func test_easy_misses_more_dodges_than_hard() -> void:
 			var me := battle.fighters[0]
 			var foe := battle.fighters[1]
 			var toward := (me.position - foe.position).normalized()
-			battle.projectiles.append({"id": 99, "owner": 1, "move": 0, "position": foe.position + toward * foe.radius,
+			battle.projectiles.append({"id": 99, "owner": 1, "slot": 0, "move": 0, "position": foe.position + toward * foe.radius,
 				"velocity": toward * (16.0 / Rules.TICK_RATE), "travelled": 0.0, "height": Rules.CHEST_HEIGHT, "rise": 0.0})
 			for i in 30:
 				battle.step()

@@ -32,6 +32,23 @@ const TIME_UP_SCORE := 4.0
 const END_LINGER_TICKS := 20
 
 
+## A hit event's defender: its "target_side", or the other side in events from before teams.
+static func defender(event: Dictionary) -> int:
+	return int(event.get("target_side", 1 - int(event.side)))
+
+
+## Max HP from `max_hp`, which is per side ([side A's, side B's]) or per side and team slot
+## (Battle.team_max_hp()).
+static func max_hp_of(max_hp: Array, side: int, slot: int) -> float:
+	var entry: Variant = max_hp[side]
+	return float(entry[slot]) if entry is Array else float(entry)
+
+
+## Whether a knockout event ends the battle: its side has no one left.
+static func is_final(event: Dictionary) -> bool:
+	return int(event.get("left", 0)) == 0
+
+
 ## The best window covering at least `frames` video frames, or the whole plan when it is
 ## shorter: {"start": tick, "end": tick (exclusive), "score": float}. Ties go to the later
 ## window, which is closer to the finish.
@@ -45,7 +62,7 @@ static func choose(plan_data: Dictionary, events: Array, max_hp: Array, frames: 
 	var scores := event_scores(events, max_hp)
 	var finish := length
 	for event: Dictionary in events:
-		if event.type in ["knockout", "time_up"]:
+		if event.type == "time_up" or (event.type == "knockout" and is_final(event)):
 			finish = mini(finish, int(event.tick))
 	var ends: Array[int] = [length]
 	for i in events.size():
@@ -78,8 +95,8 @@ static func event_scores(events: Array, max_hp: Array) -> PackedFloat32Array:
 		var event: Dictionary = events[i]
 		match event.type:
 			"hit":
-				var defender := 1 - int(event.side)
-				var score := HIT_SCORE + DAMAGE_SCORE * float(event.damage) / float(max_hp[defender])
+				var score := HIT_SCORE + DAMAGE_SCORE * float(event.damage) / max_hp_of(max_hp, defender(event),
+					int(event.get("target_slot", 0)))
 				if event.crit:
 					score += CRIT_SCORE
 				if float(event.effectiveness) > 1.0:
@@ -107,18 +124,20 @@ static func event_scores(events: Array, max_hp: Array) -> PackedFloat32Array:
 
 
 ## Indices of the hits landed by a fighter at or below COMEBACK_HP of its max HP, in the
-## log's order. HP is tracked from the hits alone.
+## log's order. HP is tracked from the hits alone, per side and team slot.
 static func comeback_hits(events: Array, max_hp: Array) -> Array[int]:
-	var hp := [float(max_hp[0]), float(max_hp[1])]
+	var hp := {}
 	var found: Array[int] = []
 	for i in events.size():
 		var event: Dictionary = events[i]
 		if event.type != "hit":
 			continue
 		var attacker: int = event.side
-		if hp[attacker] <= COMEBACK_HP * float(max_hp[attacker]):
+		var slot := int(event.get("slot", 0))
+		var full := max_hp_of(max_hp, attacker, slot)
+		if float(hp.get(Vector2i(attacker, slot), full)) <= COMEBACK_HP * full:
 			found.append(i)
-		hp[1 - attacker] = float(event.hp)
+		hp[Vector2i(defender(event), int(event.get("target_slot", 0)))] = float(event.hp)
 	return found
 
 
