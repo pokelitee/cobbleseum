@@ -42,6 +42,10 @@ _Avoid_: party, roster (that's every species)
 A team member coming into the battle, landing from its ball at its side's start spot. After a knockout with more of the team to come, it comes after a short lull and can't be hit until it lands.
 _Avoid_: switch-in (for this), spawn
 
+**Switch**:
+Recalling the fighter out for a healthy member of its team on the bench, which lands where it stood and can be hit while it does. A side can switch again only after a cooldown that every send-out starts.
+_Avoid_: swap, substitute
+
 **Side**:
 One of a battle's two places, A or B. Every matchup is played from both sides.
 
@@ -49,7 +53,7 @@ One of a battle's two places, A or B. Every matchup is played from both sides.
 One step of a battle. There are 30 ticks a second.
 
 **Intent**:
-What a fighter is told to do on one tick: move in a direction, dodge, guard, use one of its moves, or feint one. The player and the AI give the same intents.
+What a fighter is told to do on one tick: move in a direction, dodge, guard, use one of its moves, feint one, or switch to a team member. The player and the AI give the same intents.
 _Avoid_: input, command, action
 
 **Seed**:

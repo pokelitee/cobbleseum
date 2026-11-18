@@ -34,7 +34,8 @@ var terrain: Terrain
 ## The arena conditions (§9.11): the weather, surge and screens, shared with both fighters.
 var conditions := ArenaConditions.new()
 ## With record_intents set (battles with a player), every tick's intents per side, as
-## [move x, move y, use, dodge x, dodge y, feint, guard]; a ReplayController plays them back.
+## [move x, move y, use, dodge x, dodge y, feint, guard, switch]; a ReplayController plays them
+## back.
 var record_intents := false
 var intent_log: Array = [[], []]
 
@@ -46,13 +47,18 @@ var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
 const FIGHTER_STATE_SIZE := 32
-## Values hashed per side for team battles: the slot out, the send-out countdown, the shield.
-const TEAM_STATE_SIZE := 3
+## Values hashed per side for team battles: the slot out, the send-out countdown, the shield,
+## the switch cooldown.
+const TEAM_STATE_SIZE := 4
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
 ## Per side, ticks until its next Pokémon is sent out after a knockout (0 for none pending).
 var _send_out_ticks := PackedInt32Array([0, 0])
+## Per side, ticks until it can switch again, and the team slot it picked to send out next
+## after a knockout (-1 for none: the first member left).
+var _switch_cooldown := PackedInt32Array([0, 0])
+var _picks := PackedInt32Array([-1, -1])
 ## Set by a knockout with more to come: projectiles in flight vanish at the end of the tick.
 var _drop_projectiles := false
 ## Whether the state hashed includes the teams' (only when a side has more than one member,
@@ -229,7 +235,7 @@ static func intent_to_log(intent: Dictionary) -> Array:
 	var move: Vector2 = intent.get("move", Vector2.ZERO)
 	var dodge: Vector2 = intent.get("dodge", Vector2.ZERO)
 	return [move.x, move.y, int(intent.get("use", -1)), dodge.x, dodge.y, int(intent.get("feint", -1)),
-		1 if intent.get("guard", false) else 0]
+		1 if intent.get("guard", false) else 0, int(intent.get("switch", -1))]
 
 
 static func intent_from_log(entry: Array) -> Dictionary:
@@ -242,6 +248,8 @@ static func intent_from_log(entry: Array) -> Dictionary:
 		intent.feint = int(entry[5])
 	if entry.size() > 6 and int(entry[6]) != 0:
 		intent.guard = true
+	if entry.size() > 7 and int(entry[7]) >= 0:
+		intent.switch = int(entry[7])
 	return intent
 
 
@@ -267,6 +275,10 @@ func step() -> void:
 		intents.append(intent)
 		if record_intents:
 			intent_log[side].append(intent_to_log(intent))
+		# Between Pokémon after a knockout, a side's "switch" picks which comes out next.
+		var pick := int(intent.get("switch", -1))
+		if _send_out_ticks[side] > 0 and pick >= 0 and pick < teams[side].size() and not teams[side][pick].is_knocked_out():
+			_picks[side] = pick
 	if tick == 0:
 		_start_conditions()
 	_tick_send_outs()
@@ -390,6 +402,9 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			var use: int = intent.get("use", -1)
 			var feint: int = intent.get("feint", -1)
 			var guard: bool = intent.get("guard", false)
+			if can_switch(fighter.side, int(intent.get("switch", -1))):
+				_switch(fighter, teams[fighter.side][int(intent.switch)])
+				return
 			if dodge.length_squared() > 0.0 and fighter.can_dodge():
 				fighter.dodge_charges -= 1
 				fighter.action = Fighter.Action.DODGE
@@ -827,10 +842,67 @@ func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
 ## Sends out each side's next Pokémon once its lull after a knockout is over.
 func _tick_send_outs() -> void:
 	for side in 2:
+		_switch_cooldown[side] = maxi(0, _switch_cooldown[side] - 1)
 		if _send_out_ticks[side] > 0:
 			_send_out_ticks[side] -= 1
 			if _send_out_ticks[side] == 0:
-				_send_out(teams[side][next_up(side)])
+				var slot := _picks[side] if _picks[side] >= 0 else next_up(side)
+				_picks[side] = -1
+				_send_out(teams[side][slot])
+
+
+## Whether `side` can switch its fighter for team member `slot` now: the fighter could act, the
+## side's switch cooldown is over, the member is healthy and on the bench, and the foe isn't
+## between Pokémon.
+func can_switch(side: int, slot: int) -> bool:
+	return slot >= 0 and slot < teams[side].size() and slot != fighters[side].slot and _switch_cooldown[side] == 0 \
+		and not (teams[side][slot] as Fighter).is_knocked_out() and fighters[side].can_act() and not is_waiting(1 - side)
+
+
+## Ticks until `side` can switch again.
+func switch_cooldown(side: int) -> int:
+	return _switch_cooldown[side]
+
+
+## Recalls `fighter` for `incoming`, which lands where it stood, open to hits, over
+## Rules.SWITCH_SECONDS. Stat stages, confusion and the like clear on the way out; HP, major
+## status and move cooldowns stay with the Pokémon, frozen on the bench, and bad poison starts
+## over.
+func _switch(fighter: Fighter, incoming: Fighter) -> void:
+	_event("recall", fighter.side, {"species": fighter.species_id})
+	incoming.position = fighter.position
+	incoming.facing = fighter.facing
+	incoming.ground = fighter.ground
+	incoming.velocity = Vector2.ZERO
+	_leave(fighter)
+	if not fighters[1 - fighter.side].is_knocked_out():
+		_slide(incoming, fighters[1 - fighter.side], Vector2.ZERO)
+	_send_out(incoming, false)
+
+
+## Whether `fighter` is on the bench: frozen, so effects of its own projectiles still in flight
+## (recoil, drain, Life Orb) and of the foe's abilities don't reach it.
+func _benched(fighter: Fighter) -> bool:
+	return fighters[fighter.side] != fighter
+
+
+## What a fighter loses when it's recalled.
+static func _leave(fighter: Fighter) -> void:
+	for stat: String in fighter.boosts:
+		fighter.boosts[stat] = 0
+	fighter.stage_ticks = 0
+	fighter.confusion_ticks = 0
+	fighter.toxic_level = 0
+	fighter.stun_ticks = 0
+	fighter.followups.clear()
+	fighter.velocity = Vector2.ZERO
+	fighter.action = Fighter.Action.READY
+	fighter.action_ticks = 0
+	fighter.feinting = false
+	fighter.flash_fire_ticks = 0
+	fighter.intimidate_ticks = 0
+	fighter.speed_boost_ticks = 0
+	fighter.weak_armor_ticks = 0
 
 
 ## The team slot `side` sends out next: its first member not knocked out, or -1.
@@ -839,23 +911,26 @@ func next_up(side: int) -> int:
 	return left[0].slot if not left.is_empty() else -1
 
 
-## `fighter` comes out at its side's start spot (pushed clear of the foe), landing from its
-## ball shielded; projectiles in flight vanish. Abilities that act on entry (weather and surge
-## setters) do; Intimidate strikes on its first tick.
-func _send_out(fighter: Fighter) -> void:
+## `fighter` comes out. After a knockout (`after_knockout`) it lands at its side's start spot
+## (pushed clear of the foe), shielded, and projectiles in flight vanish; on a switch it lands
+## where it was put, open to hits. Either way the side's switch cooldown starts. Abilities that
+## act on entry (weather and surge setters) do; Intimidate strikes on its first tick.
+func _send_out(fighter: Fighter, after_knockout := true) -> void:
 	var foe := fighters[1 - fighter.side]
-	_place_at_start(fighter)
-	if not foe.is_knocked_out():
-		_slide(fighter, foe, Vector2.ZERO)
-		var to_foe := foe.position - fighter.position
-		if to_foe.length_squared() > 1e-8:
-			fighter.facing = to_foe.normalized()
+	if after_knockout:
+		_place_at_start(fighter)
+		if not foe.is_knocked_out():
+			_slide(fighter, foe, Vector2.ZERO)
+			var to_foe := foe.position - fighter.position
+			if to_foe.length_squared() > 1e-8:
+				fighter.facing = to_foe.normalized()
+		projectiles.clear()
 	fighter.action = Fighter.Action.SEND_OUT
-	fighter.action_ticks = Rules.seconds_to_ticks(Rules.SEND_OUT_SECONDS)
-	fighter.shielded = true
+	fighter.action_ticks = Rules.seconds_to_ticks(Rules.SEND_OUT_SECONDS if after_knockout else Rules.SWITCH_SECONDS)
+	fighter.shielded = after_knockout
 	fighters[fighter.side] = fighter
-	projectiles.clear()
-	_event("send_out", fighter.side, {"species": fighter.species_id})
+	_switch_cooldown[fighter.side] = Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS)
+	_event("send_out", fighter.side, {"species": fighter.species_id, "switch": not after_knockout})
 	var weather := Abilities.sets_weather(fighter)
 	var surge := Abilities.sets_surge(fighter)
 	if not weather.is_empty() or not surge.is_empty():
@@ -974,7 +1049,7 @@ func _apply_effect(attacker: Fighter, defender: Fighter, effect: Dictionary, mov
 ## Gives a major status unless the fighter already has one or its type or ability is immune.
 ## `source` is the foe that caused it, if any (Synchronize passes it back).
 func _inflict(fighter: Fighter, status: String, source: Fighter = null) -> void:
-	if not fighter.status.is_empty() or fighter.is_knocked_out():
+	if not fighter.status.is_empty() or fighter.is_knocked_out() or _benched(fighter):
 		return
 	for type: String in Rules.STATUS_IMMUNITIES.get(status, []):
 		if type in fighter.types:
@@ -1013,6 +1088,8 @@ func _end_status(fighter: Fighter) -> void:
 ## making the change, if any: abilities can block its drops (Clear Body) or answer them
 ## (Defiant).
 func _boost(fighter: Fighter, changes: Dictionary, move_id: String, foe: Fighter = null) -> void:
+	if _benched(fighter):
+		return
 	if foe != null:
 		var allowed := Abilities.allowed_drops(fighter, changes)
 		if allowed.size() < changes.size():
@@ -1052,6 +1129,8 @@ func _decay_stages(fighter: Fighter) -> void:
 ## Restores HP, reported as `type`: "heal", or "regen" for the small steady healing of
 ## items like Leftovers, which the view doesn't call out.
 func _heal(fighter: Fighter, amount: int, move_id: String, type := "heal") -> void:
+	if _benched(fighter):
+		return
 	var healed := mini(amount, fighter.max_hp - fighter.hp)
 	if healed > 0:
 		fighter.hp += healed
@@ -1060,7 +1139,7 @@ func _heal(fighter: Fighter, amount: int, move_id: String, type := "heal") -> vo
 
 ## Takes HP outside a hit (status damage, recoil, confusion), reporting it as `type`.
 func _hurt(fighter: Fighter, amount: int, type: String, details: Dictionary) -> void:
-	if fighter.is_knocked_out():
+	if fighter.is_knocked_out() or _benched(fighter):
 		return
 	fighter.hp = maxi(0, fighter.hp - amount)
 	details.merge({"damage": amount, "hp": fighter.hp})
@@ -1226,6 +1305,7 @@ func _record_state() -> void:
 			_state[i] = fighters[side].slot
 			_state[i + 1] = _send_out_ticks[side]
 			_state[i + 2] = 1.0 if fighters[side].shielded else 0.0
+			_state[i + 3] = _switch_cooldown[side]
 			i += TEAM_STATE_SIZE
 	_hash.update(_state.to_byte_array())
 

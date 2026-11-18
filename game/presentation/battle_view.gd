@@ -49,7 +49,8 @@ With neither, the setup screen opens; with only options, the showcase battle pla
 %s
 
 In play mode: WASD or arrows move, Space dodges, J K L I or 1-4 use moves, G guards, hold
-Shift to feint. After a battle, R starts a rematch; Esc goes back to the setup screen.
+Shift to feint. In a team battle Q cycles the bench and E switches (after a knockout, the
+highlighted one comes out). After a battle, R starts a rematch; Esc goes back to the setup screen.
 Recording clips: tools/record.gd (--help there)."""
 const SPECS_DIR := "res://recordings/specs"
 ## Play mode: frames the controls hint stays up, and frames after the knockout before the
@@ -322,11 +323,9 @@ func _ready() -> void:
 		_move_fx.smooth = _smooth
 
 	if _live:
-		var player := battle.fighters[_player_side]
-		_hud.show_move_bar(player.moves.map(func(m: BattleMove) -> String: return m.name),
-			player.moves.map(func(m: BattleMove) -> String: return m.type), PlayerController.MOVE_KEYS,
-			PlayerController.FEINT_KEY, PlayerController.GUARD_KEY)
-		_hud.show_hint("Move: WASD / stick   Dodge: Space / A   Guard: G / RT   Feint: hold Shift / LB   F3: AI scores")
+		_show_player_moves()
+		_hud.show_hint("Move: WASD / stick   Dodge: Space / A   Guard: G / RT   Feint: hold Shift / LB   F3: AI scores"
+			+ ("   Switch: Q then E / D-pad" if battle.teams[_player_side].size() > 1 else ""))
 		_event_index = 0
 		for side in 2:
 			_hud.set_hp(side, 1.0, true)
@@ -631,9 +630,32 @@ func _next_live_frame() -> void:
 		_views[side].place(fighter.position, fighter.facing, _arena.surface_at(fighter.position, fighter.ground))
 		_hud.set_hp(side, float(fighter.hp) / fighter.max_hp)
 	_hud.update_move_bar(battle.fighters[_player_side])
+	_update_switch_bar()
 	_move_fx.sync_projectiles(battle)
 	_player_camera.apply(_camera, _views[_player_side], _views[1 - _player_side])
 	_update_sight()
+
+
+## The move bar for the player's fighter out now.
+func _show_player_moves() -> void:
+	var player := battle.fighters[_player_side]
+	_hud.show_move_bar(player.moves.map(func(m: BattleMove) -> String: return m.name),
+		player.moves.map(func(m: BattleMove) -> String: return m.type), PlayerController.MOVE_KEYS,
+		PlayerController.FEINT_KEY, PlayerController.GUARD_KEY)
+
+
+## The switch indicator in a team battle: the highlighted bench member and the switch cooldown.
+func _update_switch_bar() -> void:
+	if battle.teams[_player_side].size() < 2:
+		return
+	var choice := _player.bench_choice
+	if choice < 0:
+		_hud.show_switch("", 0.0)
+		return
+	var name: String = (battle.teams[_player_side][choice] as Fighter).name
+	var text := "%s  ▸ %s    %s  %s" % [PlayerController.CYCLE_KEY, name, PlayerController.SWITCH_KEY,
+		"Send out" if battle.fighters[_player_side].is_knocked_out() else "Switch"]
+	_hud.show_switch(text, float(battle.switch_cooldown(_player_side)) / Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS))
 
 
 ## Saves the battle's spec (Battle.saved_spec) so it replays exactly (and tools/record.gd can
@@ -853,6 +875,10 @@ func _play_events() -> void:
 					_arena_sound.set_level(ArenaSound.STING_DUCK_DB, ArenaSound.DUCK_FRAMES)
 			"send_out":
 				_show_out(event.side)
+				if _live and event.side == _player_side:
+					_show_player_moves()
+				_fx.announce(_views[event.side], "Go, %s!" % (battle.teams[event.side][int(event.slot)] as Fighter).name,
+					Hud.SIDE_COLOURS[event.side].lightened(0.35), 56)
 				_sound.cry(event.side)
 				if _looks[event.side][int(event.slot)].shiny:
 					_move_fx.sparkle(_views[event.side], 0)
