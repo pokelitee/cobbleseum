@@ -21,7 +21,7 @@ extends RefCounted
 
 const DEFAULT_FOE := "blastoise"
 const KEYS: Array[String] = ["play", "watch", "vs", "team", "vs-team", "ai", "vs-ai", "seed", "arena", "weather", "shiny",
-	"form", "vs-form", "moves", "vs-moves", "ability", "vs-ability", "item", "vs-item"]
+	"form", "vs-form", "moves", "vs-moves", "ability", "vs-ability", "item", "vs-item", "trainer", "vs-trainer"]
 ## Flags that may come without a value: the mode, when --team names the species.
 const BARE_KEYS: Array[String] = ["play", "watch"]
 ## The value of --ability, --item and --weather for none.
@@ -92,6 +92,9 @@ static func to_spec(flags: Dictionary) -> Dictionary:
 		var key: String = ["form", "vs-form"][side]
 		if flags.has(key):
 			lead(spec, side).form = "" if flags[key] == Appearance.BASE_FORM else str(flags[key])
+		var trainer_key: String = ["trainer", "vs-trainer"][side]
+		if flags.has(trainer_key):
+			sides[side].trainer = str(flags[trainer_key]).to_lower()
 	for side in 2:
 		var prefix: String = ["", "vs-"][side]
 		if flags.has(prefix + "moves"):
@@ -131,6 +134,8 @@ static func to_flags(spec: Dictionary) -> Dictionary:
 	var flags := {("play" if playing else "watch"): fighters[0].species, "vs": fighters[1].species,
 		"ai": ais[1] if playing else ais[0]}
 	for side in 2:
+		if sides[side].has("trainer"):
+			flags[["trainer", "vs-trainer"][side]] = sides[side].trainer
 		if sides[side].get("team") is Array:
 			flags[["team", "vs-team"][side]] = ",".join(sides[side].team.map(func(m: Dictionary) -> String: return str(m.species)))
 	if not playing:

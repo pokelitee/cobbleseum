@@ -1086,6 +1086,7 @@ The presets are grassland, beach, volcano, snowfield, cave and stadium (the open
   - the preset's number of watchers (four by default) of the arena's types (its `suits`, 0.4–2.2 m tall, never the fighters themselves) spread around the front row, each watching one fighter with its head;
   - they sway while they wait. Hits that take at least 15% of the defender's HP, critical hits and super-effective hits make them cheer: figures hop and raise their arms, more of them the bigger the hit, and the cheer calms over a couple of seconds. A knockout brings everyone to their feet for 3 s, and the Cobblemon cry. Hit-stop freezes the crowd along with the fighters.
 - **Determinism:** everything, the particles included (fixed particle seeds), comes from the preset and the battle seed, so every render of a battle is identical.
+- **Trainers** (`TrainerView`, M15): a side's `"trainer"` (`--trainer`, `--vs-trainer`, the setup screen; `none` for none) stands in its trainer's box on a coliseum's apron, or on the land just past the wall behind its start spot in the open: the games' sprite (§14), 80 pixels billboarded upright at about 1.75 m, pixel-sharp and unshaded. A team battle made from flags without one gets a generic trainer class from the seed (Ace Trainer, Youngster, Lass, Veteran, Hiker, Swimmer); one-on-one battles have none unless asked. The trainer throws a ball in an arc to send a Pokémon out (at the battle's start too), and the Pokémon appears with a flash where it lands; a switch first calls the Pokémon back with a red beam. It hops at a big hit by its side, slumps when one of its team is knocked out (for good at the last), and hops for joy when its side wins. `--list=trainers` names the 22 available: the generic classes and characters from the games and the anime (Red, Blue, Ash, Misty, Brock, Cynthia, Leon, Lance, Steven, Iris, N, Serena, Hop, Marnie). A trainer whose sprite isn't in the cache isn't drawn. Presentation only: the simulation never reads it.
 
 ### 12.8 Shinies and cosmetic forms
 
@@ -1152,7 +1153,7 @@ A fighter can appear **shiny** (its species' alternate colours) and in a **cosme
   - The repository never redistributes assets.
   - Every clip credits Cobblemon on its credits card and in generated description text.
   - Commercial use of clips needs permission. Whether clips will be monetised is an open question (§19).
-- **Trainer sprites** (planned, M15): the games' trainer sprites are official art, not openly licensed fan work like Cobblemon's. They are fetched into the local cache only, never committed or redistributed, and like the rest of the Pokémon IP they keep clips non-commercial.
+- **Trainer sprites** (M15): the games' trainer sprites are official art, not openly licensed fan work like Cobblemon's. They come from Pokémon Showdown's sprite server (`sources.json`'s `trainer_<id>` entries, pinned by SHA-256), whose repository (smogon/sprites) states no settled licence for its images and asks to be asked before they're used; the decision to fetch them anyway for local, non-commercial clips was taken knowingly (2026-11-18). They are fetched into the local cache only, never committed or redistributed, every clip with trainers credits them, and like the rest of the Pokémon IP they keep clips non-commercial.
 
 ## 15. Proposed project layout
 
@@ -1299,7 +1300,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **AI:** done (rules version 26, §11). Switching is another utility candidate, scored by the matchup gain of a bench member (expected damage dealt against taken), own HP, status and stage losses, minus the send-out risk. Profiles get a switch chance, like the feint and guard chances.
 - **Entry hazards** done (rules version 27, §9.11). Stealth Rock, Spikes, Toxic Spikes, Sticky Web right after switching, as their own rules version, acting on send-out.
 - **Pace:** done (rules version 28, §9.1). 1v1 tuning is unchanged. A team-battle HP multiplier by team size keeps a full 6v6 around 2–3 minutes (about 20–30 s a knockout), tuned by balance batch; the overtime clock scales with the Pokémon left.
-- **Trainers:** a trainer stands in each side's trainer's box, throws on send-out and recall, and reacts. Its look comes from the games' trainer sprites, billboarded, fetched into the git-ignored cache like other assets and never committed (§14).
+- **Trainers:** done (§12.7, §14). A trainer stands in each side's trainer's box, throws on send-out and recall, and reacts. Its look comes from the games' trainer sprites, billboarded, fetched into the git-ignored cache like other assets and never committed (§14).
 - **HUD and clips:** each side shows its team as six balls (healthy, statused, fainted); clips pick the best window across the whole battle; the music ends only on the final knockout (§12.5).
 - **Ranking:** stays one-on-one (§13). Team results don't feed it, since a team win can't be credited to one species.
 

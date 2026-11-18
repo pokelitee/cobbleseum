@@ -5,7 +5,7 @@ extends RefCounted
 ## start so any run can be repeated. Used by the game (the setup screen and the battle view),
 ## tools/record.gd, tools/battle.gd and tools/rank.gd.
 
-const LIST_KINDS: Array[String] = ["species", "arenas", "moves", "abilities", "items", "profiles"]
+const LIST_KINDS: Array[String] = ["species", "arenas", "moves", "abilities", "items", "profiles", "trainers"]
 ## The controllers a fighter's "ai" may name besides the profiles (Controllers).
 const OTHER_AIS: Array[String] = ["stand_in", "player"]
 ## How many near matches an error suggests.
@@ -19,6 +19,8 @@ const SPEC_FLAGS_HELP := """Battle flags (instead of a spec file):
                            needs no species
   --vs=<species>           side B (default blastoise)
   --vs-team=<a,b,...>      side B's whole team instead of --vs
+  --trainer=<trainer>      side A's trainer, or none (default in team battles: one from the seed,
+                           otherwise none); --vs-trainer for B
   --ai=<profile>           side A's AI; with --play, the foe's (default ranked)
   --vs-ai=<profile>        side B's AI with --watch (default: --ai)
   --seed=<N>               the battle; without it each run is a new one
@@ -32,7 +34,8 @@ const SPEC_FLAGS_HELP := """Battle flags (instead of a spec file):
 Moves, ability, item and looks apply to a team's first member; the rest bring their standard
 ones. Names may be written as IDs (mrmime, lifeorb) or as names ("Mr. Mime", "Life Orb")."""
 const INFO_HELP := """Information:
-  --list=<kind>            prints the species, arenas, moves, abilities, items or profiles
+  --list=<kind>            prints the species, arenas, moves, abilities, items, profiles or
+                           trainers
   --help                   prints this help"""
 
 
@@ -97,6 +100,9 @@ static func list(kind: String, data: BattleData) -> Dictionary:
 			for name in profiles():
 				lines.append(name)
 			lines.append("stand_in  (the stand-in AI)")
+		"trainers":
+			for id in TrainerView.ALL:
+				lines.append("%s%s" % [id, "  (generic: the seed may pick it)" if id in TrainerView.GENERIC else ""])
 		_:
 			return {"error": "--list needs one of %s%s" % [", ".join(LIST_KINDS), _hint(nearest(kind, LIST_KINDS))]}
 	return {"lines": lines}
@@ -169,6 +175,10 @@ static func check_spec(spec: Dictionary, data: BattleData) -> String:
 			var ai := str(side.get("ai", Controllers.DEFAULT_AI))
 			if not ai in profiles() and not ai in OTHER_AIS:
 				return unknown("AI profile", ai, profiles() + ["stand_in"])
+	for side: Dictionary in spec.get("fighters", []):
+		var trainer := Appearance.trainer_of(side)
+		if not trainer.is_empty() and not trainer in TrainerView.ALL:
+			return unknown("trainer", trainer, TrainerView.ALL + [Appearance.NO_TRAINER])
 	for fighter: Dictionary in Appearance.members(spec):
 		var id := str(fighter.get("species", ""))
 		if not id in species:

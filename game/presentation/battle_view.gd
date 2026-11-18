@@ -266,6 +266,7 @@ func _ready() -> void:
 	for side in 2:
 		_views[side].watch(_views[1 - side])
 	_add_crowd(loaded.data)
+	_add_trainers(spec)
 	_marks = BattleMarks.new()
 	add_child(_marks)
 	_marks.setup(int(spec.seed), _arena)
@@ -286,6 +287,7 @@ func _ready() -> void:
 			printerr("warning: drawing the mesh move styles, since " + problem)
 	_hud = Hud.new()
 	_hud.move_effects_credit = _move_fx.cobblemon != null
+	_hud.trainer_credit = _trainers.any(func(t: TrainerView) -> bool: return t != null)
 	add_child(_hud)
 	_hud.setup([battle.fighters[0].name, battle.fighters[1].name], size, [battle.fighters[0].types, battle.fighters[1].types],
 		[_portraits[0][battle.fighters[0].slot], _portraits[1][battle.fighters[1].slot]],
@@ -336,6 +338,7 @@ func _ready() -> void:
 		_arena.weather.snap(battle.conditions.weather)
 		_arena.surge.snap(battle.conditions.surge)
 		_track_smoothed()
+		_open_with_throws()
 		return
 	var start := 0
 	_end_tick = plan.slow.size()
@@ -371,6 +374,8 @@ func _ready() -> void:
 		# A clip can start mid-battle, after conditions were inflicted.
 		_views[side].set_asleep(fighter.status == "slp")
 	_track_smoothed()
+	if start == 0:
+		_open_with_throws()
 
 
 ## Hands the fighters and the camera to the smoothing, which projectiles join as they fly.
@@ -502,6 +507,9 @@ func _advance_effects() -> void:
 	for view in _views:
 		view.next_frame()
 	_crowd.next_frame()
+	for trainer: TrainerView in _trainers:
+		if trainer != null:
+			trainer.next_frame()
 	_fx.next_frame()
 	_move_fx.next_frame()
 	_marks.next_frame()
@@ -769,6 +777,8 @@ func _play_events() -> void:
 				_sound.hit(move, big)
 				if big:
 					_hud.shake(defender)
+				if (big or share >= CHEER_SHARE) and not _replaying:
+					_trainer_reacts(event.side, "hop")
 				if big or share >= CHEER_SHARE:
 					_crowd.cheer(0.4 + share * 1.5 + (0.25 if big else 0.0))
 					_arena_sound.cheer()
@@ -870,6 +880,10 @@ func _play_events() -> void:
 				_views[event.side].play_role("faint")
 				if final:
 					_views[1 - int(event.side)].celebrate()
+				if not _replaying:
+					_trainer_reacts(event.side, "droop_last" if final else "droop")
+					if final:
+						_trainer_reacts(1 - int(event.side), "celebrate")
 				_sound.knockout(event.side)
 				_arena_sound.cheer()
 				if _replaying:
@@ -885,8 +899,14 @@ func _play_events() -> void:
 					_hud.show_winner("%s wins!" % battle.fighters[1 - int(event.side)].name)
 					_music.victory(BattleMusic.CUT_FRAMES)
 					_arena_sound.set_level(ArenaSound.STING_DUCK_DB, ArenaSound.DUCK_FRAMES)
+			"recall":
+				if _trainers[event.side] != null and not _replaying:
+					var leaving := _views[event.side]
+					_trainers[event.side].recall_from(leaving.global_position + Vector3.UP * leaving.height * 0.5)
 			"send_out":
 				_show_out(event.side)
+				if not _replaying:
+					_throw_out(event.side)
 				if _live and event.side == _player_side:
 					_show_player_moves()
 				_fx.announce(_views[event.side], "Go, %s!" % (battle.teams[event.side][int(event.slot)] as Fighter).name,
@@ -942,6 +962,8 @@ func _mark(event: Dictionary, settled := false) -> void:
 
 ## The weather and surge shown last frame, their ticks left then, and the ticks they lasted in
 ## all (for the HUD's timers).
+## Each side's trainer (TrainerView), or null.
+var _trainers: Array = [null, null]
 ## Screen panes in front of shielded fighters, and entry hazards on the field.
 var _screen_panes: ScreenPanes
 var _hazard_marks: HazardMarks
@@ -1092,6 +1114,56 @@ func _build_stage(arena_name: String) -> void:
 	_camera = Camera3D.new()
 	_camera.far = Terrain.WORLD_RADIUS * 3.0
 	add_child(_camera)
+
+
+## Each side's trainer the spec names (Appearance.trainer_of), in its trainer's box, if its
+## sprite is in the cache.
+func _add_trainers(spec: Dictionary) -> void:
+	for side in 2:
+		var id := Appearance.trainer_of(spec.fighters[side])
+		var trainer: TrainerView = TrainerView.create(id) if not id.is_empty() else null
+		if trainer == null and not id.is_empty():
+			printerr("warning: the trainer sprite %s isn't in the cache; run tools/assets.gd" % id)
+		if trainer != null:
+			add_child(trainer)
+			trainer.stand_at(_arena.trainer_spot(side))
+		_trainers[side] = trainer
+
+
+## The battle opening with each trainer throwing out its first Pokémon.
+func _open_with_throws() -> void:
+	for side in 2:
+		_throw_out(side)
+
+
+## `side`'s trainer throws the ball for its fighter out now, which appears where the ball lands.
+func _throw_out(side: int) -> void:
+	var trainer: TrainerView = _trainers[side]
+	if trainer == null:
+		return
+	var view := _views[side]
+	var fighter := battle.fighters[side]
+	view.visible = false
+	trainer.throw_to(Vector3(fighter.position.x, _arena.surface_at(fighter.position, fighter.ground), fighter.position.y),
+		func() -> void:
+			if _views[side] == view:
+				view.visible = true
+				_move_fx.aura(view, Color(1, 1, 1), true))
+
+
+## A trainer's reaction: "hop", "droop", "droop_last" (the side's last knocked out) or
+## "celebrate".
+func _trainer_reacts(side: int, reaction: String) -> void:
+	var trainer: TrainerView = _trainers[side]
+	if trainer == null:
+		return
+	match reaction:
+		"hop":
+			trainer.hop()
+		"droop", "droop_last":
+			trainer.droop(reaction == "droop_last")
+		"celebrate":
+			trainer.celebrate()
 
 
 ## Spectators, if the arena has stands: figures in a share of the seats, and watchers that

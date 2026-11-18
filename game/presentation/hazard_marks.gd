@@ -15,7 +15,8 @@ const ROCK_COLOUR := Color("8f7a5a")
 const SPIKE_COLOUR := Color("8c8a86")
 const TOXIC_COLOUR := Color("9b4fc4")
 const WEB_COLOUR := Color(0.92, 0.92, 0.85, 0.85)
-const ROCK_HEIGHT := 1.3
+## Stones hover at about knee height, small, so a camera passing close isn't filled by one.
+const ROCK_HEIGHT := 0.8
 
 ## Per side and hazard, the pieces shown ({"node", "layer"}) and how far in they are (0-1).
 var _pieces := [{}, {}]
@@ -77,8 +78,8 @@ func _build(side: int, name: String, battle: Battle) -> Array:
 		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 		match name:
 			"stealthrock":
-				LowPoly.frustum(tool, ROCK_COLOUR, Vector3(0, -0.18, 0), 0.08, 0.2, 0.18, 5, angle, 0.25, random)
-				LowPoly.frustum(tool, ROCK_COLOUR.lightened(0.15), Vector3.ZERO, 0.2, 0.0, 0.3, 5, angle, 0.25, random)
+				LowPoly.frustum(tool, ROCK_COLOUR, Vector3(0, -0.11, 0), 0.05, 0.12, 0.11, 5, angle, 0.25, random)
+				LowPoly.frustum(tool, ROCK_COLOUR.lightened(0.15), Vector3.ZERO, 0.12, 0.0, 0.2, 5, angle, 0.25, random)
 			"spikes", "toxicspikes":
 				var colour := SPIKE_COLOUR if name == "spikes" else TOXIC_COLOUR
 				LowPoly.frustum(tool, colour, Vector3.ZERO, 0.11, 0.0, 0.32, 4, angle)

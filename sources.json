@@ -223,6 +223,292 @@
       "layout": [
         {"pattern": "volcano.mp3", "min_count": 1}
       ]
+    },
+    "trainer_acetrainer": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/acetrainer.png",
+      "size": 626,
+      "sha256": "918f551f12e3d8791064524df1051c2ee0b21085c240ca430cec5992e16b373f",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["acetrainer.png"],
+      "layout": [
+        {"pattern": "acetrainer.png", "min_count": 1}
+      ]
+    },
+    "trainer_acetrainerf": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/acetrainerf.png",
+      "size": 804,
+      "sha256": "37c20636f55a8d55e5bece8340014804a7929de09ed623f1fd0e2dfe5df453f5",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["acetrainerf.png"],
+      "layout": [
+        {"pattern": "acetrainerf.png", "min_count": 1}
+      ]
+    },
+    "trainer_ash": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/ash.png",
+      "size": 789,
+      "sha256": "530f2f63ae174bcd20695ad6b0f9e4ea5f13950b4aa1334d8947aa732c998dc0",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["ash.png"],
+      "layout": [
+        {"pattern": "ash.png", "min_count": 1}
+      ]
+    },
+    "trainer_blue": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/blue.png",
+      "size": 655,
+      "sha256": "96bc04edd003af3e1235360db3ca6ef2ee27794891f48712d0035c7508c5b5af",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["blue.png"],
+      "layout": [
+        {"pattern": "blue.png", "min_count": 1}
+      ]
+    },
+    "trainer_brock": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/brock.png",
+      "size": 672,
+      "sha256": "ca422c284f250814332bcc61df1aaf174dd450477676028dec400750638a319d",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["brock.png"],
+      "layout": [
+        {"pattern": "brock.png", "min_count": 1}
+      ]
+    },
+    "trainer_cynthia": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/cynthia.png",
+      "size": 798,
+      "sha256": "717578631bc6307769e551d3c88986eabf67991b771e4ccb4c2496d44ac620b8",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["cynthia.png"],
+      "layout": [
+        {"pattern": "cynthia.png", "min_count": 1}
+      ]
+    },
+    "trainer_hiker": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/hiker.png",
+      "size": 1006,
+      "sha256": "81c95e53f09c2bcb47170cf793befaf070dcb904750c457fab1654d8be0d7fcf",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["hiker.png"],
+      "layout": [
+        {"pattern": "hiker.png", "min_count": 1}
+      ]
+    },
+    "trainer_hop": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/hop.png",
+      "size": 814,
+      "sha256": "ee0f354518dcf4889a05742f13ae823c392afeb1a2d99ae7339f2a08115680f3",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["hop.png"],
+      "layout": [
+        {"pattern": "hop.png", "min_count": 1}
+      ]
+    },
+    "trainer_iris": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/iris.png",
+      "size": 802,
+      "sha256": "4bb2cbb554cd5cdd784169c8aff66daf1ab157342cbc416c4f70b96894f98416",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["iris.png"],
+      "layout": [
+        {"pattern": "iris.png", "min_count": 1}
+      ]
+    },
+    "trainer_lance": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/lance.png",
+      "size": 1003,
+      "sha256": "af8511d1620255a915fc83152db79472a55451790478596fad08b881316cd13f",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["lance.png"],
+      "layout": [
+        {"pattern": "lance.png", "min_count": 1}
+      ]
+    },
+    "trainer_lass": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/lass.png",
+      "size": 714,
+      "sha256": "9df61959812b15d8ad3cb43efd8659778b62d63d86fa7ecb70dc684c1455e17f",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["lass.png"],
+      "layout": [
+        {"pattern": "lass.png", "min_count": 1}
+      ]
+    },
+    "trainer_leon": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/leon.png",
+      "size": 1474,
+      "sha256": "4f3b136f533d6876820cfd50591defb41c2fb95ce2bd39c95f394aa8c7e99090",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["leon.png"],
+      "layout": [
+        {"pattern": "leon.png", "min_count": 1}
+      ]
+    },
+    "trainer_marnie": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/marnie.png",
+      "size": 715,
+      "sha256": "2733d6a01e4066a02ad1890e92bdc441ac6b0d335cd547110efd505313aa99a5",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["marnie.png"],
+      "layout": [
+        {"pattern": "marnie.png", "min_count": 1}
+      ]
+    },
+    "trainer_misty": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/misty.png",
+      "size": 754,
+      "sha256": "5efe2a5176796ebe3e18168b6a87b80b72d89393f4dc25d35dd0ebe2b0b2f5cc",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["misty.png"],
+      "layout": [
+        {"pattern": "misty.png", "min_count": 1}
+      ]
+    },
+    "trainer_n": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/n.png",
+      "size": 780,
+      "sha256": "ff80c0e3086614328c983629e3f39766dee225405c245ba0f1900bbbcfe9a57a",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["n.png"],
+      "layout": [
+        {"pattern": "n.png", "min_count": 1}
+      ]
+    },
+    "trainer_red": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/red.png",
+      "size": 691,
+      "sha256": "8360016360591b27eeea371300f104d33d2629af6eaf7a8cc0d2e219c54cbba3",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["red.png"],
+      "layout": [
+        {"pattern": "red.png", "min_count": 1}
+      ]
+    },
+    "trainer_serena": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/serena.png",
+      "size": 707,
+      "sha256": "6af2586ee0ae130f499869b9f810c719db6906697b86dbe6f24cbf7fa24bd874",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["serena.png"],
+      "layout": [
+        {"pattern": "serena.png", "min_count": 1}
+      ]
+    },
+    "trainer_steven": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/steven.png",
+      "size": 731,
+      "sha256": "ac71965ed7dd755b436a00c39392754ad1a527a3edb808695842ecfbf1c74b31",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["steven.png"],
+      "layout": [
+        {"pattern": "steven.png", "min_count": 1}
+      ]
+    },
+    "trainer_swimmer": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/swimmer.png",
+      "size": 596,
+      "sha256": "5fd13a07ce9f66d00175a68a0cc74f3b3ed7a252a8053e9726e9d53d8f5a3981",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["swimmer.png"],
+      "layout": [
+        {"pattern": "swimmer.png", "min_count": 1}
+      ]
+    },
+    "trainer_veteran": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/veteran.png",
+      "size": 791,
+      "sha256": "a4a5ab7ccd57c26f1e5b65d49405c35693c2e188c040119fe6b2b16c225bd1d8",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["veteran.png"],
+      "layout": [
+        {"pattern": "veteran.png", "min_count": 1}
+      ]
+    },
+    "trainer_veteranf": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/veteranf.png",
+      "size": 722,
+      "sha256": "dbb8dd4be91d2b06a220525e5bffa327252d9b6b850d60df3494b29eb1f4aef4",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["veteranf.png"],
+      "layout": [
+        {"pattern": "veteranf.png", "min_count": 1}
+      ]
+    },
+    "trainer_youngster": {
+      "version": "1",
+      "url": "https://play.pokemonshowdown.com/sprites/trainers/youngster.png",
+      "size": 635,
+      "sha256": "4cd5365f7bfcefdaad4f5dd384674f489a42b70a0443397be8e1faac39942fab",
+      "archive": "file",
+      "license": "None: official Pokémon game art as Pokémon Showdown hosts it (smogon/sprites, licence unsettled). Local cache only, never committed; non-commercial clips only",
+      "page": "https://play.pokemonshowdown.com/sprites/trainers/",
+      "extract": ["youngster.png"],
+      "layout": [
+        {"pattern": "youngster.png", "min_count": 1}
+      ]
     }
   }
 }
