@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 26
+const RULES_VERSION := 27
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -157,6 +157,9 @@ const ARENA_MOVE_COOLDOWN := 30.0
 const SCREEN_SECONDS := 8.0
 const SCREEN_EXTENDED_SECONDS := 13.0
 const SCREEN_COOLDOWN := 14.0
+## Entry hazards (§9.11) are cheap to lay and last until cleared, so their moves cool down for
+## HAZARD_COOLDOWN between layers.
+const HAZARD_COOLDOWN := 12.0
 
 ## Stat stages run from -6 to +6 with the main-series multipliers (§9.5). They wear off:
 ## every STAGE_DECAY_SECONDS without a change, each stage moves one step back toward 0.

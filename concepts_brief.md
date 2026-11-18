@@ -501,7 +501,7 @@ In the code, multi-hit, charge and recharge are properties of the melee, project
 For the 850 standard moves, 628 are playable: 243 melee, 238 projectile, 64 area, 26 self-buff, 18 debuff, 17 status, 10 heal and 12 arena moves (§9.11). The rest are other arena moves, special cases and moves whose power is computed in code.
 
 **Not in the first version:**
-- Entry hazards (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) wait for team battles (§9.11), and the other side and field conditions are special cases.
+- The side and field conditions besides weather, surges, screens and entry hazards (§9.11) are special cases.
 - 106 special-case moves, such as Protect, Substitute, Counter and Transform.
 
 **Phases.** Every move has a wind-up, an active window and a recovery.
@@ -688,7 +688,7 @@ Since rules version 19 (M9). Like abilities, item effects are our own table, `ga
 
 ### 9.11 Arena moves
 
-Arena moves set a condition on the whole arena or on one side for a while instead of hitting a fighter (`game/sim/arena_conditions.gd`). Three families, one pull request and rules version each: **weather** (rules version 20), **surges** (21) and **screens** (22), all done in M10. Entry hazards (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) wait for team battles (§17): they punish switching in, and a one-on-one battle has no switching, so any reading now would be replaced later.
+Arena moves set a condition on the whole arena or on one side for a while instead of hitting a fighter (`game/sim/arena_conditions.gd`). Three families, one pull request and rules version each: **weather** (rules version 20), **surges** (21) and **screens** (22), all done in M10. Entry hazards (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) came with team battles (M15, rules version 27, below): they punish switching in.
 
 - **Playing one:** an arena move is a status-category move applied on release, like a self-buff: the same 0.4 s wind-up and recovery, and it can't be feinted. It needs no range or line of sight. Its cooldown is 30 s, longer than its condition lasts: casting costs under a second, so with a status move's cooldown a weather stayed up all battle, and a paired probe put carrying one at +23 points of win rate.
 - **Durations:** a turn reads as about 5 s, as for per-turn effects (§9.9), so the main series' five turns become 20 s for weather and surges, and its eight with an extending item (Damp Rock, Heat Rock, Smooth Rock, Icy Rock, Terrain Extender) 32 s. Screens are shorter (below). Using a weather or surge move while the same one is up renews it.
@@ -731,7 +731,22 @@ Arena moves set a condition on the whole arena or on one side for a while instea
 
 **Screens** (rules version 22): Reflect and Light Screen halve physical and special damage to the user's side; Aurora Veil halves both and can only be used in snow. A screen lasts 8 s (13 s with Light Clay), and the move's cooldown is 14 s, so a screen is up at most a little over half the time. Brick Break, Psychic Fangs and Raging Bull shatter the foe's screens before they hit. Infiltrator's attacks ignore screens. Critical hits ignore them, as in the main series. The look (`ScreenPanes`) is a translucent pane with a pixel-art border in the screen's colour (pink Reflect, gold Light Screen, cyan Aurora Veil) between the fighter and its foe, and a timed badge in the effect row of the side's name plate (§12.5); a shattered screen gets a callout. A species carrying a screen holds Light Clay as its standard item.
 
-- **Left out:** entry hazards (team battles), Tailwind, Safeguard, Mist, Trick Room, Magic Room, Wonder Room, Gravity, Quick Guard, Wide Guard and Fairy Lock (special cases, §9.3); Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide and Steel Roller's surge readings; the seeds, Protosynthesis, Quark Drive and other abilities of species missing from the roster; Sand Veil and Snow Cloak (accuracy).
+**Entry hazards** (team battles, rules version 27): Stealth Rock, Spikes, Toxic Spikes and Sticky Web lay a hazard on the foe's side, which acts on each of its send-outs (a switch or the one after a knockout) until it's cleared.
+
+| Hazard | Layers | On send-out |
+|---|---|---|
+| Stealth Rock | 1 | 1/8 of max HP times Rock's compressed effectiveness (§9.4), so 10–20% |
+| Spikes | 3 | 1/8, 1/6, 1/4 of max HP by layers; grounded only |
+| Toxic Spikes | 2 | poison (two layers: bad poison); grounded only; a grounded Poison type absorbs them |
+| Sticky Web | 1 | −1 Speed; grounded only |
+
+- Laying one is an arena move like the others (0.4 s wind-up, no range), with a 12 s cooldown between layers; a layer past the most fails. Magic Guard takes no hazard damage. Rapid Spin and Mortal Spin clear the user's side when they hit; Defog clears both sides and the foe's screens, and Tidy Up both sides (with +1 Attack and Speed). Defog and Tidy Up became playable for this.
+- **Standard movesets never pick them**, nor Defog or Tidy Up, so one-on-one movesets, battles and rankings are unchanged; specs, `--moves` and the setup screen give them.
+- **AI:** both AIs value a layer by what it takes from each send-out still to come on the foe's side (its healthy bench, plus half a switch): 1/8 of HP for Stealth Rock, the next Spikes layer's step, poison 8% (bad poison 4% more), a Speed drop 4%. Clearing is worth the hazards on its own side less those on the foe's. Nothing to send out, or the most layers already, is worth nothing.
+- **Presentation:** a badge per hazard in the effect row of its side's plate (ROCK, SPK×2, TSPK, WEB, with icons drawn in-house, no timer since they last), low-poly pieces around that side's start spot (pointed stones hovering and turning, grey and purple spikes, more each layer, a pale web lying flat), and callouts when one is laid, cleared, absorbed or bites.
+- **Determinism:** each side's layers are part of the hashed state in team battles.
+
+- **Left out:** Tailwind, Safeguard, Mist, Trick Room, Magic Room, Wonder Room, Gravity, Quick Guard, Wide Guard and Fairy Lock (special cases, §9.3); Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide and Steel Roller's surge readings; the seeds, Protosynthesis, Quark Drive and other abilities of species missing from the roster; Sand Veil and Snow Cloak (accuracy).
 
 ## 10. Simulation and determinism
 
@@ -1277,7 +1292,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **Switching:** done (rules version 25, §9.1). A "switch to N" intent, available whenever the fighter could act. The recall and send-out take about 1 s, in which the incoming Pokémon can be hit; then a switch cooldown of about 5 s. A knockout forces a pick. Stat stages and confusion clear on switching out; major status stays with the Pokémon.
 - **Team specs:** done (§9.1, §10). `--team=a,b,c` and `--vs-team` list each side's team (moves, ability, item and look flags go to the first member), the setup screen has six team slots a side (bench members bring their standard sets), and `--help` documents them. Hand-written specs go in the git-ignored `specs/` folder. The battle spec lists each side's team (species, and optionally moves, ability, item, form and shiny per member); quick runs use a flag such as `--team=a,b,c`. Recreations of battles from the games or the anime are hand-written specs kept locally, not committed.
 - **AI:** done (rules version 26, §11). Switching is another utility candidate, scored by the matchup gain of a bench member (expected damage dealt against taken), own HP, status and stage losses, minus the send-out risk. Profiles get a switch chance, like the feint and guard chances.
-- **Entry hazards** (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) right after switching, as their own rules version, acting on send-out.
+- **Entry hazards** done (rules version 27, §9.11). Stealth Rock, Spikes, Toxic Spikes, Sticky Web right after switching, as their own rules version, acting on send-out.
 - **Pace:** 1v1 tuning is unchanged. A team-battle HP multiplier by team size keeps a full 6v6 around 2–3 minutes (about 20–30 s a knockout), tuned by balance batch; the overtime clock scales with the Pokémon left.
 - **Trainers:** a trainer stands in each side's trainer's box, throws on send-out and recall, and reacts. Its look comes from the games' trainer sprites, billboarded, fetched into the git-ignored cache like other assets and never committed (§14).
 - **HUD and clips:** each side shows its team as six balls (healthy, statused, fainted); clips pick the best window across the whole battle; the music ends only on the final knockout (§12.5).

@@ -40,6 +40,11 @@ func read(fighter: Fighter) -> Array[Dictionary]:
 			_totals[key] = maxi(left, standard_ticks(key))
 		_lefts[key] = left
 		entries.append({"key": key, "left": clampf(float(left) / maxi(_totals[key], 1), 0.0, 1.0)})
+	# Entry hazards on its side (team battles), with their layers: they last until cleared.
+	var hazards: Dictionary = fighter.arena.hazards[fighter.side]
+	for hazard: String in ArenaConditions.HAZARDS:
+		if hazards.has(hazard):
+			entries.append({"key": hazard, "layers": int(hazards[hazard])})
 	for stat in STAGES:
 		var stages: int = fighter.boosts[stat]
 		if stages != 0:

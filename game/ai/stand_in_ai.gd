@@ -150,7 +150,11 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 static func arena_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 	var arena := me.arena
 	var value := 0.0
-	if not move.screen.is_empty():
+	if not move.hazard.is_empty():
+		value = arena.hazard_value(foe.side, move.hazard, foe)
+	elif move.kind == BattleMove.Kind.ARENA and move.clears == "both":
+		value = arena.hazards_worth(me.side) - arena.hazards_worth(foe.side)
+	elif not move.screen.is_empty():
 		value = arena.screen_value(me, foe, move.screen)
 	elif not move.surge.is_empty():
 		var full := ArenaConditions.surge_ticks_for(me) / float(Rules.TICK_RATE)
