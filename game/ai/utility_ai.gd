@@ -20,6 +20,11 @@ extends RefCounted
 ##   then strike while the foe has neither left.
 ## - Spacing by style: the distance it keeps follows its melee lean (melee_lean), so kiters hold
 ##   their range and go in for melee only on an opening, and brawlers press in.
+## - Doubles (M17): each fighter decides on its own but sees its ally. It picks its target by
+##   the share of each foe's HP it could take, a focus bonus for its ally's target, closeness and
+##   a pull to keep its lock; it watches every foe's wind-ups; a spread move counts every fighter
+##   it would hit and is vetoed when it would hurt the ally more than the foes; and it keeps
+##   apart from its ally.
 ## - Exact ties go to the side's random stream, never list order.
 ## With `keep_scores` set (the debug overlay), the last evaluation is kept in `last_scores`.
 
@@ -92,6 +97,17 @@ const SWITCH_MARGIN := 0.4
 const SWITCH_BASE := 0.6
 const SWITCH_SLOPE := 0.3
 const SWITCH_TOP := 0.95
+## Doubles targeting: a foe's appeal is the share of its HP left the fighter's best move would
+## take (up to 1), less TARGET_DISTANCE_COST a metre of gap, plus FOCUS_BONUS if the ally is on
+## it and TARGET_STICK for the foe already locked, so the lock doesn't flicker.
+const TARGET_DISTANCE_COST := 0.03
+const FOCUS_BONUS := 0.15
+const TARGET_STICK := 0.1
+## A spread move's harm to the ally counts this many times its harm to a foe of the same share.
+const ALLY_HARM_WEIGHT := 1.5
+## Doubles spacing: within ALLY_SPACING metres of its ally a fighter edges away from it.
+const ALLY_SPACING := 3.0
+const ALLY_PUSH := 0.8
 
 var profile: AIProfile
 var random: SimRandom
@@ -124,6 +140,15 @@ var _switch_rolls := {}
 ## The fighters it last decided for and against; a team battle's send-out changes them.
 var _me: Fighter
 var _foe: Fighter
+## Doubles: whether this battle is one, the recent states of every foe out (Fighter -> {"buffer":
+## Array, "count": int}; singles keeps one buffer in _history), and the ally's position to keep
+## apart from (Vector2.INF for none).
+var _doubles := false
+var _foe_histories := {}
+## Off, it plays doubles as if each foe were alone (no target choice, ally or second foe), for
+## probes measuring what the doubles play is worth.
+var coordinate := true
+var _ally_position := Vector2.INF
 
 static var _curves := {}
 
@@ -137,6 +162,7 @@ func _init(ai_profile: AIProfile, stream: SimRandom) -> void:
 func decide(battle: Battle, index: int) -> Dictionary:
 	var me := battle.fighters[index]
 	var foe := battle.target_of(me)
+	_doubles = battle.doubles and coordinate
 	_meet(me, foe)
 	if battle.is_waiting(index) and me.is_knocked_out():
 		# Between Pokémon after a knockout: pick who comes out next.
@@ -145,7 +171,12 @@ func decide(battle: Battle, index: int) -> Dictionary:
 	if battle.frozen(me) or me.is_knocked_out():
 		_intent = {}
 		return {}
-	_remember(foe)
+	if _doubles:
+		_remember_foes(battle, me)
+		var ally := battle.ally_of(me)
+		_ally_position = ally.position if not ally.is_knocked_out() else Vector2.INF
+	else:
+		_remember(foe)
 	_held += 1
 	_since_decision += 1
 	if not me.can_act():
@@ -156,6 +187,13 @@ func decide(battle: Battle, index: int) -> Dictionary:
 	if _since_decision < profile.decision_interval_ticks and keep_moving and not _intent.is_empty():
 		return _around_terrain(battle, me, _movement_intent(me, _perceived(foe), _current))
 	_since_decision = 0
+	var retarget := -1
+	if _doubles:
+		var place := choose_target(battle, me)
+		if place != me.target_place:
+			retarget = place
+			foe = battle.fighters[place * 2 + 1 - me.side]
+			_meet(me, foe)
 	var seen := _perceived(foe)
 	var threat := _threat(battle, me, foe, seen)
 	var candidates := _candidates(battle, me, foe, seen, threat)
@@ -176,7 +214,34 @@ func decide(battle: Battle, index: int) -> Dictionary:
 			_intent = {"switch": choice.move}
 		_:
 			_intent = _around_terrain(battle, me, _movement_intent(me, seen, _current))
+	if retarget >= 0:
+		_intent.target = retarget
 	return _intent
+
+
+## The place of the foe `me` should be locked onto in doubles (choose_target's appeal, best
+## first; its current lock when no foe is up).
+static func choose_target(battle: Battle, me: Fighter) -> int:
+	var best := me.target_place
+	var best_appeal := -INF
+	var ally := battle.ally_of(me)
+	var ally_target: Fighter = battle.target_of(ally) if ally != null and not ally.is_knocked_out() else null
+	for foe in battle.out(1 - me.side):
+		if foe.is_knocked_out():
+			continue
+		var reach := 0.0
+		for move in me.moves:
+			if move.is_damaging() and not move.self_destructs:
+				reach = maxf(reach, expected_damage(me, foe, move, battle.data()))
+		var appeal := minf(reach / maxf(foe.hp, 1.0), 1.0) - TARGET_DISTANCE_COST * Battle._gap(me, foe)
+		if foe == ally_target:
+			appeal += FOCUS_BONUS
+		if foe.place == me.target_place:
+			appeal += TARGET_STICK
+		if appeal > best_appeal:
+			best = foe.place
+			best_appeal = appeal
+	return best
 
 
 ## Starts afresh for a new fighter of its own (everything it was planning) or a new foe (what
@@ -184,7 +249,11 @@ func decide(battle: Battle, index: int) -> Dictionary:
 func _meet(me: Fighter, foe: Fighter) -> void:
 	if (_foe != null and foe != _foe) or (_me != null and me != _me):
 		_switch_rolls.clear()
-	if _foe != null and foe != _foe:
+	if _doubles and _foe != null and foe != _foe:
+		# Each foe keeps its own history in doubles, and threats are judged whoever made them;
+		# only a feint's opening belongs to the foe it was rolled against.
+		_feint_roll = -1
+	elif _foe != null and foe != _foe:
 		_history.clear()
 		_history_count = 0
 		_judged.clear()
@@ -201,6 +270,38 @@ func _meet(me: Fighter, foe: Fighter) -> void:
 		_flank_spot = Vector2.INF
 	_me = me
 	_foe = foe
+
+
+## What a spread (area) move would do now in doubles: {"foes": how many foes it would hit,
+## "share": the shares of their max HP it would take (×0.75 when it hits several) less
+## ALLY_HARM_WEIGHT times the share of the ally's it would take}.
+static func spread_value(battle: Battle, me: Fighter, move: BattleMove) -> Dictionary:
+	var hit: Array[Fighter] = []
+	var foes := 0
+	for other in battle.fighters:
+		if other == me or other.is_knocked_out() or (other.side == me.side and move.spread != "all"):
+			continue
+		if Battle._gap(me, other) <= Rules.AREA_RADIUS and absf(other.ground - me.ground) <= Rules.AREA_HEIGHT:
+			hit.append(other)
+			if other.side != me.side:
+				foes += 1
+	var factor := Rules.SPREAD_FACTOR if hit.size() > 1 else 1.0
+	var share := 0.0
+	for other in hit:
+		var taken := expected_damage(me, other, move, battle.data()) * factor / maxf(other.max_hp, 1.0)
+		share += taken if other.side != me.side else -ALLY_HARM_WEIGHT * taken
+	return {"foes": foes, "share": share}
+
+
+## Remembers how every foe out looks now (doubles), forgetting those no longer out.
+func _remember_foes(battle: Battle, me: Fighter) -> void:
+	var out := battle.out(1 - me.side)
+	for known: Fighter in _foe_histories.keys():
+		if not out.has(known):
+			_foe_histories.erase(known)
+	for foe in out:
+		if not foe.is_knocked_out():
+			_remember(foe)
 
 
 ## The intent's walking direction turned, if needed, so it doesn't run into ground the fighter
@@ -238,9 +339,16 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			# self-lowering moves.
 			var expected := expected_damage(me, foe, move, battle.data())
 			var adjusted := StandInAI.move_score(me, foe, move) / maxf(move.power * move.expected_hits(), 1.0) if move.fixed_damage == 0 else 1.0
+			var share := expected / maxf(foe.max_hp, 1.0)
+			if _doubles and move.kind == BattleMove.Kind.AREA:
+				var spread := spread_value(battle, me, move)
+				share = spread.share
+				considerations.in_range = 1.0 if spread.foes > 0 else 0.0
+				if share <= 0.0:
+					adjusted = 0.0
 			# The stand-in's value of 0 is a veto (self-destructing early, sinking a stat below -2);
 			# the damage curve's floor would otherwise turn it into a usable score.
-			considerations.damage = _sample("damage", expected * adjusted / maxf(foe.max_hp, 1.0)) if adjusted > 0.0 else 0.0
+			considerations.damage = _sample("damage", share * adjusted) if adjusted > 0.0 else 0.0
 			considerations.finisher = _sample("finisher", expected / maxf(foe.hp, 1.0))
 			if move.kind == BattleMove.Kind.MELEE and (Abilities.punishes_contact(foe) or Items.punishes_contact(foe)):
 				considerations.contact_cost = CONTACT_COST
@@ -528,6 +636,14 @@ static func _urgency(ticks: float) -> float:
 func _remember(foe: Fighter) -> void:
 	var snapshot := {"position": foe.position, "action": foe.action, "action_ticks": foe.action_ticks,
 		"action_move": foe.action_move}
+	if _doubles:
+		var entry: Dictionary = _foe_histories.get_or_add(foe, {"buffer": [], "count": 0})
+		if entry.buffer.size() < HISTORY:
+			entry.buffer.append(snapshot)
+		else:
+			entry.buffer[int(entry.count) % HISTORY] = snapshot
+		entry.count += 1
+		return
 	if _history.size() < HISTORY:
 		_history.append(snapshot)
 	else:
@@ -537,6 +653,12 @@ func _remember(foe: Fighter) -> void:
 
 ## The opponent as this AI sees it: reaction_delay_ticks ago (or as early as remembered).
 func _perceived(foe: Fighter) -> Dictionary:
+	if _doubles:
+		if not _foe_histories.has(foe):
+			_remember(foe)
+		var entry: Dictionary = _foe_histories[foe]
+		var at := maxi(int(entry.count) - 1 - profile.reaction_delay_ticks, maxi(0, int(entry.count) - HISTORY))
+		return entry.buffer[at % HISTORY]
 	if _history_count == 0:
 		_remember(foe)
 	var index := maxi(_history_count - 1 - profile.reaction_delay_ticks, maxi(0, _history_count - HISTORY))
@@ -562,6 +684,9 @@ func _threat(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary) -> Dic
 			continue
 		if (start + velocity * t).distance_to(me.position) > me.radius + Rules.PROJECTILE_RADIUS:
 			continue
+		# A projectile aimed at the ally flies past this fighter.
+		if _doubles and int(projectile.get("target", -1)) != Battle.index_of(me):
+			continue
 		var shooter: Fighter = battle.teams[projectile.owner][projectile.slot]
 		var move := shooter.moves[projectile.move]
 		var threat := {"key": "p%d" % int(projectile.id),
@@ -569,15 +694,28 @@ func _threat(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary) -> Dic
 			"danger": expected_damage(shooter, me, move, data) / maxf(me.hp, 1.0) if move.is_damaging() else 0.1}
 		if best.is_empty() or threat.ticks < best.ticks:
 			best = threat
-	if seen.action == Fighter.Action.WINDUP:
-		var move := foe.moves[seen.action_move]
+	var attackers: Array[Fighter] = [foe]
+	if _doubles:
+		attackers = []
+		for other in battle.out(1 - me.side):
+			if not other.is_knocked_out():
+				attackers.append(other)
+	for attacker in attackers:
+		var view := seen if attacker == foe else _perceived(attacker)
+		if view.action != Fighter.Action.WINDUP:
+			continue
+		var move := attacker.moves[view.action_move]
+		# In doubles a melee strike only threatens the fighter it's aimed at (a foe's own target).
+		if _doubles and move.kind == BattleMove.Kind.MELEE and battle.target_of(attacker) != me:
+			continue
 		var reach := Rules.MELEE_DASH_RANGE if move.kind == BattleMove.Kind.MELEE else Rules.AREA_RADIUS
-		var gap := me.position.distance_to(seen.position) - me.radius - foe.radius
+		var gap := me.position.distance_to(view.position) - me.radius - attacker.radius
 		if (move.kind == BattleMove.Kind.MELEE or move.kind == BattleMove.Kind.AREA) and gap <= reach:
-			var started := battle.tick - delay - (move.windup_ticks - int(seen.action_ticks))
-			var threat := {"key": "w%d" % started, "direction": (me.position - seen.position).normalized(),
+			var started := battle.tick - delay - (move.windup_ticks - int(view.action_ticks))
+			var key := "w%d" % started if not _doubles else "w%d.%d" % [started, Battle.index_of(attacker)]
+			var threat := {"key": key, "direction": (me.position - view.position).normalized(),
 				"melee": move.kind == BattleMove.Kind.MELEE,
-				"ticks": float(int(seen.action_ticks) - delay), "danger": expected_damage(foe, me, move, data) / maxf(me.hp, 1.0)}
+				"ticks": float(int(view.action_ticks) - delay), "danger": expected_damage(attacker, me, move, data) / maxf(me.hp, 1.0)}
 			# A wind-up that has already landed by the time the AI sees it start is no threat.
 			if threat.ticks >= 0.0 and (best.is_empty() or threat.ticks < best.ticks):
 				best = threat
@@ -759,6 +897,11 @@ func _movement_intent(me: Fighter, seen: Dictionary, action: String) -> Dictiona
 		direction += -me.position.normalized()
 		if side.dot(-me.position) < 0.0:
 			_strafe = -_strafe
+	if _doubles and _ally_position != Vector2.INF:
+		var from_ally := me.position - _ally_position
+		var apart := from_ally.length()
+		if apart < ALLY_SPACING and apart > 1e-4:
+			direction += from_ally / apart * ALLY_PUSH * (1.0 - apart / ALLY_SPACING)
 	return {"move": direction.normalized() if direction.length_squared() > 0.0 else Vector2.ZERO}
 
 

@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 30
+const RULES_VERSION := 31
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31

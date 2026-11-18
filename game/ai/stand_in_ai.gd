@@ -72,6 +72,12 @@ func decide(battle: Battle, index: int) -> Dictionary:
 	var intent := {"use": -1, "move": Vector2.ZERO, "dodge": Vector2.ZERO}
 	if not me.can_act() or battle.frozen(me):
 		return intent
+	# In doubles it goes for the nearest foe up.
+	if battle.doubles:
+		for other in battle.out(1 - me.side):
+			if not other.is_knocked_out() and Battle._gap(me, other) < Battle._gap(me, foe) - 0.5:
+				foe = other
+				intent.target = other.place
 	var threat := incoming_threat(battle, index)
 	if not threat.is_empty() and me.can_dodge() and _first_look(battle, threat) and random.chance(DODGE_CHANCE):
 		intent.dodge = _dodge_direction(me, threat.direction)
