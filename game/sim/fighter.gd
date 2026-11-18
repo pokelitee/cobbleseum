@@ -22,6 +22,8 @@ var target_place := 0
 var helping_ticks := 0
 var cheer_ticks := 0
 var helped := false
+## Doubles: its ally out (Battle._link_allies), for Friend Guard; null in singles.
+var ally: Fighter = null
 ## Landing from its ball after a knockout: it can't be hit until it lands.
 var shielded := false
 var species_id: String

@@ -56,7 +56,8 @@ static func standard(species: Dictionary) -> String:
 	var listed: Dictionary = species.get("abilities", {})
 	for slot: String in listed:
 		var id := BattleData.to_id(str(listed[slot]))
-		if not is_known(id):
+		# Abilities that only act on an ally (doubles) are never standard, so singles keep theirs.
+		if not is_known(id) or effect(id).get("doubles_only", false):
 			continue
 		var value := float(effect(id).get("value", 0))
 		if value > best_value or (value == best_value and id < best):
