@@ -119,6 +119,9 @@ var _portraits: Array = []
 var _hud: Hud
 var _overlay: AIOverlay
 var _move_fx: MoveFX
+var _marks: BattleMarks
+## Sides whose current move has already marked the ground, so a multi-hit move marks once.
+var _marked := {}
 var _sound: BattleSound
 var _music: BattleMusic
 ## The crowd's sound in a coliseum, the field's ambience in the open.
@@ -259,6 +262,9 @@ func _ready() -> void:
 	for side in 2:
 		_views[side].watch(_views[1 - side])
 	_add_crowd(loaded.data)
+	_marks = BattleMarks.new()
+	add_child(_marks)
+	_marks.setup(int(spec.seed), _arena)
 	_move_fx = MoveFX.new()
 	add_child(_move_fx)
 	var moves: Array = []
@@ -266,6 +272,9 @@ func _ready() -> void:
 		for fighter: Fighter in team:
 			for move in fighter.moves:
 				_move_fx.styles[move.id] = MoveStyle.of(move.id, loaded.data.moves[move.id])
+				if move.is_damaging():
+					_marks.prepare(BattleMarks.kinds_for(_move_fx.style_of(move), move.type,
+						move.kind == BattleMove.Kind.MELEE, move.kind == BattleMove.Kind.AREA))
 			moves.append_array(fighter.moves)
 	if options.cobblemon_fx:
 		var problem := _move_fx.use_cobblemon(_views, moves)
@@ -334,7 +343,11 @@ func _ready() -> void:
 		_end_tick = window.end
 		print("%s %d %d" % [CLIP_WINDOW, start, _end_tick])
 	while battle.tick < start and not battle.is_over():
+		var seen := battle.events.size()
 		battle.step()
+		# The ground shows what happened before the clip, already settled.
+		for event in battle.events.slice(seen):
+			_mark(event, true)
 	_tick = battle.tick
 	_event_index = battle.events.size()
 	# A clip that skips past the start of overtime never sees its event.
@@ -489,6 +502,7 @@ func _advance_effects() -> void:
 	_crowd.next_frame()
 	_fx.next_frame()
 	_move_fx.next_frame()
+	_marks.next_frame()
 	_hud.next_frame()
 	_sync_conditions()
 	_sound.next_frame()
@@ -687,6 +701,9 @@ func _play_events() -> void:
 	while _event_index < battle.events.size():
 		var event: Dictionary = battle.events[_event_index]
 		_event_index += 1
+		# The instant replay shows the knockout again on ground that's already marked.
+		if not _replaying:
+			_mark(event)
 		match event.type:
 			"windup":
 				var move := _move(event)
@@ -849,6 +866,40 @@ func _play_events() -> void:
 				_music.draw()
 				for view in _views:
 					view.play_role("sad")
+
+
+## Leaves a battlefield mark (BattleMarks) for a hit (once per move), an area move's blast
+## around its user, or a projectile stopped by the terrain. A `settled` mark is shown as it
+## ends up, for marks made before a clip starts.
+func _mark(event: Dictionary, settled := false) -> void:
+	var side := int(event.side)
+	var key := int(event.tick) * 16 + side * 4
+	match event.type:
+		"windup":
+			_marked.erase(side)
+		"hit":
+			var move := _move(event)
+			if move.kind == BattleMove.Kind.AREA or _marked.get(side, false):
+				return
+			_marked[side] = true
+			var defender: Fighter = battle.teams[Highlights.defender(event)][int(event.get("target_slot", 0))]
+			var share := float(event.damage) / defender.max_hp
+			var big: bool = event.crit or event.effectiveness > 1.0
+			var along := defender.position - battle.fighters[side].position
+			_marks.add(BattleMarks.describe(_move_fx.style_of(move), move.type, move.kind == BattleMove.Kind.MELEE, false, share, big),
+				move.type, defender.position, defender.ground, along.normalized(), key, settled)
+		"blast":
+			var move := _move(event)
+			var user := battle.fighters[side]
+			_marks.add(BattleMarks.describe(_move_fx.style_of(move), move.type, false, true, 0.0, false),
+				move.type, user.position, user.ground, Vector2.ZERO, key + 1, settled)
+		"blocked":
+			var move := _move(event)
+			var at := Vector2(event.position[0], event.position[1])
+			var description := BattleMarks.describe(_move_fx.style_of(move), move.type, false, false, 0.0, false)
+			description.radius = BattleMarks.BLOCKED_RADIUS
+			description.debris = false
+			_marks.add(description, move.type, at, battle.terrain.height_at(at), Vector2.ZERO, key + 2, settled)
 
 
 ## The weather and surge shown last frame, their ticks left then, and the ticks they lasted in

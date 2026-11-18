@@ -256,6 +256,10 @@ _Avoid_: camera AI
 How a damaging move looks, such as punch, slash, beam or orb. It never changes play.
 _Avoid_: move effect, move animation
 
+**Battlefield mark**:
+What a hit leaves on the arena's ground for the rest of the battle: a scorch, frost, cracks, a crater ring, a splash stain or a scuff, and for area and ground-shaking moves debris that settles. It never changes play.
+_Avoid_: scar, damage (for these), terrain (that's the ground's shape)
+
 **Ambience**:
 The steady background sound of an arena: the crowd in a coliseum, or the field's own sound (wind, surf, rumble, drips) in the open.
 _Avoid_: atmosphere, background noise
