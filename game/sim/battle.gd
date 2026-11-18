@@ -11,14 +11,22 @@ extends RefCounted
 ## every member and `fighters` each side's one out now. After a knockout with more to come,
 ## the side's next one is sent out (Rules.KNOCKOUT_LULL_SECONDS later, at its start spot); the
 ## battle ends when a side has no one left.
+##
+## Doubles (M17, a spec's "doubles": true) puts two of each side's team out at once, each in
+## a place (0 or 1) and locked onto a foe's place (target_of). `fighters` then holds four, one per
+## place and side at index place * 2 + side (index_of), so fighters[side] is always a side's
+## first and singles reads exactly as before. Each fighter out has its own controller.
 
-enum Stream { BATTLE, SIDE_A, SIDE_B, COSMETIC, TERRAIN }
+## SIDE_A2 and SIDE_B2 are the AI streams of each side's second fighter in doubles.
+enum Stream { BATTLE, SIDE_A, SIDE_B, COSMETIC, TERRAIN, SIDE_A2, SIDE_B2 }
 enum Result { ONGOING, WIN_A, WIN_B, DRAW }
 
 var tick := 0
 var result := Result.ONGOING
-## Each side's fighter out now, indexed by side.
+## The fighters out now, indexed by index_of (by side in singles).
 var fighters: Array[Fighter] = []
+## Whether two of each side's team are out at once (M17).
+var doubles := false
 ## Each side's whole team in the spec's order (Fighter.slot), the fighters out included.
 var teams: Array = [[], []]
 ## The tick overtime starts in the stretch since the last send-out after a knockout (or the
@@ -35,9 +43,9 @@ var arena := ""
 var terrain: Terrain
 ## The arena conditions (§9.11): the weather, surge and screens, shared with both fighters.
 var conditions := ArenaConditions.new()
-## With record_intents set (battles with a player), every tick's intents per side, as
-## [move x, move y, use, dodge x, dodge y, feint, guard, switch]; a ReplayController plays them
-## back.
+## With record_intents set (battles with a player), every tick's intents per fighter out
+## (index_of), as [move x, move y, use, dodge x, dodge y, feint, guard, switch] and, when it
+## names one, the target; a ReplayController plays them back.
 var record_intents := false
 var intent_log: Array = [[], []]
 
@@ -52,17 +60,21 @@ const FIGHTER_STATE_SIZE := 32
 ## Values hashed per side for team battles: the slot out, the send-out countdown, the shield,
 ## the switch cooldown and the layers of each entry hazard.
 const TEAM_STATE_SIZE := 8
+## Values hashed per place in doubles: its slot out, send-out countdown, shield and target.
+const PLACE_STATE_SIZE := 4
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
-## Per side, ticks until its next Pokémon is sent out after a knockout (0 for none pending).
+## Per place (index_of), ticks until its next Pokémon is sent out after a knockout (0 for none
+## pending), and the team slot picked to send out there (-1 for none: the first member left).
 var _send_out_ticks := PackedInt32Array([0, 0])
-## Per side, ticks until it can switch again, and the team slot it picked to send out next
-## after a knockout (-1 for none: the first member left).
-var _switch_cooldown := PackedInt32Array([0, 0])
 var _picks := PackedInt32Array([-1, -1])
-## Set by a knockout with more to come: projectiles in flight vanish at the end of the tick.
+## Per side, ticks until it can switch again.
+var _switch_cooldown := PackedInt32Array([0, 0])
+## Set by a knockout with more to come: projectiles in flight vanish at the end of the tick (in
+## doubles only those aimed at the fighters knocked out, by index).
 var _drop_projectiles := false
+var _dropped_targets: Array[int] = []
 ## Whether the state hashed includes the teams' (only when a side has more than one member,
 ## so one-on-one battles hash exactly as before).
 var _hash_teams := false
@@ -70,31 +82,37 @@ var _hash_teams := false
 
 ## `spec` = {"seed": int, "fighters": [{"species", "moves"?: [ids], "radius"?}, x2] (one per
 ## side; a side's entry may instead hold "team": [members like that], 1-Rules.MAX_TEAM of them),
+## "doubles"?: true for two out a side (teams of Rules.MIN_DOUBLES_TEAM or more),
 ## "arena"?: preset, "weather"?: a starting weather ("" for none, else the preset's),
 ## "rules_version"?: int, "data_versions"?: {source: SHA-256}}. Without
 ## "moves" a fighter gets its species' standard moveset (Movesets). The
 ## hitbox radius comes from the spec, else the roster, else Fighter.DEFAULT_RADIUS; with a
 ## roster loaded, species outside it are rejected. A spec that names a rules or data version
 ## other than these is rejected, since it would play as a different battle.
-## Controllers are objects with decide(battle, side) -> {"move": Vector2, "use": int,
-## "dodge": Vector2 (zero for none), "feint": int (a move to feint), "guard": bool}; each
-## owns its random stream (see random_stream()).
+## Controllers, one per fighter out (in index_of order), are objects with decide(battle, index)
+## -> {"move": Vector2, "use": int, "dodge": Vector2 (zero for none), "feint": int (a move to
+## feint), "guard": bool, "switch": int, "target": int (a foe's place, doubles)}; each owns its
+## random stream (see random_stream()).
 ## Returns {"battle": Battle} or {"error": String}.
 static func create(battle_spec: Dictionary, data: BattleData, controllers: Array) -> Dictionary:
 	var version_problem := _version_problem(battle_spec, data)
 	if not version_problem.is_empty():
 		return {"error": version_problem}
 	var entries: Array = battle_spec.get("fighters", [])
-	if entries.size() != 2 or controllers.size() != 2:
-		return {"error": "a battle needs exactly two sides (fighters) and two controllers"}
+	var per_side := 2 if battle_spec.get("doubles", false) == true else 1
+	if entries.size() != 2 or controllers.size() != 2 * per_side:
+		return {"error": "a battle needs exactly two sides (fighters) and %d controllers" % (2 * per_side)}
 	var members: Array = []
 	for entry: Dictionary in entries:
 		var team := members_of(entry)
 		if team.is_empty() or team.size() > Rules.MAX_TEAM:
 			return {"error": "a team has 1-%d Pokémon, not %d" % [Rules.MAX_TEAM, team.size()]}
+		if team.size() < per_side:
+			return {"error": "a doubles team has %d-%d Pokémon, not %d" % [Rules.MIN_DOUBLES_TEAM, Rules.MAX_TEAM, team.size()]}
 		members.append(team)
 	var battle := Battle.new()
 	battle.spec = battle_spec
+	battle.doubles = per_side == 2
 	battle._data = data
 	battle._controllers = controllers
 	battle._random = SimRandom.stream(int(battle_spec.seed), Stream.BATTLE)
@@ -126,12 +144,24 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 				fighter.hp = fighter.max_hp
 			fighter.arena = battle.conditions
 			battle.teams[side].append(fighter)
-		var lead: Fighter = battle.teams[side][0]
-		battle._place_at_start(lead)
-		battle.fighters.append(lead)
 		# The leads' send-out starts the switch cooldown like any other.
 		if team_size > 1:
 			battle._switch_cooldown[side] = Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS)
+	for place in per_side:
+		for side in 2:
+			var lead: Fighter = battle.teams[side][place]
+			lead.place = place
+			lead.target_place = place
+			battle._place_at_start(lead)
+			battle.fighters.append(lead)
+	var out := battle.fighters.size()
+	battle._send_out_ticks.resize(out)
+	battle._send_out_ticks.fill(0)
+	battle._picks.resize(out)
+	battle._picks.fill(-1)
+	battle.intent_log.resize(out)
+	for index in out:
+		battle.intent_log[index] = []
 	battle._count_benches()
 	battle._hash.start(HashingContext.HASH_SHA256)
 	return {"battle": battle}
@@ -184,9 +214,11 @@ func _start_stretch(from: int) -> void:
 	_time_cap_ticks = from + Rules.seconds_to_ticks(Rules.TIME_CAP_SECONDS)
 
 
-## Puts a fighter on its side's start spot, facing the other side's.
+## Puts a fighter on its side's start spot (in doubles, Rules.DOUBLES_SPREAD to one side of it by
+## place, across from the foe in the same place), facing the other side's.
 func _place_at_start(fighter: Fighter) -> void:
-	fighter.position = Vector2(0, (-0.5 if fighter.side == 0 else 0.5) * Rules.START_DISTANCE)
+	var across := ((-1.0 if fighter.place == 0 else 1.0) * Rules.DOUBLES_SPREAD) if doubles else 0.0
+	fighter.position = Vector2(across, (-0.5 if fighter.side == 0 else 0.5) * Rules.START_DISTANCE)
 	fighter.facing = Vector2(0, 1 if fighter.side == 0 else -1)
 	fighter.velocity = Vector2.ZERO
 	fighter.ground = terrain.height_at(fighter.position)
@@ -211,10 +243,47 @@ func healthy(side: int) -> Array[Fighter]:
 	return left
 
 
-## Whether `side` is between Pokémon: its fighter is down and the next is on its way, or
-## landing shielded. Meanwhile the foe can only walk.
-func is_waiting(side: int) -> bool:
-	return _send_out_ticks[side] > 0 or (fighters[side].action == Fighter.Action.SEND_OUT and fighters[side].shielded)
+## Whether the place `index` (index_of; a side in singles) is between Pokémon: its fighter is
+## down and the next is on its way, or landing shielded. Meanwhile, in singles, the foe can only
+## walk (frozen).
+func is_waiting(index: int) -> bool:
+	return _send_out_ticks[index] > 0 or (fighters[index].action == Fighter.Action.SEND_OUT and fighters[index].shielded)
+
+
+## Whether `fighter` can only walk because its foe is between Pokémon. Only in singles: in
+## doubles the others fight on through a send-out.
+func frozen(fighter: Fighter) -> bool:
+	return not doubles and is_waiting(1 - fighter.side)
+
+
+## The index of a fighter out in `fighters`: place * 2 + side.
+static func index_of(fighter: Fighter) -> int:
+	return fighter.place * 2 + fighter.side
+
+
+## The fighters out on `side` (in doubles a knocked-out one stays in its place until replaced).
+func out(side: int) -> Array[Fighter]:
+	var list: Array[Fighter] = []
+	for index in range(side, fighters.size(), 2):
+		list.append(fighters[index])
+	return list
+
+
+## `fighter`'s ally out in doubles (knocked out or not), else null.
+func ally_of(fighter: Fighter) -> Fighter:
+	return fighters[(1 - fighter.place) * 2 + fighter.side] if doubles else null
+
+
+## The foe `fighter` is aimed at: in singles the one foe out; in doubles the foe in its target's
+## place, or the other foe while that one is down (until a newcomer takes its place).
+func target_of(fighter: Fighter) -> Fighter:
+	if not doubles:
+		return fighters[1 - fighter.side]
+	var locked := fighters[fighter.target_place * 2 + 1 - fighter.side]
+	if not locked.is_knocked_out():
+		return locked
+	var other := fighters[(1 - fighter.target_place) * 2 + 1 - fighter.side]
+	return other if not other.is_knocked_out() else locked
 
 
 static func _version_problem(battle_spec: Dictionary, data: BattleData) -> String:
@@ -241,7 +310,10 @@ func saved_spec() -> Dictionary:
 	saved.merge(spec.duplicate(true))
 	for side in 2:
 		saved.fighters[side].erase("ai")
+		saved.fighters[side].erase("ally_ai")
 		saved.fighters[side].intents = intent_log[side]
+		if doubles:
+			saved.fighters[side].ally_intents = intent_log[side + 2]
 	saved.checksum = checksum()
 	return saved
 
@@ -250,8 +322,11 @@ func saved_spec() -> Dictionary:
 static func intent_to_log(intent: Dictionary) -> Array:
 	var move: Vector2 = intent.get("move", Vector2.ZERO)
 	var dodge: Vector2 = intent.get("dodge", Vector2.ZERO)
-	return [move.x, move.y, int(intent.get("use", -1)), dodge.x, dodge.y, int(intent.get("feint", -1)),
+	var entry := [move.x, move.y, int(intent.get("use", -1)), dodge.x, dodge.y, int(intent.get("feint", -1)),
 		1 if intent.get("guard", false) else 0, int(intent.get("switch", -1))]
+	if intent.has("target"):
+		entry.append(int(intent.target))
+	return entry
 
 
 static func intent_from_log(entry: Array) -> Dictionary:
@@ -266,6 +341,8 @@ static func intent_from_log(entry: Array) -> Dictionary:
 		intent.guard = true
 	if entry.size() > 7 and int(entry[7]) >= 0:
 		intent.switch = int(entry[7])
+	if entry.size() > 8 and int(entry[8]) >= 0:
+		intent.target = int(entry[8])
 	return intent
 
 
@@ -286,25 +363,31 @@ func step() -> void:
 	if is_over():
 		return
 	var intents := []
-	for side in 2:
-		var intent: Dictionary = _controllers[side].decide(self, side)
+	for index in fighters.size():
+		var intent: Dictionary = _controllers[index].decide(self, index)
 		intents.append(intent)
 		if record_intents:
-			intent_log[side].append(intent_to_log(intent))
-		# Between Pokémon after a knockout, a side's "switch" picks which comes out next.
+			intent_log[index].append(intent_to_log(intent))
+		# Between Pokémon after a knockout, a place's "switch" picks which comes out next.
+		var side := index % 2
 		var pick := int(intent.get("switch", -1))
-		if _send_out_ticks[side] > 0 and pick >= 0 and pick < teams[side].size() and not teams[side][pick].is_knocked_out():
-			_picks[side] = pick
+		if _send_out_ticks[index] > 0 and pick >= 0 and pick < teams[side].size() and _on_bench(teams[side][pick]):
+			_picks[index] = pick
 	if tick == 0:
 		_start_conditions()
 	_tick_send_outs()
-	var order := [0, 1] if tick % 2 == 0 else [1, 0]
-	for side: int in order:
-		_act(fighters[side], fighters[1 - side], intents[side])
+	# The sides take turns going first, alternating every tick.
+	for i in fighters.size():
+		var index := i if tick % 2 == 0 else i ^ 1
+		_act(fighters[index], intents[index])
 	_move_projectiles()
 	if _drop_projectiles:
 		_drop_projectiles = false
 		projectiles.clear()
+	if not _dropped_targets.is_empty():
+		projectiles = projectiles.filter(func(projectile: Dictionary) -> bool:
+			return not int(projectile.get("target", -1)) in _dropped_targets)
+		_dropped_targets.clear()
 	for ended in conditions.tick():
 		if ended.has("screen"):
 			_event("screen_end", int(ended.side), {"screen": ended.screen})
@@ -332,9 +415,10 @@ func checksum() -> String:
 	return _checksum
 
 
-func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
+func _act(fighter: Fighter, intent: Dictionary) -> void:
 	if fighter.is_knocked_out():
 		return
+	var foe := target_of(fighter)
 	for i in fighter.cooldowns.size():
 		fighter.cooldowns[i] = maxi(0, fighter.cooldowns[i] - 1)
 	fighter.feint_cooldown = maxi(0, fighter.feint_cooldown - 1)
@@ -354,28 +438,34 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 		if fighter.action_ticks <= 0:
 			fighter.action = Fighter.Action.READY
 			fighter.shielded = false
-			_event("landed_out", fighter.side, {})
+			_fevent("landed_out", fighter, {})
 		return
-	if is_waiting(foe.side):
+	if frozen(fighter):
 		intent = {"move": intent.get("move", Vector2.ZERO)}
 	if fighter.is_knocked_out() or fighter.is_incapacitated():
 		fighter.followups.clear()
 		if not fighter.is_knocked_out():
-			_drift(fighter, foe, Vector2.ZERO)
+			_drift(fighter, Vector2.ZERO)
 		return
+	# A fighter that could act may lock onto the other foe.
+	var target := int(intent.get("target", -1))
+	if doubles and (target == 0 or target == 1) and target != fighter.target_place and fighter.action == Fighter.Action.READY:
+		fighter.target_place = target
+		foe = target_of(fighter)
+		_fevent("target", fighter, {"target_place": target})
 	for followup in fighter.followups.duplicate():
 		if not fighter.followups.has(followup):
 			continue  # a parry dropped it
 		followup.ticks -= 1
 		if followup.ticks <= 0:
 			fighter.followups.erase(followup)
-			_strike(fighter, foe, followup.move)
+			_strike(fighter, target_of(fighter), followup.move)
 			if followup.last:
-				_event("multi_hit_end", fighter.side, {"move": fighter.moves[followup.move].id})
+				_fevent("multi_hit_end", fighter, {"move": fighter.moves[followup.move].id})
 	var to_foe := (foe.position - fighter.position).normalized()
 	match fighter.action:
 		Fighter.Action.DODGE:
-			_slide(fighter, foe, fighter.dodge_step)
+			_slide(fighter, fighter.dodge_step)
 			fighter.velocity = fighter.dodge_step * Rules.TICK_RATE
 			fighter.action_ticks -= 1
 			if fighter.action_ticks <= 0:
@@ -387,29 +477,29 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			if move.kind == BattleMove.Kind.MELEE and gap > 0.0:
 				# Melee moves dash in during the wind-up, stopping just inside reach.
 				fighter.velocity = Vector2.ZERO
-				_slide(fighter, foe, to_foe * minf(gap, Rules.MELEE_DASH_SPEED / Rules.TICK_RATE))
+				_slide(fighter, to_foe * minf(gap, Rules.MELEE_DASH_SPEED / Rules.TICK_RATE))
 			else:
-				_drift(fighter, foe, Vector2.ZERO)
+				_drift(fighter, Vector2.ZERO)
 			fighter.action_ticks -= 1
 			if fighter.feinting and fighter.action_ticks <= Rules.FEINT_BREAK_TICKS:
 				fighter.feinting = false
 				fighter.action = Fighter.Action.READY
-				_event("feint_end", fighter.side, {"move": move.id})
+				_fevent("feint_end", fighter, {"move": move.id})
 			elif fighter.action_ticks <= 0:
 				_release(fighter, foe)
 		Fighter.Action.GUARD:
 			_turn(fighter, to_foe, Rules.AIM_TURN_RATE)
-			_drift(fighter, foe, Vector2.ZERO)
+			_drift(fighter, Vector2.ZERO)
 			fighter.action_ticks -= 1
 			if fighter.action_ticks == Rules.seconds_to_ticks(Rules.GUARD_RECOVERY):
-				_event("guard_end", fighter.side, {"blocked": fighter.guard_blocked})
+				_fevent("guard_end", fighter, {"blocked": fighter.guard_blocked})
 				if fighter.guard_blocked:
 					fighter.action_ticks = 0
 			if fighter.action_ticks <= 0:
 				fighter.action = Fighter.Action.READY
 		Fighter.Action.RECOVERY:
 			_turn(fighter, to_foe, Rules.TURN_RATE)
-			_drift(fighter, foe, Vector2.ZERO)
+			_drift(fighter, Vector2.ZERO)
 			fighter.action_ticks -= 1
 			if fighter.action_ticks <= 0:
 				fighter.action = Fighter.Action.READY
@@ -418,7 +508,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 			var use: int = intent.get("use", -1)
 			var feint: int = intent.get("feint", -1)
 			var guard: bool = intent.get("guard", false)
-			if can_switch(fighter.side, int(intent.get("switch", -1))):
+			if can_switch(index_of(fighter), int(intent.get("switch", -1))):
 				_switch(fighter, teams[fighter.side][int(intent.switch)])
 				return
 			if dodge.length_squared() > 0.0 and fighter.can_dodge():
@@ -426,13 +516,13 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 				fighter.action = Fighter.Action.DODGE
 				fighter.action_ticks = Rules.seconds_to_ticks(Rules.DODGE_SECONDS)
 				fighter.dodge_step = dodge.normalized() * Rules.DODGE_DISTANCE / fighter.action_ticks
-				_event("dodge", fighter.side, {"direction": [dodge.normalized().x, dodge.normalized().y]})
+				_fevent("dodge", fighter, {"direction": [dodge.normalized().x, dodge.normalized().y]})
 			elif guard and fighter.can_guard():
 				fighter.action = Fighter.Action.GUARD
 				fighter.action_ticks = Rules.seconds_to_ticks(Rules.GUARD_SECONDS) + Rules.seconds_to_ticks(Rules.GUARD_RECOVERY)
 				fighter.guard_cooldown = Rules.seconds_to_ticks(Rules.GUARD_COOLDOWN)
 				fighter.guard_blocked = false
-				_event("guard", fighter.side, {})
+				_fevent("guard", fighter, {})
 			elif fighter.move_ready(use) and _gap(fighter, foe) <= fighter.moves[use].reach():
 				var move := fighter.moves[use]
 				if fighter.confusion_ticks > 0 and _random.chance(Rules.CONFUSION_CHANCE):
@@ -442,7 +532,7 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 				fighter.action_ticks = conditions.windup_against(foe, move, fighter.windup_ticks(move))
 				fighter.action_move = use
 				fighter.cooldowns[use] = move.cooldown_ticks
-				_event("windup", fighter.side, {"move": move.id})
+				_fevent("windup", fighter, {"move": move.id})
 			elif fighter.can_feint(feint) and _gap(fighter, foe) <= fighter.moves[feint].reach():
 				var move := fighter.moves[feint]
 				fighter.action = Fighter.Action.WINDUP
@@ -450,9 +540,9 @@ func _act(fighter: Fighter, foe: Fighter, intent: Dictionary) -> void:
 				fighter.action_move = feint
 				fighter.feinting = true
 				fighter.feint_cooldown = Rules.seconds_to_ticks(Rules.FEINT_COOLDOWN)
-				_event("feint", fighter.side, {"move": move.id, "ticks": move.windup_ticks - Rules.FEINT_BREAK_TICKS})
+				_fevent("feint", fighter, {"move": move.id, "ticks": move.windup_ticks - Rules.FEINT_BREAK_TICKS})
 			else:
-				_walk(fighter, foe, intent.get("move", Vector2.ZERO))
+				_walk(fighter, intent.get("move", Vector2.ZERO))
 			var walking := fighter.velocity / maxf(fighter.move_speed, 0.1)
 			_turn(fighter, to_foe + walking.limit_length(1.0) * Rules.MOVE_FACING_WEIGHT,
 				Rules.AIM_TURN_RATE if fighter.action == Fighter.Action.WINDUP else Rules.TURN_RATE)
@@ -482,21 +572,21 @@ static func _gap(fighter: Fighter, foe: Fighter) -> float:
 	return fighter.position.distance_to(foe.position) - fighter.radius - foe.radius
 
 
-func _walk(fighter: Fighter, foe: Fighter, direction: Vector2) -> void:
+func _walk(fighter: Fighter, direction: Vector2) -> void:
 	if direction.length_squared() > 1.0:
 		direction = direction.normalized()
-	_drift(fighter, foe, direction * fighter.current_move_speed())
+	_drift(fighter, direction * fighter.current_move_speed())
 
 
 ## Eases the fighter's velocity toward `target` (m/s) at Rules.ACCELERATION and moves it. The
-## velocity kept is what it actually moved, so walls and the foe's body stop it.
-func _drift(fighter: Fighter, foe: Fighter, target: Vector2) -> void:
+## velocity kept is what it actually moved, so walls and the others' bodies stop it.
+func _drift(fighter: Fighter, target: Vector2) -> void:
 	var rate := Rules.ACCELERATION * fighter.agility
 	if fighter.glides and target.length_squared() < fighter.velocity.length_squared():
 		rate *= Rules.GLIDE_BRAKING
 	fighter.velocity = fighter.velocity.move_toward(target, rate / Rules.TICK_RATE)
 	var before := fighter.position
-	_slide(fighter, foe, fighter.velocity / Rules.TICK_RATE)
+	_slide(fighter, fighter.velocity / Rules.TICK_RATE)
 	fighter.velocity = (fighter.position - before) * Rules.TICK_RATE
 
 
@@ -508,17 +598,21 @@ static func _turn(fighter: Fighter, direction: Vector2, degrees_per_second: floa
 	fighter.facing = fighter.facing.rotated(clampf(fighter.facing.angle_to(direction), -step, step)).normalized()
 
 
-## Moves a fighter by `delta`, kept inside the arena wall and outside the foe's hitbox
-## (it slides around the foe instead of passing through).
-func _slide(fighter: Fighter, foe: Fighter, delta: Vector2) -> void:
+## Moves a fighter by `delta`, kept inside the arena wall and outside the other fighters'
+## hitboxes (it slides around them instead of passing through).
+func _slide(fighter: Fighter, delta: Vector2) -> void:
 	var next := fighter.position + delta
-	var contact := fighter.radius + foe.radius
-	var away := next - foe.position
-	# A fainted foe whose next Pokémon is on its way is no obstacle.
-	if away.length() < contact and not (foe.is_knocked_out() and _send_out_ticks[foe.side] > 0):
-		if away.length_squared() < 1e-8:
-			away = fighter.position - foe.position
-		next = foe.position + away.normalized() * contact
+	for other in fighters:
+		# A fainted fighter whose next Pokémon is on its way (or, in doubles, any fainted one) is
+		# no obstacle.
+		if other == fighter or (other.is_knocked_out() and (doubles or _send_out_ticks[index_of(other)] > 0)):
+			continue
+		var contact := fighter.radius + other.radius
+		var away := next - other.position
+		if away.length() < contact:
+			if away.length_squared() < 1e-8:
+				away = fighter.position - other.position
+			next = other.position + away.normalized() * contact
 	var limit := Rules.ARENA_RADIUS - fighter.radius
 	if next.length() > limit:
 		next = next.normalized() * limit
@@ -543,7 +637,7 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 		elif move.kind == BattleMove.Kind.ARENA and not move.screen.is_empty():
 			var ticks := ArenaConditions.screen_ticks_for(fighter)
 			conditions.set_screen(fighter.side, move.screen, ticks)
-			_event("screen", fighter.side, {"screen": move.screen, "move": move.id, "seconds": ticks / float(Rules.TICK_RATE)})
+			_fevent("screen", fighter, {"screen": move.screen, "move": move.id, "seconds": ticks / float(Rules.TICK_RATE)})
 		elif move.kind == BattleMove.Kind.ARENA and not move.surge.is_empty():
 			_set_surge(fighter, move.surge, {"move": move.id})
 		elif move.kind == BattleMove.Kind.ARENA:
@@ -559,7 +653,7 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 		for i in range(1, hits if not parried else 1):
 			fighter.followups.append({"ticks": i * interval, "move": fighter.action_move, "last": i == hits - 1})
 		if move.recharges:
-			_event("recharge", fighter.side, {"move": move.id})
+			_fevent("recharge", fighter, {"move": move.id})
 		if move.self_destructs:
 			_hurt(fighter, fighter.hp, "self_destruct", {"move": move.id})
 
@@ -568,43 +662,96 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 ## parried it.
 func _strike(fighter: Fighter, foe: Fighter, move_index: int) -> bool:
 	var move := fighter.moves[move_index]
+	if doubles and move.kind == BattleMove.Kind.AREA:
+		_strike_area(fighter, move)
+		return false
 	match move.kind:
 		BattleMove.Kind.MELEE, BattleMove.Kind.AREA:
 			var reach := Rules.MELEE_REACH if move.kind == BattleMove.Kind.MELEE else Rules.AREA_RADIUS
 			if move.kind == BattleMove.Kind.AREA:
-				_event("blast", fighter.side, {"move": move.id})
+				_fevent("blast", fighter, {"move": move.id})
 			var reach_up := Rules.MELEE_HEIGHT if move.kind == BattleMove.Kind.MELEE else Rules.AREA_HEIGHT
 			if _gap(fighter, foe) > reach or foe.is_knocked_out() or absf(foe.ground - fighter.ground) > reach_up:
-				_event("miss", fighter.side, {"move": move.id})
+				_fevent("miss", fighter, {"move": move.id})
 			elif foe.is_invulnerable():
-				_event("miss", fighter.side, {"move": move.id})
-				_event("dodged", foe.side, {"move": move.id})
+				_fevent("miss", fighter, {"move": move.id})
+				_fevent("dodged", foe, {"move": move.id})
 			elif foe.guards_against(fighter.position - foe.position):
 				_guarded(fighter, foe, move)
 				return move.kind == BattleMove.Kind.MELEE
 			else:
 				_hit(fighter, foe, move)
 		_:
-			_projectile_count += 1
-			# Aimed along the facing, rising or falling to reach the foe's chest at its distance.
-			var start := fighter.position + fighter.facing * fighter.radius
-			var speed := conditions.projectile_speed(fighter, move) / Rules.TICK_RATE
-			if move.physical:
-				speed *= float(fighter.ability_effect.get("physical_projectile_speed", 1.0))
-			var ticks_to_foe := maxf(start.distance_to(foe.position) / speed, 1.0)
-			projectiles.append({
-				"id": _projectile_count,
-				"owner": fighter.side,
-				"slot": fighter.slot,
-				"move": move_index,
-				"position": start,
-				"velocity": fighter.facing * speed,
-				"height": fighter.ground + Rules.CHEST_HEIGHT,
-				"rise": (foe.ground - fighter.ground) / ticks_to_foe,
-				"travelled": 0.0,
-			})
-			_event("fire", fighter.side, {"move": move.id})
+			_fire(fighter, foe, move_index, fighter.facing)
+			# A spread status or debuff move fires at the other foe too, if it's in range and sight.
+			var other := _other_foe(fighter, foe)
+			if move.spread == "foes" and not move.is_damaging() and other != null and _gap(fighter, other) <= move.reach() \
+					and can_see(fighter, other):
+				_fire(fighter, other, move_index, (other.position - fighter.position).normalized())
 	return false
+
+
+## The foe out other than `foe` in doubles, if it's up; else null.
+func _other_foe(fighter: Fighter, foe: Fighter) -> Fighter:
+	if not doubles:
+		return null
+	for other in out(1 - fighter.side):
+		if other != foe and not other.is_knocked_out():
+			return other
+	return null
+
+
+## Launches `fighter`'s move `move_index` at `foe` along `direction`.
+func _fire(fighter: Fighter, foe: Fighter, move_index: int, direction: Vector2) -> void:
+	var move := fighter.moves[move_index]
+	_projectile_count += 1
+	# Aimed along the facing, rising or falling to reach the foe's chest at its distance.
+	var start := fighter.position + direction * fighter.radius
+	var speed := conditions.projectile_speed(fighter, move) / Rules.TICK_RATE
+	if move.physical:
+		speed *= float(fighter.ability_effect.get("physical_projectile_speed", 1.0))
+	var ticks_to_foe := maxf(start.distance_to(foe.position) / speed, 1.0)
+	var projectile := {
+		"id": _projectile_count,
+		"owner": fighter.side,
+		"slot": fighter.slot,
+		"move": move_index,
+		"position": start,
+		"velocity": direction * speed,
+		"height": fighter.ground + Rules.CHEST_HEIGHT,
+		"rise": (foe.ground - fighter.ground) / ticks_to_foe,
+		"travelled": 0.0,
+	}
+	if doubles:
+		projectile.target = index_of(foe)
+	projectiles.append(projectile)
+	_fevent("fire", fighter, {"move": move.id})
+
+
+## A spread (area) move going off in doubles: it hits every foe in its ring, and the ally too for
+## "all" moves, at Rules.SPREAD_FACTOR each when it hits more than one.
+func _strike_area(fighter: Fighter, move: BattleMove) -> void:
+	_fevent("blast", fighter, {"move": move.id})
+	var reached: Array[Fighter] = []
+	for other in fighters:
+		if other == fighter or other.is_knocked_out() or (other.side == fighter.side and move.spread != "all"):
+			continue
+		if _gap(fighter, other) <= Rules.AREA_RADIUS and absf(other.ground - fighter.ground) <= Rules.AREA_HEIGHT:
+			reached.append(other)
+	if reached.is_empty():
+		_fevent("miss", fighter, {"move": move.id})
+		return
+	var factor := Rules.SPREAD_FACTOR if reached.size() > 1 else 1.0
+	for other in reached:
+		if other.is_knocked_out():
+			continue
+		if other.is_invulnerable():
+			_fevent("miss", fighter, {"move": move.id})
+			_fevent("dodged", other, {"move": move.id})
+		elif other.guards_against(fighter.position - other.position):
+			_guarded(fighter, other, move)
+		else:
+			_hit(fighter, other, move, factor)
 
 
 ## Hits for one use: fixed, or 2-5 with the main-series weights (always the most with Skill Link).
@@ -626,7 +773,7 @@ func _move_projectiles() -> void:
 	var remaining: Array[Dictionary] = []
 	for projectile in projectiles:
 		var owner: Fighter = teams[projectile.owner][projectile.slot]
-		var target := fighters[1 - projectile.owner]
+		var target := fighters[int(projectile.target)] if doubles else fighters[1 - projectile.owner]
 		var start: Vector2 = projectile.position
 		var end: Vector2 = start + projectile.velocity
 		var closest := Geometry2D.get_closest_point_to_segment(target.position, start, end)
@@ -645,26 +792,29 @@ func _move_projectiles() -> void:
 				continue
 			if not projectile.get("dodged", false):
 				projectile.dodged = true  # it flies on through the dodging fighter
-				_event("dodged", target.side, {"move": move.id})
+				_fevent("dodged", target, {"move": move.id})
 		projectile.position = end
 		projectile.height = height + float(projectile.rise)
 		projectile.travelled += (projectile.velocity as Vector2).length()
 		if terrain.height_at(end) > projectile.height:
-			_event("blocked", owner.side, {"move": move.id, "position": [end.x, end.y], "height": projectile.height})
-			_event("miss", owner.side, {"move": move.id})
+			_fevent("blocked", owner, {"move": move.id, "position": [end.x, end.y], "height": projectile.height})
+			_fevent("miss", owner, {"move": move.id})
 		elif projectile.travelled < Rules.PROJECTILE_RANGE * 1.5 and end.length() < Rules.ARENA_RADIUS:
 			remaining.append(projectile)
 		else:
-			_event("miss", owner.side, {"move": move.id})
+			_fevent("miss", owner, {"move": move.id})
 	projectiles = remaining
 
 
-func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
+## `spread` is Rules.SPREAD_FACTOR for a spread move hitting several fighters at once, else 1.
+func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0) -> void:
 	if move.id in ArenaConditions.SCREEN_BREAKERS:
 		for screen: String in conditions.screens[defender.side].keys():
 			conditions.screens[defender.side].erase(screen)
-			_event("screen_end", defender.side, {"screen": screen, "shattered": true})
+			_fevent("screen_end", defender, {"screen": screen, "shattered": true})
 	var outcome := damage(attacker, defender, move, _data, _random)
+	if spread < 1.0:
+		outcome.damage = maxi(1, floori(outcome.damage * spread))
 	outcome.damage = maxi(1, floori(outcome.damage * Rules.overtime_factor(tick, overtime_tick / float(Rules.TICK_RATE))))
 	var immune := Abilities.immune(defender, move)
 	var dealt := mini(outcome.damage, defender.hp)
@@ -678,7 +828,7 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 		defender.sturdy_used = defender.sturdy_used or holds
 		defender.item_used = defender.item_used or sash
 	defender.hp -= dealt
-	_event("hit", attacker.side, {"move": move.id, "damage": dealt if holds or sash else outcome.damage, "crit": outcome.crit,
+	_fevent("hit", attacker, {"move": move.id, "damage": dealt if holds or sash else outcome.damage, "crit": outcome.crit,
 		"effectiveness": outcome.effectiveness, "hp": defender.hp, "slot": attacker.slot, "target_side": defender.side,
 		"target_slot": defender.slot})
 	if holds:
@@ -697,7 +847,7 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 		if defender.action == Fighter.Action.WINDUP and defender.moves[defender.action_move].kind == BattleMove.Kind.HEAL:
 			defender.action = Fighter.Action.READY
 			defender.action_ticks = 0
-			_event("interrupt", defender.side, {"move": defender.moves[defender.action_move].id})
+			_fevent("interrupt", defender, {"move": defender.moves[defender.action_move].id})
 		if defender.status == "slp" or (defender.status == "frz" and move.type == "Fire"):
 			_end_status(defender)
 		if not immune and Abilities.secondaries_apply(attacker, defender):
@@ -720,8 +870,8 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 func _guarded(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	defender.guard_blocked = true
 	var parry := move.kind == BattleMove.Kind.MELEE
-	_event("miss", attacker.side, {"move": move.id})
-	_event("guarded", defender.side, {"move": move.id, "parry": parry})
+	_fevent("miss", attacker, {"move": move.id})
+	_fevent("guarded", defender, {"move": move.id, "parry": parry})
 	if parry:
 		attacker.followups.clear()
 		if attacker.action == Fighter.Action.READY or attacker.action == Fighter.Action.RECOVERY:
@@ -732,7 +882,7 @@ func _guarded(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 ## Reports that `fighter`'s ability took effect, so the view can name it.
 func _ability_event(fighter: Fighter, details := {}) -> void:
 	details.merge({"ability": fighter.ability, "name": Abilities.display_name(fighter.ability)})
-	_event("ability", fighter.side, details)
+	_fevent("ability", fighter, details)
 
 
 ## An absorbing ability (Water Absorb, Sap Sipper, Flash Fire) taking a hit of its type.
@@ -780,7 +930,7 @@ func _ability_on_hit(attacker: Fighter, defender: Fighter, move: BattleMove) -> 
 ## Reports that `fighter`'s held item took effect (or was used up), so the view can name it.
 func _item_event(fighter: Fighter, details := {}) -> void:
 	details.merge({"item": fighter.item, "name": Items.display_name(fighter.item)})
-	_event("item", fighter.side, details)
+	_fevent("item", fighter, details)
 
 
 ## Items that act on a hit landing: the attacker's Life Orb cost and Shell Bell, the
@@ -819,7 +969,7 @@ func _check_lum(fighter: Fighter) -> void:
 		_end_status(fighter)
 	if fighter.confusion_ticks > 0:
 		fighter.confusion_ticks = 0
-		_event("status_end", fighter.side, {"status": "confusion"})
+		_fevent("status_end", fighter, {"status": "confusion"})
 
 
 ## Items that act over time, once a second: Leftovers and Black Sludge (which hurts a holder
@@ -844,7 +994,7 @@ func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
 		return
 	fighter.flash_fire_ticks = maxi(0, fighter.flash_fire_ticks - 1)
 	fighter.weak_armor_ticks = maxi(0, fighter.weak_armor_ticks - 1)
-	if entry.get("intimidate", false) and not is_waiting(foe.side):
+	if entry.get("intimidate", false) and not is_waiting(index_of(foe)):
 		fighter.intimidate_ticks -= 1
 		if fighter.intimidate_ticks <= 0:
 			fighter.intimidate_ticks = Rules.seconds_to_ticks(Abilities.INTIMIDATE_SECONDS)
@@ -863,24 +1013,35 @@ func _tick_abilities(fighter: Fighter, foe: Fighter) -> void:
 				_boost(fighter, {"spe": 1}, fighter.ability)
 
 
-## Sends out each side's next Pokémon once its lull after a knockout is over.
+## Sends out each place's next Pokémon once its lull after a knockout is over.
 func _tick_send_outs() -> void:
 	for side in 2:
 		_switch_cooldown[side] = maxi(0, _switch_cooldown[side] - 1)
-		if _send_out_ticks[side] > 0:
-			_send_out_ticks[side] -= 1
-			if _send_out_ticks[side] == 0:
-				var slot := _picks[side] if _picks[side] >= 0 else next_up(side)
-				_picks[side] = -1
-				_send_out(teams[side][slot])
+	for index in fighters.size():
+		if _send_out_ticks[index] > 0:
+			_send_out_ticks[index] -= 1
+			if _send_out_ticks[index] == 0:
+				var side := index % 2
+				var picked := _picks[index]
+				var slot := picked if picked >= 0 and _on_bench(teams[side][picked]) else next_up(side)
+				_picks[index] = -1
+				if slot >= 0:
+					_send_out(teams[side][slot], true, index / 2)
 
 
-## Whether `side` can switch its fighter for team member `slot` now: the fighter could act, the
-## side's switch cooldown is over, the member is healthy and on the bench, and the foe isn't
-## between Pokémon.
-func can_switch(side: int, slot: int) -> bool:
-	return slot >= 0 and slot < teams[side].size() and slot != fighters[side].slot and _switch_cooldown[side] == 0 \
-		and not (teams[side][slot] as Fighter).is_knocked_out() and fighters[side].can_act() and not is_waiting(1 - side)
+## Whether a team member is healthy and on the bench, so it could be sent out.
+func _on_bench(member: Fighter) -> bool:
+	return not member.is_knocked_out() and not fighters.has(member)
+
+
+## Whether the fighter out at `index` (index_of; a side in singles) can switch for team member
+## `slot` now: it could act, its side's switch cooldown is over, the member is healthy and on the
+## bench, and (in singles) the foe isn't between Pokémon.
+func can_switch(index: int, slot: int) -> bool:
+	var fighter := fighters[index]
+	var team: Array = teams[fighter.side]
+	return slot >= 0 and slot < team.size() and _switch_cooldown[fighter.side] == 0 and _on_bench(team[slot]) \
+		and fighter.can_act() and not frozen(fighter)
 
 
 ## Ticks until `side` can switch again.
@@ -893,21 +1054,24 @@ func switch_cooldown(side: int) -> int:
 ## status and move cooldowns stay with the Pokémon, frozen on the bench, and bad poison starts
 ## over.
 func _switch(fighter: Fighter, incoming: Fighter) -> void:
-	_event("recall", fighter.side, {"species": fighter.species_id})
+	_fevent("recall", fighter, {"species": fighter.species_id})
 	incoming.position = fighter.position
 	incoming.facing = fighter.facing
 	incoming.ground = fighter.ground
 	incoming.velocity = Vector2.ZERO
+	incoming.target_place = fighter.target_place
 	_leave(fighter)
-	if not fighters[1 - fighter.side].is_knocked_out():
-		_slide(incoming, fighters[1 - fighter.side], Vector2.ZERO)
-	_send_out(incoming, false)
+	incoming.place = fighter.place
+	fighters[index_of(fighter)] = incoming
+	if doubles or not fighters[1 - fighter.side].is_knocked_out():
+		_slide(incoming, Vector2.ZERO)
+	_send_out(incoming, false, fighter.place)
 
 
 ## Whether `fighter` is on the bench: frozen, so effects of its own projectiles still in flight
 ## (recoil, drain, Life Orb) and of the foe's abilities don't reach it.
 func _benched(fighter: Fighter) -> bool:
-	return fighters[fighter.side] != fighter
+	return not fighters.has(fighter)
 
 
 ## What a fighter loses when it's recalled.
@@ -929,33 +1093,40 @@ static func _leave(fighter: Fighter) -> void:
 	fighter.weak_armor_ticks = 0
 
 
-## The team slot `side` sends out next: its first member not knocked out, or -1.
+## The team slot `side` sends out next: its first member healthy and on the bench, or -1.
 func next_up(side: int) -> int:
-	var left := healthy(side)
-	return left[0].slot if not left.is_empty() else -1
+	for member: Fighter in teams[side]:
+		if _on_bench(member):
+			return member.slot
+	return -1
 
 
 ## `fighter` comes out. After a knockout (`after_knockout`) it lands at its side's start spot
 ## (pushed clear of the foe), shielded, and projectiles in flight vanish; on a switch it lands
 ## where it was put, open to hits. Either way the side's switch cooldown starts. Abilities that
 ## act on entry (weather and surge setters) do; Intimidate strikes on its first tick.
-func _send_out(fighter: Fighter, after_knockout := true) -> void:
-	var foe := fighters[1 - fighter.side]
+func _send_out(fighter: Fighter, after_knockout := true, place := 0) -> void:
+	fighter.place = place
+	fighters[index_of(fighter)] = fighter
 	if after_knockout:
 		_start_stretch(tick)
+		fighter.target_place = place
 		_place_at_start(fighter)
+		var foe := target_of(fighter)
 		if not foe.is_knocked_out():
-			_slide(fighter, foe, Vector2.ZERO)
+			_slide(fighter, Vector2.ZERO)
 			var to_foe := foe.position - fighter.position
 			if to_foe.length_squared() > 1e-8:
 				fighter.facing = to_foe.normalized()
-		projectiles.clear()
+		elif doubles:
+			_slide(fighter, Vector2.ZERO)
+		if not doubles:
+			projectiles.clear()
 	fighter.action = Fighter.Action.SEND_OUT
 	fighter.action_ticks = Rules.seconds_to_ticks(Rules.SEND_OUT_SECONDS if after_knockout else Rules.SWITCH_SECONDS)
 	fighter.shielded = after_knockout
-	fighters[fighter.side] = fighter
 	_switch_cooldown[fighter.side] = Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS)
-	_event("send_out", fighter.side, {"species": fighter.species_id, "switch": not after_knockout})
+	_fevent("send_out", fighter, {"species": fighter.species_id, "switch": not after_knockout})
 	_count_benches()
 	_entry_hazards(fighter)
 	var weather := Abilities.sets_weather(fighter)
@@ -972,8 +1143,8 @@ func _send_out(fighter: Fighter, after_knockout := true) -> void:
 func _count_benches() -> void:
 	for side in 2:
 		var count := 0
-		for member: Fighter in healthy(side):
-			if member != fighters[side]:
+		for member: Fighter in teams[side]:
+			if _on_bench(member):
 				count += 1
 		conditions.bench[side] = count
 
@@ -983,10 +1154,10 @@ func _lay_hazard(fighter: Fighter, move: BattleMove) -> void:
 	var side := 1 - fighter.side
 	var layers := int(conditions.hazards[side].get(move.hazard, 0))
 	if layers >= int(ArenaConditions.HAZARDS[move.hazard]):
-		_event("hazard_failed", fighter.side, {"hazard": move.hazard, "move": move.id})
+		_fevent("hazard_failed", fighter, {"hazard": move.hazard, "move": move.id})
 		return
 	conditions.hazards[side][move.hazard] = layers + 1
-	_event("hazard", fighter.side, {"hazard": move.hazard, "layers": layers + 1, "target_side": side, "move": move.id})
+	_fevent("hazard", fighter, {"hazard": move.hazard, "layers": layers + 1, "target_side": side, "move": move.id})
 
 
 ## Defog and Tidy Up: every hazard on both sides goes, and with Defog (`screens`) the foe's
@@ -1024,21 +1195,31 @@ func _entry_hazards(fighter: Fighter) -> void:
 	if laid.has("toxicspikes") and grounded and not fighter.is_knocked_out():
 		if "Poison" in fighter.types:
 			laid.erase("toxicspikes")
-			_event("hazards_cleared", fighter.side, {"hazards": ["toxicspikes"], "absorbed": true})
+			_fevent("hazards_cleared", fighter, {"hazards": ["toxicspikes"], "absorbed": true})
 		else:
 			_inflict(fighter, "tox" if int(laid.toxicspikes) > 1 else "psn")
 	if laid.has("stickyweb") and grounded and not fighter.is_knocked_out():
-		_event("hazard_hit", fighter.side, {"hazard": "stickyweb"})
-		_boost(fighter, {"spe": -1}, "stickyweb", fighters[1 - fighter.side])
+		_fevent("hazard_hit", fighter, {"hazard": "stickyweb"})
+		_boost(fighter, {"spe": -1}, "stickyweb", target_of(fighter))
 
 
 ## A fighter fainting: with more of its team to come, its side sends out the next after a lull,
-## and every projectile in flight vanishes.
+## and every projectile in flight vanishes (in doubles only those aimed at it, and a place is
+## refilled only while the bench has someone not already on the way to the other).
 func _knocked_out(fighter: Fighter) -> void:
 	var left := healthy(fighter.side).size()
 	_count_benches()
-	_event("knockout", fighter.side, {"left": left})
-	if left > 0:
+	_fevent("knockout", fighter, {"left": left})
+	if doubles:
+		fighter.followups.clear()
+		_dropped_targets.append(index_of(fighter))
+		var coming := 0
+		for other in out(fighter.side):
+			if _send_out_ticks[index_of(other)] > 0:
+				coming += 1
+		if conditions.bench[fighter.side] > coming:
+			_send_out_ticks[index_of(fighter)] = Rules.seconds_to_ticks(Rules.KNOCKOUT_LULL_SECONDS)
+	elif left > 0:
 		_send_out_ticks[fighter.side] = Rules.seconds_to_ticks(Rules.KNOCKOUT_LULL_SECONDS)
 		_drop_projectiles = true
 		fighter.followups.clear()
@@ -1059,6 +1240,10 @@ func _start_conditions() -> void:
 		var b_speed := setters[1].stat("spe")
 		if a_speed < b_speed or (a_speed == b_speed and _random.chance(0.5)):
 			setters.reverse()
+	elif setters.size() > 2:
+		# Fastest first (a tie keeps the order out), so the slowest one's goes last and wins.
+		setters.sort_custom(func(a: Fighter, b: Fighter) -> bool:
+			return a.stat("spe") > b.stat("spe") or (a.stat("spe") == b.stat("spe") and index_of(a) < index_of(b)))
 	for fighter in setters:
 		_ability_event(fighter)
 		if not Abilities.sets_weather(fighter).is_empty():
@@ -1078,7 +1263,7 @@ func _set_weather(setter: Fighter, weather: String, source: Dictionary) -> void:
 	conditions.set_weather(weather, ticks)
 	var details := {"weather": weather, "seconds": -1.0 if ticks < 0 else ticks / float(Rules.TICK_RATE), "renewed": renewed}
 	details.merge(source)
-	_event("weather", setter.side, details)
+	_fevent("weather", setter, details)
 
 
 ## Sets a surge from `setter`'s move or ability (`source`), for its usual time or longer with a
@@ -1089,7 +1274,7 @@ func _set_surge(setter: Fighter, surge: String, source: Dictionary) -> void:
 	conditions.set_surge(surge, ticks)
 	var details := {"surge": surge, "seconds": ticks / float(Rules.TICK_RATE), "renewed": renewed}
 	details.merge(source)
-	_event("surge", setter.side, details)
+	_fevent("surge", setter, details)
 
 
 ## Grassy ground healing a grounded fighter, once a second.
@@ -1118,7 +1303,7 @@ func _tick_weather(fighter: Fighter) -> void:
 
 ## A debuff or status projectile reaching its target.
 func _land(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
-	_event("landed", attacker.side, {"move": move.id})
+	_fevent("landed", attacker, {"move": move.id})
 	_apply_effect(attacker, defender, {"boosts": move.boosts, "status": move.status, "confuses": move.confuses}, move.id)
 
 
@@ -1130,7 +1315,7 @@ func _apply_effect(attacker: Fighter, defender: Fighter, effect: Dictionary, mov
 			_ability_event(defender)
 		elif not conditions.blocks_status(defender, "confusion"):
 			defender.confusion_ticks = Rules.seconds_to_ticks(Rules.CONFUSION_SECONDS)
-			_event("status", defender.side, {"status": "confusion"})
+			_fevent("status", defender, {"status": "confusion"})
 			_check_lum(defender)
 	if not effect.get("boosts", {}).is_empty():
 		_boost(defender, effect.boosts, move_id, attacker)
@@ -1163,7 +1348,7 @@ func _inflict(fighter: Fighter, status: String, source: Fighter = null) -> void:
 			fighter.status_ticks = Rules.seconds_to_ticks(Rules.FREEZE_SECONDS)
 		_:
 			fighter.status_ticks = Rules.seconds_to_ticks(Rules.STATUS_SECONDS)
-	_event("status", fighter.side, {"status": status})
+	_fevent("status", fighter, {"status": status})
 	_check_lum(fighter)
 	if source != null and fighter.ability_effect.get("synchronize", false) and status in ["brn", "par", "psn", "tox"]:
 		_ability_event(fighter)
@@ -1171,7 +1356,7 @@ func _inflict(fighter: Fighter, status: String, source: Fighter = null) -> void:
 
 
 func _end_status(fighter: Fighter) -> void:
-	_event("status_end", fighter.side, {"status": fighter.status})
+	_fevent("status_end", fighter, {"status": fighter.status})
 	fighter.status = ""
 	fighter.status_ticks = 0
 
@@ -1195,7 +1380,7 @@ func _boost(fighter: Fighter, changes: Dictionary, move_id: String, foe: Fighter
 			applied[stat] = fighter.boosts[stat] - before
 	if not applied.is_empty():
 		fighter.stage_ticks = 0
-		_event("boost", fighter.side, {"boosts": applied, "move": move_id})
+		_fevent("boost", fighter, {"boosts": applied, "move": move_id})
 	var answer: Dictionary = fighter.ability_effect.get("on_lowered", {})
 	if foe != null and not answer.is_empty() and applied.values().any(func(stages: int) -> bool: return stages < 0):
 		_ability_event(fighter)
@@ -1215,7 +1400,7 @@ func _decay_stages(fighter: Fighter) -> void:
 			fighter.boosts[stat] = stage - signi(stage)
 			applied[stat] = -signi(stage)
 	if not applied.is_empty():
-		_event("stage_decay", fighter.side, {"boosts": applied})
+		_fevent("stage_decay", fighter, {"boosts": applied})
 
 
 ## Restores HP, reported as `type`: "heal", or "regen" for the small steady healing of
@@ -1226,7 +1411,7 @@ func _heal(fighter: Fighter, amount: int, move_id: String, type := "heal") -> vo
 	var healed := mini(amount, fighter.max_hp - fighter.hp)
 	if healed > 0:
 		fighter.hp += healed
-		_event(type, fighter.side, {"amount": healed, "hp": fighter.hp, "move": move_id})
+		_fevent(type, fighter, {"amount": healed, "hp": fighter.hp, "move": move_id})
 
 
 ## Takes HP outside a hit (status damage, recoil, confusion), reporting it as `type`.
@@ -1235,7 +1420,7 @@ func _hurt(fighter: Fighter, amount: int, type: String, details: Dictionary) -> 
 		return
 	fighter.hp = maxi(0, fighter.hp - amount)
 	details.merge({"damage": amount, "hp": fighter.hp})
-	_event(type, fighter.side, details)
+	_fevent(type, fighter, details)
 	if fighter.is_knocked_out():
 		_knocked_out(fighter)
 	else:
@@ -1250,7 +1435,7 @@ func _tick_conditions(fighter: Fighter) -> void:
 	if fighter.confusion_ticks > 0:
 		fighter.confusion_ticks -= 1
 		if fighter.confusion_ticks == 0:
-			_event("status_end", fighter.side, {"status": "confusion"})
+			_fevent("status_end", fighter, {"status": "confusion"})
 	if fighter.status.is_empty():
 		return
 	fighter.status_ticks -= 1
@@ -1279,7 +1464,7 @@ func _tick_conditions(fighter: Fighter) -> void:
 			"par":
 				if _random.chance(Rules.PARALYSIS_STUN_CHANCE):
 					fighter.stun_ticks = Rules.seconds_to_ticks(Rules.PARALYSIS_STUN_SECONDS)
-					_event("stunned", fighter.side, {})
+					_fevent("stunned", fighter, {})
 	if fighter.status_ticks <= 0 and not fighter.is_knocked_out():
 		_end_status(fighter)
 
@@ -1362,8 +1547,8 @@ func _time_up_result() -> Result:
 
 ## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
 func _record_state() -> void:
-	_state.resize(FIGHTER_STATE_SIZE * 2 + 4 + 2 * ArenaConditions.SCREENS.size() + projectiles.size() * 3
-		+ (TEAM_STATE_SIZE * 2 if _hash_teams else 0))
+	_state.resize(FIGHTER_STATE_SIZE * fighters.size() + 4 + 2 * ArenaConditions.SCREENS.size() + projectiles.size() * 3
+		+ (TEAM_STATE_SIZE * 2 if _hash_teams else 0) + (PLACE_STATE_SIZE * fighters.size() if doubles else 0))
 	var i := 0
 	for fighter in fighters:
 		_state[i] = fighter.position.x
@@ -1422,14 +1607,28 @@ func _record_state() -> void:
 			for h in ArenaConditions.HAZARDS.size():
 				_state[i + 4 + h] = int(conditions.hazards[side].get(ArenaConditions.HAZARDS.keys()[h], 0))
 			i += TEAM_STATE_SIZE
+	if doubles:
+		for index in fighters.size():
+			_state[i] = fighters[index].slot
+			_state[i + 1] = _send_out_ticks[index]
+			_state[i + 2] = 1.0 if fighters[index].shielded else 0.0
+			_state[i + 3] = fighters[index].target_place
+			i += PLACE_STATE_SIZE
 	_hash.update(_state.to_byte_array())
 
 
-## Records an event. One by a side names its fighter's team slot ("slot"), the one out unless
+## Records an event. One by a side names a team slot ("slot"): its first fighter out's unless
 ## `details` says otherwise.
 func _event(type: String, side: int, details: Dictionary) -> void:
 	var event := {"tick": tick, "type": type, "side": side}
 	if side >= 0:
 		event.slot = fighters[side].slot
+	event.merge(details, true)
+	events.append(event)
+
+
+## Records an event about one fighter: its side and team slot.
+func _fevent(type: String, fighter: Fighter, details: Dictionary) -> void:
+	var event := {"tick": tick, "type": type, "side": fighter.side, "slot": fighter.slot}
 	event.merge(details, true)
 	events.append(event)

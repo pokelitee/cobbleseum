@@ -133,15 +133,16 @@ func _init(ai_profile: AIProfile, stream: SimRandom) -> void:
 	random = stream
 
 
-func decide(battle: Battle, side: int) -> Dictionary:
-	var me := battle.fighters[side]
-	var foe := battle.fighters[1 - side]
+## `index` is the fighter's in Battle.fighters (its side, in singles).
+func decide(battle: Battle, index: int) -> Dictionary:
+	var me := battle.fighters[index]
+	var foe := battle.target_of(me)
 	_meet(me, foe)
-	if battle.is_waiting(side) and me.is_knocked_out():
+	if battle.is_waiting(index) and me.is_knocked_out():
 		# Between Pokémon after a knockout: pick who comes out next.
-		var pick := best_pick(battle, side)
+		var pick := best_pick(battle, index)
 		return {"switch": pick} if pick >= 0 else {}
-	if battle.is_waiting(1 - side):
+	if battle.frozen(me) or me.is_knocked_out():
 		_intent = {}
 		return {}
 	_remember(foe)
@@ -156,7 +157,7 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		return _around_terrain(battle, me, _movement_intent(me, _perceived(foe), _current))
 	_since_decision = 0
 	var seen := _perceived(foe)
-	var threat := _threat(battle, me, seen, side)
+	var threat := _threat(battle, me, foe, seen)
 	var candidates := _candidates(battle, me, foe, seen, threat)
 	var choice := _choose(candidates)
 	if choice.action != _current:
@@ -544,13 +545,12 @@ func _perceived(foe: Fighter) -> Dictionary:
 
 ## The most urgent attack this AI has noticed: {"key", "direction", "ticks" (left until it
 ## lands), "danger" (share of our HP)} or {}. Each threat gets one dodge roll.
-func _threat(battle: Battle, me: Fighter, seen: Dictionary, side: int) -> Dictionary:
-	var foe := battle.fighters[1 - side]
+func _threat(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary) -> Dictionary:
 	var data := battle.data()
 	var best := {}
 	var delay := profile.reaction_delay_ticks
 	for projectile in battle.projectiles:
-		if int(projectile.owner) == side or projectile.get("dodged", false):
+		if int(projectile.owner) == me.side or projectile.get("dodged", false):
 			continue
 		var velocity: Vector2 = projectile.velocity
 		var speed := maxf(velocity.length(), 1e-6)
@@ -631,7 +631,7 @@ func _add_switch(battle: Battle, me: Fighter, foe: Fighter, urgency: float, cand
 	var best_gain := SWITCH_MARGIN
 	var staying := trade(me, foe, battle.data())
 	for member: Fighter in battle.healthy(me.side):
-		if not battle.can_switch(me.side, member.slot):
+		if not battle.can_switch(Battle.index_of(me), member.slot):
 			continue
 		var gain := switch_worth(member, foe, battle.data()) - staying
 		if gain > best_gain:
@@ -691,13 +691,17 @@ static func status_rate(fighter: Fighter) -> float:
 	return 0.0
 
 
-## The team slot `side` should send out after a knockout: the healthy member with the best
-## trade against the foe out, or -1 when no one is left.
-static func best_pick(battle: Battle, side: int) -> int:
-	var foe := battle.fighters[1 - side]
+## The team slot the place `index` (Battle.index_of; a side in singles) should send out after a
+## knockout: the bench member with the best trade against the foe it will face, or -1 when no
+## one is left.
+static func best_pick(battle: Battle, index: int) -> int:
+	var side := index % 2
+	var foe := battle.target_of(battle.fighters[index])
 	var best := -1
 	var best_worth := -INF
 	for member: Fighter in battle.healthy(side):
+		if battle.fighters.has(member):
+			continue
 		var worth := trade(member, foe, battle.data()) if not foe.is_knocked_out() else float(member.hp) / member.max_hp
 		if worth > best_worth:
 			best = member.slot

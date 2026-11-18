@@ -1,7 +1,7 @@
 extends SceneTree
 ## Batch simulation and balance report (concepts_brief.md §9.7).
 ## Usage: godot --headless --path . --script res://tools/batch.gd -- [--battles=500] [--seed=1]
-##        [--ai-a=ranked] [--ai-b=ranked] [--team-size=1]
+##        [--ai-a=ranked] [--ai-b=ranked] [--team-size=1] [--doubles]
 ## The AI options name each side's controller (Controllers): pitting two AIs against each
 ## other over random matchups, side A's win rate shows which is stronger.
 ##
@@ -19,6 +19,8 @@ extends SceneTree
 ## Matchups and battle seeds come from --seed, so a report can be reproduced exactly.
 ## --team-size=N plays team battles (§9.1) of N random species a side instead, written to
 ## results/balance_<rules version>_<seed>_t<N>.json.
+## --doubles plays them as doubles (M17, teams of 2 or more, two out a side), written to
+## results/balance_<rules version>_<seed>_t<N>d.json.
 
 const DEFAULT_BATTLES := 500
 const RESULTS_DIR := "res://results"
@@ -36,6 +38,7 @@ func _initialize() -> void:
 	var seed := 1
 	var ai := [Controllers.DEFAULT_AI, Controllers.DEFAULT_AI]
 	var team_size := 1
+	var doubles := false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--battles="):
 			battles = maxi(1, arg.get_slice("=", 1).to_int())
@@ -43,6 +46,8 @@ func _initialize() -> void:
 			seed = arg.get_slice("=", 1).to_int()
 		elif arg.begins_with("--team-size="):
 			team_size = clampi(arg.get_slice("=", 1).to_int(), 1, Rules.MAX_TEAM)
+		elif arg == "--doubles":
+			doubles = true
 		elif arg.begins_with("--ai-a=") or arg.begins_with("--ai-b="):
 			ai[0 if arg.begins_with("--ai-a=") else 1] = arg.get_slice("=", 1)
 		else:
@@ -51,6 +56,9 @@ func _initialize() -> void:
 	var loaded := BattleData.load_all()
 	if loaded.has("error"):
 		printerr("error: " + loaded.error)
+		return quit(1)
+	if doubles and team_size < Rules.MIN_DOUBLES_TEAM:
+		printerr("error: --doubles needs --team-size=%d or more" % Rules.MIN_DOUBLES_TEAM)
 		return quit(1)
 	var data: BattleData = loaded.data
 	var pool: Array[String] = []
@@ -74,6 +82,8 @@ func _initialize() -> void:
 				for j in team_size:
 					teams[side].append({"species": pool[random.next_u32() % pool.size()]})
 			spec = {"seed": int(random.next_u32() % 1000000), "fighters": [{"team": teams[0], "ai": ai[0]}, {"team": teams[1], "ai": ai[1]}]}
+			if doubles:
+				spec.doubles = true
 		rows.append(run(spec, data))
 	var elapsed := (Time.get_ticks_msec() - started) / 1000.0
 	var report := summarise(rows)
@@ -81,9 +91,10 @@ func _initialize() -> void:
 	report.seed = seed
 	report.ai = ai
 	report.team_size = team_size
+	report.doubles = doubles
 	report.ms_per_battle = elapsed * 1000.0 / battles
 	print_report(report, pool.size())
-	_save(report, rows, seed, team_size)
+	_save(report, rows, seed, ("_t%d%s" % [team_size, "d" if doubles else ""]) if team_size > 1 else "")
 	quit(0)
 
 
@@ -233,12 +244,13 @@ static func _percentile(sorted: Array[float], share: float) -> float:
 
 
 ## Results live inside the project folder, so keep the editor from importing them.
-static func _save(report: Dictionary, rows: Array[Dictionary], seed: int, team_size := 1) -> void:
+## `suffix` names the format in the file name ("_t3", "_t4d"; "" for one-on-one).
+static func _save(report: Dictionary, rows: Array[Dictionary], seed: int, suffix := "") -> void:
 	var dir := ProjectSettings.globalize_path(RESULTS_DIR)
 	DirAccess.make_dir_recursive_absolute(dir)
 	if not FileAccess.file_exists(dir.path_join(".gdignore")):
 		FileAccess.open(dir.path_join(".gdignore"), FileAccess.WRITE).close()
-	var path := dir.path_join("balance_v%d_%d%s.json" % [Rules.RULES_VERSION, seed, "_t%d" % team_size if team_size > 1 else ""])
+	var path := dir.path_join("balance_v%d_%d%s.json" % [Rules.RULES_VERSION, seed, suffix])
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(JSON.stringify({"report": report, "battles": rows}, "  ", false))
 	file.close()

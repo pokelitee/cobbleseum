@@ -65,13 +65,14 @@ static func pair(seed: int) -> Array:
 	]
 
 
-func decide(battle: Battle, side: int) -> Dictionary:
-	var me := battle.fighters[side]
-	var foe := battle.fighters[1 - side]
+## `index` is the fighter's in Battle.fighters (its side, in singles).
+func decide(battle: Battle, index: int) -> Dictionary:
+	var me := battle.fighters[index]
+	var foe := battle.target_of(me)
 	var intent := {"use": -1, "move": Vector2.ZERO, "dodge": Vector2.ZERO}
-	if not me.can_act() or battle.is_waiting(1 - side):
+	if not me.can_act() or battle.frozen(me):
 		return intent
-	var threat := incoming_threat(battle, side)
+	var threat := incoming_threat(battle, index)
 	if not threat.is_empty() and me.can_dodge() and _first_look(battle, threat) and random.chance(DODGE_CHANCE):
 		intent.dodge = _dodge_direction(me, threat.direction)
 		return intent
@@ -194,13 +195,13 @@ static func _damage_score(me: Fighter, move: BattleMove) -> float:
 	return score
 
 
-## An attack about to hit `side`: {"direction": Vector2, "projectile": Dictionary} or
-## {"direction", "windup_tick": int}; {} when there's none.
-static func incoming_threat(battle: Battle, side: int) -> Dictionary:
-	var me := battle.fighters[side]
-	var foe := battle.fighters[1 - side]
+## An attack about to hit the fighter at `index` (Battle.index_of): {"direction": Vector2,
+## "projectile": Dictionary} or {"direction", "windup_tick": int}; {} when there's none.
+static func incoming_threat(battle: Battle, index: int) -> Dictionary:
+	var me := battle.fighters[index]
+	var foe := battle.target_of(me)
 	for projectile in battle.projectiles:
-		if int(projectile.owner) == side or projectile.get("dodged", false):
+		if int(projectile.owner) == me.side or projectile.get("dodged", false):
 			continue
 		var velocity: Vector2 = projectile.velocity
 		var start: Vector2 = projectile.position

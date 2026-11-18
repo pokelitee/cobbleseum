@@ -99,12 +99,14 @@ func poll() -> void:
 				pending_use = i
 
 
-func decide(battle: Battle, side: int) -> Dictionary:
+## `index` is the player's fighter's in Battle.fighters (its side, in singles).
+func decide(battle: Battle, index: int) -> Dictionary:
+	var side := index % 2
 	var direction := to_world(stick)
 	var intent := {"move": direction}
 	if pending_dodge:
-		var me := battle.fighters[side]
-		var away := me.position - battle.fighters[1 - side].position
+		var me := battle.fighters[index]
+		var away := me.position - battle.target_of(me).position
 		# Dodge where the stick points, or sideways from the foe when it's centred.
 		intent.dodge = direction if direction.length_squared() > 0.01 else Vector2(-away.y, away.x).normalized()
 	if pending_guard:
@@ -118,7 +120,7 @@ func decide(battle: Battle, side: int) -> Dictionary:
 		bench_choice = bench[0] if not bench.is_empty() else -1
 	if pending_cycle != 0 and not bench.is_empty():
 		bench_choice = bench[posmod(bench.find(bench_choice) + pending_cycle, bench.size())]
-	if bench_choice >= 0 and (pending_switch or battle.fighters[side].is_knocked_out()):
+	if bench_choice >= 0 and (pending_switch or battle.fighters[index].is_knocked_out()):
 		intent.switch = bench_choice
 	pending_dodge = false
 	pending_guard = false
@@ -133,7 +135,7 @@ func decide(battle: Battle, side: int) -> Dictionary:
 static func bench_slots(battle: Battle, side: int) -> Array[int]:
 	var slots: Array[int] = []
 	for fighter: Fighter in battle.healthy(side):
-		if fighter != battle.fighters[side]:
+		if not battle.fighters.has(fighter):
 			slots.append(fighter.slot)
 	return slots
 

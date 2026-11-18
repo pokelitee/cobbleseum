@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 29
+const RULES_VERSION := 30
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -31,6 +31,12 @@ const TEAM_HP_EXPONENT := 0.5
 ## send-out (a switch or the pick after a knockout) starts a side-wide SWITCH_COOLDOWN_SECONDS.
 const SWITCH_SECONDS := 1.0
 const SWITCH_COOLDOWN_SECONDS := 5.0
+## Doubles (M17): two of each side's team of MIN_DOUBLES_TEAM-MAX_TEAM out at once, standing
+## DOUBLES_SPREAD either side of their side's start spot. A spread move (an area move) that hits
+## more than one fighter deals SPREAD_FACTOR to each, as in the main series.
+const MIN_DOUBLES_TEAM := 2
+const DOUBLES_SPREAD := 2.5
+const SPREAD_FACTOR := 0.75
 
 const ARENA_RADIUS := 14.0
 ## Terrain (§9.8): the most a fighter can step up (fliers more); projectiles leave and aim at
