@@ -10,6 +10,9 @@
 //   pixels that moves with SURGE_PHASE (set per video frame, so renders repeat): pulses along a
 //   grid of lines (electric), mown stripes of grass (grassy), drifting cloud patches (misty) or
 //   rings rippling out from the centre (psychic).
+// - battlefield marks (BattleMarks) on upward faces: a canvas of sixteenth-metre pixels over the
+//   field, so marks sit on the same pixel grid as the grain, with glowing pixels whose alpha holds
+//   the frame they were made on, cooling in steps as MARKS_FRAME moves on.
 // Blocks come two ways: MultiMesh boxes (a unit cube scaled per instance; the face's metres
 // come from the vertex and the instance's scale) and ring segments built as meshes (UV holds
 // the face's metres; FACE_UV is set).
@@ -35,6 +38,18 @@ uniform float SURGE_RADIUS = 14.5;
 uniform float SURGE_PHASE = 0.0;
 // 0 electric, 1 grassy, 2 misty, 3 psychic (ArenaSurge.COLOURS order).
 uniform int SURGE_KIND = 0;
+
+// Battlefield marks: colour canvas (alpha 1 where marked) and glow canvas, MARKS_TEXEL pixels a
+// metre from MARKS_ORIGIN on the floor.
+uniform bool MARKS_ON = false;
+uniform sampler2D MARKS : source_color, filter_nearest;
+uniform sampler2D MARKS_GLOW : source_color, filter_nearest;
+uniform vec2 MARKS_ORIGIN = vec2(0.0);
+uniform float MARKS_TEXEL = 16.0;
+uniform float MARKS_FRAME = 0.0;
+uniform float MARKS_GLOW_FRAMES = 60.0;
+uniform float MARKS_GLOW_STEPS = 5.0;
+uniform float MARKS_GLOW_ENERGY = 3.0;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -170,6 +185,27 @@ void fragment() {
 		colour = mix(colour, shade, min(1.0, amount * (0.12 + 0.5 * tint)));
 		EMISSION = SURGE.rgb * amount * glow * 0.9;
 	}
+	// Marks sit on top of a surge's tint (its glow still adds over them), so they read in every surge.
+	vec3 glowing = vec3(0.0);
+	if (MARKS_ON && world_normal.y > 0.7) {
+		ivec2 size = textureSize(MARKS, 0);
+		ivec2 pixel = ivec2(floor((world_position.xz - MARKS_ORIGIN) * MARKS_TEXEL));
+		if (pixel.x >= 0 && pixel.y >= 0 && pixel.x < size.x && pixel.y < size.y) {
+			vec4 mark = texelFetch(MARKS, pixel, 0);
+			if (mark.a > 0.5) {
+				float mark_grain = hash(vec3(vec2(pixel), 5.0)) - 0.5;
+				colour = mark.rgb * (1.0 + mark_grain * GRAIN * 0.5);
+			}
+			vec4 glow = texelFetch(MARKS_GLOW, pixel, 0);
+			if (glow.a > 0.0) {
+				float born = round(glow.a * 255.0) - 1.0;
+				float age = mod(MARKS_FRAME - born + 254.0, 254.0);
+				float left = ceil((1.0 - age / MARKS_GLOW_FRAMES) * MARKS_GLOW_STEPS) / MARKS_GLOW_STEPS;
+				glowing = glow.rgb * MARKS_GLOW_ENERGY * clamp(left, 0.0, 1.0);
+			}
+		}
+	}
+	EMISSION += glowing;
 	ALBEDO = colour;
 	ROUGHNESS = 0.92;
 }

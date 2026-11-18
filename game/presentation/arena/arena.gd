@@ -165,6 +165,14 @@ func _build(names: Array) -> void:
 	surge.setup(self, _rng.seed)
 
 
+## The colour of the field's ground, which battlefield marks made of earth are shaded from:
+## the coliseum's paving, or the field's own ground.
+func ground_colour() -> Color:
+	if _enclosed and _terrain.field == "paved":
+		return theme.slab
+	return _colour(0)
+
+
 func _colour(index: int) -> Color:
 	return _look.colours[index]
 
@@ -708,6 +716,27 @@ func set_surge(kind: int, colour: Color, strength: float, phase: float) -> void:
 		surface.set_shader_parameter("SURGE_KIND", kind)
 		surface.set_shader_parameter("SURGE_RADIUS", FLOOR_RADIUS)
 		surface.set_shader_parameter("SURGE_PHASE", phase)
+
+
+## Shows battlefield marks (BattleMarks) on the field's upward faces: `albedo` and `glow` are
+## its canvases, PIXELS_PER_METRE wide a metre, whose first pixel's corner is at `origin` on the
+## floor. Glowing pixels' alpha holds the frame they were made on, so the glow cools on its own as
+## set_marks_frame() moves on.
+func set_marks(albedo: Texture2D, glow: Texture2D, origin: Vector2, glow_frames: int, glow_steps: int, glow_energy: float) -> void:
+	for surface in _surfaces:
+		surface.set_shader_parameter("MARKS_ON", true)
+		surface.set_shader_parameter("MARKS", albedo)
+		surface.set_shader_parameter("MARKS_GLOW", glow)
+		surface.set_shader_parameter("MARKS_ORIGIN", origin)
+		surface.set_shader_parameter("MARKS_GLOW_FRAMES", float(glow_frames))
+		surface.set_shader_parameter("MARKS_GLOW_STEPS", float(glow_steps))
+		surface.set_shader_parameter("MARKS_GLOW_ENERGY", glow_energy)
+
+
+## The marks' clock (BattleMarks.frame_code()), for their glows' cooling.
+func set_marks_frame(code: float) -> void:
+	for surface in _surfaces:
+		surface.set_shader_parameter("MARKS_FRAME", code)
 
 
 func _add_water(level: float) -> void:
