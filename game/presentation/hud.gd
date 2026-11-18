@@ -96,6 +96,10 @@ var _credits: Control
 var _move_slots: Array[Dictionary] = []
 ## The feint and guard indicators under the move bar (their shades cover them while they cool
 ## down).
+## The move bar's nodes (rebuilt when a team battle sends out the player's next Pokémon) and
+## the switch indicator.
+var _move_bar: Control
+var _switch_box: ColorRect
 var _feint_shade: ColorRect
 var _guard_shade: ColorRect
 var _hint: Label
@@ -549,6 +553,12 @@ func flash_title(text: String, colour: Color) -> void:
 ## Play mode: the player's moves along the bottom, each with its key and a cooldown shade,
 ## and under them the feint modifier's and the guard's keys, shaded while they cool down.
 func show_move_bar(names: Array, types: Array, keys: Array, feint_key := "", guard_key := "") -> void:
+	if _move_bar != null:
+		_move_bar.free()
+	_move_slots.clear()
+	_move_bar = Control.new()
+	_move_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_move_bar)
 	var slot_width := 300.0 * _scale
 	var gap := 16.0 * _scale
 	var total := names.size() * slot_width + (names.size() - 1) * gap
@@ -557,7 +567,7 @@ func show_move_bar(names: Array, types: Array, keys: Array, feint_key := "", gua
 		panel.color = Color(TypeColors.of(types[i]), 0.85)
 		panel.size = Vector2(slot_width, 70 * _scale)
 		panel.position = Vector2((_size.x - total) * 0.5 + i * (slot_width + gap), _size.y - 170 * _scale)
-		add_child(panel)
+		_move_bar.add_child(panel)
 		var label := _label("%s  %s" % [keys[i], names[i]], 30, Color.WHITE)
 		label.position = Vector2(12, 14) * _scale
 		panel.add_child(label)
@@ -579,7 +589,7 @@ func _indicator(text: String, offset: float) -> ColorRect:
 	box.color = Color(0.2, 0.22, 0.3, 0.85)
 	box.size = Vector2(300, 44) * _scale
 	box.position = Vector2((_size.x - box.size.x) * 0.5 + offset * (box.size.x + 16 * _scale) * 0.5, _size.y - 92 * _scale)
-	add_child(box)
+	_move_bar.add_child(box)
 	var label := _label(text, 24, Color.WHITE)
 	label.position = Vector2(12, 6) * _scale
 	box.add_child(label)
@@ -588,6 +598,27 @@ func _indicator(text: String, offset: float) -> ColorRect:
 	shade.size = box.size
 	box.add_child(shade)
 	return shade
+
+
+## The switch indicator above the move bar in play: the bench member a switch would send out
+## (`text`, "" to hide it) and the share of the side's switch cooldown left.
+func show_switch(text: String, cooldown: float) -> void:
+	if _switch_box == null:
+		_switch_box = ColorRect.new()
+		_switch_box.color = Color(0.2, 0.22, 0.3, 0.85)
+		_switch_box.size = Vector2(620, 44) * _scale
+		_switch_box.position = Vector2((_size.x - _switch_box.size.x) * 0.5, _size.y - 230 * _scale)
+		add_child(_switch_box)
+		var label := _label("", 24, Color.WHITE)
+		label.position = Vector2(12, 6) * _scale
+		_switch_box.add_child(label)
+		var shade := ColorRect.new()
+		shade.color = Color(0, 0, 0, 0.6)
+		shade.size = _switch_box.size
+		_switch_box.add_child(shade)
+	_switch_box.visible = not text.is_empty()
+	(_switch_box.get_child(0) as Label).text = text
+	(_switch_box.get_child(1) as ColorRect).scale.x = clampf(cooldown, 0.0, 1.0)
 
 
 ## Shades each move, and the feint and guard indicators, by how much of its cooldown is left.

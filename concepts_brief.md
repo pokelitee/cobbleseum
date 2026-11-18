@@ -439,13 +439,15 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 - One-on-one, in a round arena with walls (no ring-outs), 14 m in radius since rules version 13 (8 m until version 11, then 11 m), with fighters starting 10 m apart. Once fighters kept their distance (version 9), 8 m was cramped: they spent 11% of the time within a metre of the wall, 6% at 11 m. With terrain (§9.8) the extra room holds plateaus and cover; fighters don't use all of it at once, and needn't. Rankings use this one size.
 - The simulation runs at a fixed 30 ticks per second.
 - **Teams** (M15, rules version 24): a side brings a team of 1–6 Pokémon, one out at a time (`Battle.teams`; `fighters` holds each side's one out). After a knockout with more of the team to come there's a 2 s lull, then the next is sent out at its side's start spot, taking 1 s to land, unhittable throughout; until it lands the fighter left standing can only walk, and projectiles in flight vanish. The battle ends when a side has no one left. Abilities that act on entry act on every send-out (weather and surge setters; Intimidate on its first tick). Overtime and the time cap scale with the larger team's size. A battle of one Pokémon a side plays exactly as before.
+- **Switching** (rules version 25): whenever its fighter could act, a side can switch it for a healthy bench member. The fighter is recalled and the incoming one lands where it stood over 1 s, open to hits and unable to act. Stat stages, confusion, bad poison's count and ability timers clear on the way out; HP, major status and its timer and move cooldowns stay with the Pokémon, frozen on the bench, and nothing reaches a benched Pokémon (recoil or drain from its own projectiles still in flight included). Every send-out, a switch or the one after a knockout, starts a side-wide 5 s switch cooldown. During the lull after a knockout, the side's switch intent picks who comes out (else the first left). In play, Q (D-pad left and right) cycles the highlighted bench member on a bar above the moves and E (D-pad up) switches to it; after a knockout the highlighted one comes out.
 - **Length:** battles should last 30–45 seconds. From 60 seconds, **overtime** raises hit damage by 10% per second (×4 by the cap), so slow matchups finish. At 90 seconds the battle ends in a draw.
 - **Controls:** both fighters are controlled through the same intents:
   - a movement direction;
   - dodge;
   - use move 1–4;
   - feint move 1–4 (§9.2);
-  - guard (§9.2).
+  - guard (§9.2);
+  - switch to team member N (team battles, below).
 
   The AI and the player produce identical intents.
 
@@ -1271,7 +1273,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 **M15: team battles (singles).** One Pokémon out per side, teams of 1–6 (3v3 and 6v6 as the usual sizes), to stage battles like the games' and the anime's. Its own rules versions, one pull request each where they split cleanly:
 
 - **N fighters per side in the simulation:** done (rules version 24, §9.1). The battle, AI, director, HUD, highlights and spec stop assuming exactly two fighters. A side has a team and an active fighter; the battle ends when a side has no one left. Doubles (M17) reuse this, so no new one-per-side assumptions.
-- **Switching:** a "switch to N" intent, available whenever the fighter could act. The recall and send-out take about 1 s, in which the incoming Pokémon can be hit; then a switch cooldown of about 5 s. A knockout forces a pick. Stat stages and confusion clear on switching out; major status stays with the Pokémon.
+- **Switching:** done (rules version 25, §9.1). A "switch to N" intent, available whenever the fighter could act. The recall and send-out take about 1 s, in which the incoming Pokémon can be hit; then a switch cooldown of about 5 s. A knockout forces a pick. Stat stages and confusion clear on switching out; major status stays with the Pokémon.
 - **Team specs:** the battle spec lists each side's team (species, and optionally moves, ability, item, form and shiny per member); quick runs use a flag such as `--team=a,b,c`. Recreations of battles from the games or the anime are hand-written specs kept locally, not committed.
 - **AI:** switching is another utility candidate, scored by the matchup gain of a bench member (expected damage dealt against taken), own HP, status and stage losses, minus the send-out risk. Profiles get a switch chance, like the feint and guard chances.
 - **Entry hazards** (Stealth Rock, Spikes, Toxic Spikes, Sticky Web) right after switching, as their own rules version, acting on send-out.

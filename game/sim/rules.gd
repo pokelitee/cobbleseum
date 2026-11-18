@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 24
+const RULES_VERSION := 25
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -23,6 +23,11 @@ const HP_MULTIPLIER := 19.0
 const MAX_TEAM := 6
 const KNOCKOUT_LULL_SECONDS := 2.0
 const SEND_OUT_SECONDS := 1.0
+## Switching (§9.1): a fighter that could act can be recalled for a healthy bench member,
+## which lands where it stood over SWITCH_SECONDS, open to hits and unable to act. Every
+## send-out (a switch or the pick after a knockout) starts a side-wide SWITCH_COOLDOWN_SECONDS.
+const SWITCH_SECONDS := 1.0
+const SWITCH_COOLDOWN_SECONDS := 5.0
 
 const ARENA_RADIUS := 14.0
 ## Terrain (§9.8): the most a fighter can step up (fliers more); projectiles leave and aim at
