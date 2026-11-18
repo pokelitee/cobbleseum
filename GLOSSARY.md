@@ -42,6 +42,10 @@ _Avoid_: party, roster (that's every species)
 A team member coming into the battle, landing from its ball at its side's start spot. After a knockout with more of the team to come, it comes after a short lull and can't be hit until it lands.
 _Avoid_: switch-in (for this), spawn
 
+**Trainer**:
+The figure standing in a side's trainer's box, drawn from the games' trainer sprites, who throws its team's Pokémon out, calls them back and reacts. Presentation only.
+_Avoid_: player (that's the person playing), character
+
 **Switch**:
 Recalling the fighter out for a healthy member of its team on the bench, which lands where it stood and can be hit while it does. A side can switch again only after a cooldown that every send-out starts.
 _Avoid_: swap, substitute

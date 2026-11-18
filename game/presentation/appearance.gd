@@ -14,6 +14,10 @@ const STREAM := 103
 const SHINY_CHANCE := 1.0 / 4096.0
 ## The --form value for a species' own look.
 const BASE_FORM := "base"
+## Random stream for each side's trainer (team battles), after the looks' own.
+const TRAINER_STREAM := 104
+## A side's "trainer" for none.
+const NO_TRAINER := "none"
 
 
 ## Fills in "shiny" and "form" for the fighters of `spec` that lack them, rolled from its seed.
@@ -27,6 +31,18 @@ static func roll_missing(spec: Dictionary, roster: Dictionary) -> void:
 			fighter.form = rolled.form
 		if not fighter.has("shiny"):
 			fighter.shiny = rolled.shiny and not _look(roster.get(str(fighter.species), {}), fighter.form).get("shiny", "").is_empty()
+	# Team battles get a trainer a side, a generic one from the seed unless the spec names one.
+	var trainers := SimRandom.stream(int(spec.seed), TRAINER_STREAM)
+	for side: Dictionary in spec.get("fighters", []):
+		var pick: String = TrainerView.GENERIC[trainers.next_u32() % TrainerView.GENERIC.size()]
+		if not side.has("trainer") and Battle.members_of(side).size() > 1:
+			side.trainer = pick
+
+
+## The trainer a side's spec entry names, or "" for none.
+static func trainer_of(side: Dictionary) -> String:
+	var id := str(side.get("trainer", ""))
+	return "" if id == NO_TRAINER else id
 
 
 ## One fighter's roll for its roster `entry`: a cosmetic form, each of them (but the female

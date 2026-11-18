@@ -57,6 +57,8 @@ const STAGE_CODES := {"atk": "ATK", "def": "DEF", "spa": "SPA", "spd": "SPD", "s
 const STAGE_UP := Color("5fd068")
 const STAGE_DOWN := Color("ff6b5e")
 ## The credits card; %s is the Cobblemon line (cobblemon_credit()).
+## The credits' line for the trainer sprites: the games' art, as Pokémon Showdown hosts it.
+const TRAINER_CREDIT := "Trainer sprites: the Pokémon games, via Pokémon Showdown"
 const CREDITS_TEXT := "%s\nBattle data: Pokémon Showdown\nOriginal music · Crowd and ambience: CC0, see description\nAn unaffiliated, non-commercial fan project"
 
 var _size := Vector2.ZERO
@@ -133,6 +135,8 @@ var _condition_row: BoxContainer
 ## Whether the battle draws Cobblemon's move effects, which the credits then name too. Set
 ## before setup().
 var move_effects_credit := false
+## Whether the credits name the trainer sprites (a battle with trainers).
+var trainer_credit := false
 
 
 ## The Cobblemon line of the credits. The move effects have no licence file of their own; the
@@ -236,7 +240,8 @@ func setup(names: Array, viewport_size: Vector2, types: Array = [[], []], portra
 	_winner.add_theme_constant_override("outline_size", roundi(16 * _scale))
 	_winner.visible = false
 	add_child(_winner)
-	_credits = _card(CREDITS_TEXT % cobblemon_credit(move_effects_credit), 44, 0.85)
+	_credits = _card(CREDITS_TEXT % cobblemon_credit(move_effects_credit) + ("
+" + TRAINER_CREDIT if trainer_credit else ""), 44, 0.85)
 	_credits.visible = false
 	# Side by side above the top plate in portrait; stacked in the narrow gap between the
 	# landscape plates.

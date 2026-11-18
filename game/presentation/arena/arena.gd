@@ -64,6 +64,8 @@ var theme := {}
 var seats: Array[Transform3D] = []
 ## How far from the centre a camera may go before it would be inside the scenery.
 var camera_limit := Rules.ARENA_RADIUS + CAMERA_OVERHANG
+## In the open, trainers stand this far past the wall.
+const TRAINER_BEYOND_WALL := 1.8
 ## The weather's look over the arena (ArenaWeather) and the surge's on its field (ArenaSurge),
 ## which the view keeps in step with the battle.
 var weather: ArenaWeather
@@ -379,6 +381,16 @@ static func _corner_xz(corner: Vector2i) -> Vector2:
 	var dx := (float(h & 0xffff) / 65535.0 - 0.5) * 2.0 * CORNER_JITTER
 	var dy := (float((h >> 16) & 0xffff) / 65535.0 - 0.5) * 2.0 * CORNER_JITTER
 	return Vector2(corner.x + dx, corner.y + dy)
+
+
+## Where `side`'s trainer stands: the middle of its trainer's box on the coliseum's apron, or out
+## on the land just past the wall behind its start spot.
+func trainer_spot(side: int) -> Vector3:
+	var sign := -1.0 if side == 0 else 1.0
+	if _enclosed:
+		return Vector3(0, 0.02, sign * (Coliseum.field_radius() + Coliseum.APRON_WIDTH * 0.5))
+	var at := Vector2(0, sign * (Rules.ARENA_RADIUS + TRAINER_BEYOND_WALL))
+	return Vector3(at.x, surface_at(at, _terrain.height_at(at)), at.y)
 
 
 ## The visible ground's height under `point` (between its cell's corners), or `fallback` where

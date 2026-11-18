@@ -144,16 +144,19 @@ func _initialize() -> void:
 		"events": battle.events,
 	}
 	_write(out_dir.path_join("battle.json"), JSON.stringify(record, "  "))
-	_write(out_dir.path_join("credits.txt"), credits(not _view_args.has("--mesh-fx") and CobblemonMoveFX.available()))
+	var trainers: bool = spec.fighters.any(func(side: Dictionary) -> bool: return not Appearance.trainer_of(side).is_empty())
+	_write(out_dir.path_join("credits.txt"), credits(not _view_args.has("--mesh-fx") and CobblemonMoveFX.available(), trainers))
 	print("wrote %s" % out_dir)
 	quit(0)
 
 
 ## The clip's credits: CREDITS, then each CC0 crowd and ambience recording by title and author.
-static func credits(move_effects := false) -> String:
+static func credits(move_effects := false, trainers := false) -> String:
 	var lines: PackedStringArray = [CREDITS.strip_edges()]
 	if move_effects:
 		lines.append(MOVE_EFFECTS_CREDIT)
+	if trainers:
+		lines.append(Hud.TRAINER_CREDIT + " (official art, not openly licensed; non-commercial use only)")
 	lines.append("Crowd and ambience sounds (CC0):")
 	var manifest := AssetPipeline.load_manifest("res://sources.json")
 	for source: Dictionary in manifest.get("sources", {}).values():

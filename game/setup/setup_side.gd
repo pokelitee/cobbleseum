@@ -11,7 +11,7 @@ signal changed
 ## A side's choices: its first member's species and settings, its AI, and "bench", the rest of
 ## its team (team battles) as comma-separated species IDs.
 const DEFAULT_MEMBER := {"species": "", "form": "", "shiny": "", "ability": "", "item": "", "moves": "", "ai": Controllers.DEFAULT_AI,
-	"bench": ""}
+	"bench": "", "trainer": ""}
 const ROLLED := "Rolled by the seed"
 const SHINY_CHOICES := {"": ROLLED, "no": "No", "yes": "Yes"}
 const PREVIEW_DELAY := 0.15
@@ -32,6 +32,7 @@ var _shiny: OptionButton
 var _ability: OptionButton
 var _item: OptionButton
 var _ai: OptionButton
+var _trainer: OptionButton
 var _moves: LineEdit
 var _moves_hint: Label
 var _preview_wait := -1.0
@@ -130,6 +131,11 @@ func _init(side_index: int, data: BattleData) -> void:
 	for name in Cli.profiles():
 		_add(_ai, name.capitalize(), name)
 	_add(_ai, "Stand-in", "stand_in")
+	_trainer = _option(grid, "Trainer")
+	_add(_trainer, "Rolled in team battles", "")
+	_add(_trainer, "None", Appearance.NO_TRAINER)
+	for id in TrainerView.ALL:
+		_add(_trainer, id.capitalize(), id)
 	_form = _option(grid, "Form")
 	_shiny = _option(grid, "Shiny")
 	for key: String in SHINY_CHOICES:
@@ -170,6 +176,7 @@ func set_member(chosen: Dictionary) -> void:
 	_select_species(index if index >= 0 else 0, false)
 	_moves.text = _member.moves
 	_choose(_ai, _member.ai)
+	_choose(_trainer, _member.trainer)
 	_choose(_shiny, _member.shiny)
 	_choose(_form, _member.form)
 	_choose(_ability, _member.ability)
