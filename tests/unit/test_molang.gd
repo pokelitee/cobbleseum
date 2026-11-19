@@ -87,3 +87,12 @@ func test_text_after_a_whole_expression_is_ignored_and_reported() -> void:
 		assert_true(expression.ignored.contains(text), "reported: %s" % expression.ignored)
 		assert_almost_eq(expression.evaluate(0.0, RandomNumberGenerator.new()), cases[text], 1e-6, text)
 	assert_eq(Molang.compile("1 + 2").ignored, "", "nothing left over")
+
+
+func test_trig_rates_lists_steadily_turning_angles() -> void:
+	var rates := Molang.compile("math.clamp(math.sin(q.anim_time*90*4+45)*2,-1,1)+math.cos(q.anim_time*90/2)").trig_rates()
+	assert_eq(rates.size(), 2)
+	assert_almost_eq(rates[0], 360.0, 1e-9)
+	assert_almost_eq(rates[1], 45.0, 1e-9)
+	assert_eq(Molang.compile("math.sin(q.anim_time*q.anim_time)").trig_rates(), [], "not steady")
+	assert_eq(Molang.compile("math.sin(v.unknown*q.anim_time)").trig_rates(), [], "doesn't turn")

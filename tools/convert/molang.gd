@@ -43,6 +43,16 @@ func evaluate(anim_time: float, rng: RandomNumberGenerator) -> float:
 	return 0.0 if not error.is_empty() else _eval(_root, anim_time, rng)
 
 
+## How fast, in degrees per second, each angle given to math.sin or math.cos turns with the
+## animation time, for every such angle that turns steadily (one that is a linear function of
+## the time, like `q.anim_time*90*4+45`). Others, and angles that don't turn, are left out.
+func trig_rates() -> Array[float]:
+	var rates: Array[float] = []
+	if error.is_empty():
+		_collect_trig_rates(_root, rates)
+	return rates
+
+
 func _parse(text: String) -> void:
 	_tokens = _tokenize(text.strip_edges().to_lower().trim_suffix(";"))
 	if not error.is_empty():
@@ -191,6 +201,27 @@ func _eval(node: Array, t: float, rng: RandomNumberGenerator) -> float:
 	for arg: Array in node[2]:
 		args.append(_eval(arg, t, rng))
 	return _call(node[1], args, rng)
+
+
+func _collect_trig_rates(node: Array, rates: Array[float]) -> void:
+	match node[0]:
+		Kind.NEGATE, Kind.NOT:
+			_collect_trig_rates(node[1], rates)
+		Kind.BINARY:
+			_collect_trig_rates(node[2], rates)
+			_collect_trig_rates(node[3], rates)
+		Kind.CALL:
+			for arg: Array in node[2]:
+				_collect_trig_rates(arg, rates)
+			if node[1] == "sin" or node[1] == "cos":
+				# A throwaway generator: an angle with math.random in it isn't steady anyway.
+				var rng := RandomNumberGenerator.new()
+				var angles: Array[float] = []
+				for t in 3:
+					angles.append(_eval(node[2][0], t, rng))
+				var rate := angles[1] - angles[0]
+				if absf(rate) > 1e-6 and is_equal_approx(rate, angles[2] - angles[1]):
+					rates.append(absf(rate))
 
 
 ## Molang's trigonometry works in degrees.

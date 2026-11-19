@@ -32,7 +32,7 @@ static func strike_time(animation: Animation) -> float:
 	return best_time
 
 
-## Whether an animation holds one pose throughout. Most converted idles do (786 of 1,005
+## Whether an animation holds one pose throughout. Some converted idles do (317 of 1,005
 ## species), and some walks.
 static func is_still(animation: Animation) -> bool:
 	for track in animation.get_track_count():
