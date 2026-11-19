@@ -8,7 +8,7 @@ extends RefCounted
 
 ## Badge order along the row.
 const TIMED: Array[String] = ["brn", "par", "psn", "tox", "slp", "frz", "confusion",
-	"reflect", "lightscreen", "auroraveil", "tailwind", "safeguard", "mist"]
+	"reflect", "lightscreen", "auroraveil", "tailwind", "safeguard", "mist", "substitute", "ring", "charge"]
 ## Stat stages, in badge order after the timed effects.
 const STAGES: Array[String] = ["atk", "def", "spa", "spd", "spe"]
 
@@ -29,6 +29,12 @@ func read(fighter: Fighter) -> Array[Dictionary]:
 	var screens: Dictionary = fighter.arena.screens[fighter.side]
 	for screen: String in screens:
 		ticks[screen] = screens[screen]
+	if fighter.substitute_ticks > 0:
+		ticks.substitute = fighter.substitute_ticks
+	if fighter.ring_ticks > 0:
+		ticks.ring = fighter.ring_ticks
+	if fighter.charged_ticks > 0:
+		ticks.charge = fighter.charged_ticks
 	var sides: Dictionary = fighter.arena.sides[fighter.side]
 	for condition: String in sides:
 		ticks[condition] = sides[condition]
@@ -49,6 +55,8 @@ func read(fighter: Fighter) -> Array[Dictionary]:
 	for hazard: String in ArenaConditions.HAZARDS:
 		if hazards.has(hazard):
 			entries.append({"key": hazard, "layers": int(hazards[hazard])})
+	if fighter.stockpile > 0:
+		entries.append({"key": "stockpile", "layers": fighter.stockpile})
 	for stat in STAGES:
 		var stages: int = fighter.boosts[stat]
 		if stages != 0:
@@ -69,4 +77,6 @@ static func standard_ticks(key: String) -> int:
 			return Rules.seconds_to_ticks(Rules.SCREEN_SECONDS)
 		"tailwind", "safeguard", "mist":
 			return ArenaConditions.field_ticks(key)
+		"substitute", "ring", "charge":
+			return Rules.seconds_to_ticks(Abilities.ABILITY_SECONDS)
 	return Rules.seconds_to_ticks(Rules.STATUS_SECONDS)

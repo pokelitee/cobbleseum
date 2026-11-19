@@ -178,7 +178,11 @@ static func attack_value(move: BattleMove, raw: Dictionary, physical: bool, abil
 
 ## How useful a non-damaging move is to a species attacking with `physical` stats.
 static func utility_value(move: BattleMove, physical: bool) -> float:
+	if StatusMoves.MIXED_FOE_VALUES.has(move.id):
+		return StatusMoves.MIXED_FOE_VALUES[move.id]
 	match move.kind:
+		BattleMove.Kind.CODED:
+			return StatusMoves.moveset_value(move, physical)
 		BattleMove.Kind.STATUS:
 			return CONFUSION_VALUE if move.confuses else STATUS_VALUES.get(move.status, 0.0)
 		BattleMove.Kind.HEAL:
@@ -189,12 +193,17 @@ static func utility_value(move: BattleMove, physical: bool) -> float:
 			if not move.boosts.has(stat):
 				return 0.0
 			var stages := 0
+			var lost := 0
 			for boosted: String in move.boosts:
 				if boosted in [stat, "spe"]:
 					stages += int(move.boosts[boosted])
-			return BUFF_BASE + BUFF_PER_STAGE * stages
+				elif int(move.boosts[boosted]) < 0:
+					lost -= int(move.boosts[boosted])
+			var value := BUFF_BASE + BUFF_PER_STAGE * stages - StatusMoves.LOST_STAGE_VALUE * lost
+			# An HP cost (Fillet Away's half) is worth that much less.
+			return value * (1.0 - StatusMoves.HP_COST_VALUE * float(StatusMoves.HP_COSTS.get(move.id, 0.0)))
 		BattleMove.Kind.DEBUFF:
-			return DEBUFF_VALUE
+			return 0.0 if move.self_destructs else DEBUFF_VALUE
 	return 0.0
 
 

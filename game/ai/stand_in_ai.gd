@@ -132,17 +132,30 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 			var share := float(me.hp) / me.max_hp
 			return HEAL_SCORE * (1.0 - share) if share < HEAL_BELOW else 0.0
 		BattleMove.Kind.SELF_BUFF:
+			# Fillet Away and Clangorous Soul only with HP to spare, No Retreat once.
+			var cost := float(StatusMoves.HP_COSTS.get(move.id, 0.0))
+			if (cost > 0.0 and float(me.hp) / me.max_hp < cost + 0.3) or not StatusMoves.usable(me, foe, move):
+				return 0.0
 			var allowed := Abilities.allowed_drops(foe, move.boosts)
 			for stat: String in allowed:
 				if me.boosts[stat] < STAGE_TARGET:
 					return BUFF_SCORE
 			return 0.0
 		BattleMove.Kind.DEBUFF:
+			# Memento only when nearly knocked out; Spicy Extract's Attack rise only on a special attacker.
+			if move.self_destructs and float(me.hp) / me.max_hp > SELF_DESTRUCT_BELOW:
+				return 0.0
+			if move.boosts.get("atk", 0) > 0 and foe.stats.atk >= foe.stats.spa:
+				return 0.0
 			for stat: String in move.boosts:
-				if foe.boosts[stat] > -STAGE_TARGET:
+				if int(move.boosts[stat]) < 0 and foe.boosts[stat] > -STAGE_TARGET:
 					return DEBUFF_SCORE
 			return 0.0
 		BattleMove.Kind.STATUS:
+			# Swagger and Flatter hand the foe a boost: only to the stat it doesn't attack with.
+			for stat: String in move.boosts:
+				if int(move.boosts[stat]) > 0 and foe.stats[stat] >= foe.stats["spa" if stat == "atk" else "atk"]:
+					return 0.0
 			if move.confuses:
 				return CONFUSE_SCORE if foe.confusion_ticks == 0 and not Abilities.status_immune(foe, "confusion") 					and not me.arena.blocks_status(foe, "confusion") else 0.0
 			if not foe.status.is_empty() or Abilities.status_immune(foe, move.status) or me.arena.blocks_status(foe, move.status):
@@ -153,6 +166,8 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 			return STATUS_SCORE
 		BattleMove.Kind.ARENA:
 			return arena_score(me, foe, move)
+		BattleMove.Kind.CODED:
+			return StatusMoves.score(me, foe, move)
 	return 0.0
 
 

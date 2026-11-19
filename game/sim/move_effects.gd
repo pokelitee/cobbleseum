@@ -113,7 +113,7 @@ const TYPICAL_POWER := {"reversal": 60, "flail": 60, "grassknot": 60, "lowkick":
 ## this share of their power in a standard moveset.
 const MOVESET_SHARE := {"suckerpunch": 0.5, "thunderclap": 0.5, "upperhand": 0.1, "fakeout": 0.1, "firstimpression": 0.2,
 	"dreameater": 0.1, "belch": 0.2, "lastresort": 0.3, "synchronoise": 0.3, "focuspunch": 0.6, "poltergeist": 0.9,
-	"futuresight": 0.85, "doomdesire": 0.85, "endeavor": 0.4, "counter": 0.4, "mirrorcoat": 0.4, "metalburst": 0.4, "comeuppance": 0.4}
+	"futuresight": 0.85, "doomdesire": 0.85, "spitup": 0.0, "endeavor": 0.4, "counter": 0.4, "mirrorcoat": 0.4, "metalburst": 0.4, "comeuppance": 0.4}
 
 
 ## `move` as `attacker` would use it on `defender` now.
@@ -121,8 +121,11 @@ static func adapt(attacker: Fighter, defender: Fighter, move: BattleMove) -> Bat
 	if move.adapted or not move.is_damaging() or move.fixed_damage > 0:
 		return move
 	var arena := attacker.arena
-	return _with_conditions(move, arena.weather_for(attacker), arena.surge_for(attacker), arena.surge_for(defender),
-		power_now(attacker, defender, move))
+	var power := power_now(attacker, defender, move)
+	# Charge doubles the next Electric move (rules version 39).
+	if attacker.charged_ticks > 0 and move.type == "Electric":
+		power *= StatusMoves.CHARGE_FACTOR
+	return _with_conditions(move, arena.weather_for(attacker), arena.surge_for(attacker), arena.surge_for(defender), power)
 
 
 ## `move` under weather `weather` and surge `surge` (each "" for none) from a user that is or
@@ -194,6 +197,8 @@ static func power_now(attacker: Fighter, defender: Fighter, move: BattleMove) ->
 			return power + PER_FAINTED * attacker.arena.fainted[attacker.side]
 		"ragefist":
 			return minf(RAGE_FIST_MAX, power + PER_HIT * attacker.times_hit)
+		"spitup":
+			return StatusMoves.SPIT_UP_POWER * attacker.stockpile
 	if id in DOUBLED_ON_STATUS and not defender.status.is_empty():
 		return power * 2.0
 	if id in DOUBLED_ON_POISON and defender.status in ["psn", "tox"]:
@@ -271,7 +276,7 @@ static func usable(fighter: Fighter, foe: Fighter, move: BattleMove) -> bool:
 	# One Future Sight at a time.
 	if move.delayed:
 		return fighter.foresight.is_empty()
-	return true
+	return StatusMoves.usable(fighter, foe, move)
 
 
 ## Damage a rule-damage move (BattleMove.damage_rule) deals now, before overtime; the main series'

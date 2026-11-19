@@ -81,7 +81,8 @@ func test_status_moves_are_classified() -> void:
 	assert_eq(_move("synthesis").heal_share, 0.5 * Rules.HEAL_FACTOR, "heal amount from the override table")
 	assert_eq(_move("recover").windup_ticks, Rules.seconds_to_ticks(Rules.HEAL_WINDUP), "heals channel longer")
 	assert_true(_move("confuseray").confuses)
-	assert_true(BattleMove.from_showdown("clangoroussoul", MOVES.clangoroussoul).has("error"), "needs code Showdown's data lacks")
+	# Clangorous Soul plays since rules version 39 (StatusMoves); Geomancy still needs a charge turn.
+	assert_true(BattleMove.from_showdown("geomancy", MOVES.clangoroussoul).has("error"), "needs code Showdown's data lacks")
 
 
 func test_damaging_move_effects_are_read() -> void:
