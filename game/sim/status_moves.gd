@@ -35,6 +35,9 @@ const SPIT_UP_POWER := 100
 ## that each second (§9.9).
 const WISH_SHARE := 0.5
 const RING_HEAL := 1.0 / 80.0
+## Strength Sap heals at most Recover's main-series half of max HP (before the heal factor): healing
+## the foe's whole Attack, a third of max HP a use, it drew 6 of v39's first batch's 10 new draws.
+const SAP_MOST := 0.5
 ## Focus Energy: critical hits 1 in 8, like Dragon Cheer. Charge: the next Electric move ×2.
 const CHARGE_FACTOR := 2.0
 ## Acupressure raises a random stat by 2.
@@ -47,7 +50,7 @@ const SUBSTITUTE_SCORE := 60.0
 const RING_SCORE := 50.0
 const FOCUS_SCORE := 50.0
 const STAGE_SWING_SCORE := 30.0
-const MOVESET_VALUES := {"bellydrum": 100.0, "rest": 75.0, "strengthsap": 95.0, "wish": 80.0, "painsplit": 60.0,
+const MOVESET_VALUES := {"bellydrum": 100.0, "rest": 75.0, "strengthsap": 90.0, "wish": 80.0, "painsplit": 60.0,
 	"substitute": 70.0, "aquaring": 55.0, "ingrain": 55.0, "focusenergy": 60.0, "healbell": 50.0, "aromatherapy": 50.0,
 	"takeheart": 85.0}
 ## Foe moves that mix a status with stat changes, valued below their plain kin: Swagger and Flatter

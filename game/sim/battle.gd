@@ -942,7 +942,8 @@ func _coded(fighter: Fighter, foe: Fighter, move: BattleMove) -> void:
 		"strengthsap":
 			if foe.boosts.atk > -Rules.MAX_STAGE:
 				var scale := float(fighter.max_hp) / fighter.hp_stat
-				_heal(fighter, roundi(foe.stat("atk") * scale * Rules.HEAL_FACTOR), move.id)
+				var sapped := minf(foe.stat("atk") * scale, fighter.max_hp * StatusMoves.SAP_MOST) * Rules.HEAL_FACTOR
+				_heal(fighter, roundi(sapped), move.id)
 				_boost(foe, {"atk": -1}, move.id, fighter)
 			else:
 				_fevent("failed", fighter, {"move": move.id})
