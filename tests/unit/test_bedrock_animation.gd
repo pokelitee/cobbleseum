@@ -195,3 +195,39 @@ func test_battle_sleep_battle_faint_and_physical_attack_fill_their_roles() -> vo
 	assert_eq(roles.sleep, "mon.battle_sleep")
 	assert_eq(roles.faint, "mon.battle_faint")
 	assert_eq(roles.physical, "mon.physical_attack")
+
+
+func test_loop_period_is_a_common_period_of_the_angles() -> void:
+	assert_eq(BedrockAnimation.loop_period([]), 0.0)
+	assert_almost_eq(BedrockAnimation.loop_period([360.0]), 1.0, 1e-9, "q.anim_time*90*4 turns once a second")
+	assert_almost_eq(BedrockAnimation.loop_period([360.0, 720.0]), 1.0, 1e-9)
+	assert_almost_eq(BedrockAnimation.loop_period([360.0, 135.0]), 8.0, 1e-9, "periods of 1 s and 8/3 s meet at 8 s")
+	assert_almost_eq(BedrockAnimation.loop_period([90.0 * 4 / 3]), 3.0, 1e-9)
+	assert_almost_eq(BedrockAnimation.loop_period([11.25]), BedrockAnimation.MAX_LOOP_PERIOD, 1e-9,
+			"a slow angle turns at least once, as far as the cap allows")
+	assert_true(BedrockAnimation.loop_period([360.0, 100.0]) <= BedrockAnimation.MAX_LOOP_PERIOD, "capped")
+
+
+func test_a_keyless_loop_plays_over_its_period() -> void:
+	var skeleton := _skeleton()
+	var source := {"loop": true, "bones": {"arm": {
+		"rotation": [0, 0, "math.sin(q.anim_time*90*4+45)*10"],
+		"position": [1, 0, 0],
+	}}}
+	var animation := BedrockAnimation.build(source, "test.idle", skeleton, {}, "Skeleton", {})
+	assert_almost_eq(animation.length, 1.0, 1e-9)
+	var rotation_track := animation.find_track("Skeleton:arm", Animation.TYPE_ROTATION_3D)
+	var start: Quaternion = animation.rotation_track_interpolate(rotation_track, 0.0)
+	assert_false(start.is_equal_approx(animation.rotation_track_interpolate(rotation_track, 0.5)), "moves")
+	assert_true(start.is_equal_approx(animation.rotation_track_interpolate(rotation_track, 1.0)), "ends where it starts")
+	var position_track := animation.find_track("Skeleton:arm", Animation.TYPE_POSITION_3D)
+	assert_eq(animation.track_get_key_count(position_track), 1, "a constant channel keeps one key")
+	skeleton.free()
+
+
+func test_a_keyless_loop_without_steady_angles_stays_one_frame() -> void:
+	var skeleton := _skeleton()
+	var source := {"loop": true, "bones": {"arm": {"rotation": [0, 0, "q.anim_time*10"]}}}
+	var animation := BedrockAnimation.build(source, "test.idle", skeleton, {}, "Skeleton", {})
+	assert_almost_eq(animation.length, 1.0 / BedrockAnimation.SAMPLE_RATE, 1e-9)
+	skeleton.free()

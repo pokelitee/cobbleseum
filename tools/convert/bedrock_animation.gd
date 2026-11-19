@@ -9,6 +9,15 @@ extends RefCounted
 
 const SAMPLE_RATE := 60.0
 const CHANNELS: Array[String] = ["rotation", "position", "scale"]
+## A loop with no length and no keyframes of its own, only Molang that reads the animation time
+## (most of Cobblemon's idles), plays on continuously in Cobblemon. It is baked over the shortest
+## period on the sample grid after which every steady sine and cosine in it is back where it
+## started, to within LOOP_PHASE_TOLERANCE of a turn, and no longer than MAX_LOOP_PERIOD.
+## Cobblemon's angles are mostly `q.anim_time*90*N`, a period of 4/N s, so most loops are 8 s or
+## shorter; one with no such period (a few mix in 36 or 63 degrees a second) is baked over the
+## period that comes closest, and jumps a little as it starts over.
+const MAX_LOOP_PERIOD := 16.0
+const LOOP_PHASE_TOLERANCE := 0.002
 
 
 ## Converts one animation's JSON (`source`). `rest_rotations` maps bone name -> Bedrock rest
@@ -34,7 +43,10 @@ static func build(source: Dictionary, animation_name: String, skeleton: Skeleton
 	var animation := Animation.new()
 	var loop: Variant = source.get("loop", false)
 	animation.loop_mode = Animation.LOOP_LINEAR if loop is bool and loop else Animation.LOOP_NONE
-	animation.length = maxf(float(source.get("animation_length", last_key)), 1.0 / SAMPLE_RATE)
+	var length := float(source.get("animation_length", last_key))
+	if animation.loop_mode == Animation.LOOP_LINEAR and not source.has("animation_length") and last_key == 0.0:
+		length = loop_period(_trig_rates(channels.values()))
+	animation.length = maxf(length, 1.0 / SAMPLE_RATE)
 	var samples := int(ceil(animation.length * SAMPLE_RATE)) + 1
 	for key: Array in channels:
 		var bone_name: String = key[0]
@@ -48,7 +60,8 @@ static func build(source: Dictionary, animation_name: String, skeleton: Skeleton
 		animation.track_set_interpolation_type(track, Animation.INTERPOLATION_LINEAR)
 		var rest := skeleton.get_bone_rest(bone_index)
 		var rest_rotation: Array = rest_rotations.get(bone_name, [0, 0, 0])
-		for i in samples:
+		# A constant channel needs one key; sampling it over a long loop would only bloat the file.
+		for i in (1 if _is_constant(channel) else samples):
 			var t := minf(i / SAMPLE_RATE, animation.length)
 			var value := sample(channel, t, rng)
 			match channel_name:
@@ -60,6 +73,49 @@ static func build(source: Dictionary, animation_name: String, skeleton: Skeleton
 				_:
 					animation.scale_track_insert_key(track, t, value)
 	return animation
+
+
+## The shortest loop period for angles turning at `rates` (degrees per second), as described at
+## MAX_LOOP_PERIOD; 0 when there are none.
+static func loop_period(rates: Array[float]) -> float:
+	if rates.is_empty():
+		return 0.0
+	var best := MAX_LOOP_PERIOD
+	var best_miss := INF
+	for step in range(1, int(MAX_LOOP_PERIOD * SAMPLE_RATE) + 1):
+		var period := step / SAMPLE_RATE
+		var miss := 0.0
+		for rate in rates:
+			# Every angle must come round at least once, or a slow one would pass at the first step.
+			var turns := period * rate / 360.0
+			miss = maxf(miss, absf(turns - maxf(roundf(turns), 1.0)))
+		if miss <= LOOP_PHASE_TOLERANCE:
+			return period
+		if miss < best_miss:
+			best_miss = miss
+			best = period
+	return best
+
+
+static func _trig_rates(channels: Array) -> Array[float]:
+	var rates: Array[float] = []
+	for channel: Array in channels:
+		for key: Dictionary in channel:
+			for part: Variant in key.pre + key.post:
+				if part is Molang:
+					for rate in part.trig_rates():
+						if not rate in rates:
+							rates.append(rate)
+	return rates
+
+
+static func _is_constant(channel: Array) -> bool:
+	if channel.size() != 1 or channel[0].pre != channel[0].post:
+		return false
+	for part: Variant in channel[0].pre + channel[0].post:
+		if part is Molang:
+			return false
+	return true
 
 
 static func _compile_channel(raw: Variant, report: Dictionary) -> Array:
