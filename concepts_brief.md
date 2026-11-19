@@ -1,6 +1,6 @@
 # Cobbleseum concept brief
 
-Status: living document. First draft 2026-11-08; presentation section and milestones revised 2026-11-09; milestones M11–M17 added from a battle review 2026-11-17.
+Status: living document. First draft 2026-11-08; presentation section and milestones revised 2026-11-09; milestones M11–M17 added from a battle review 2026-11-17; M19 (tournament mode) added 2026-11-19.
 
 ## 1. Summary
 
@@ -32,6 +32,7 @@ Everything runs on the user's machine. The repository contains only original cod
 | Presentation | A camera director, impact frames and slow motion driven by battle events, framed for landscape and vertical | §12 |
 | Recording | Movie Maker at 30 fps in either format, encoded to MP4 with ffmpeg | §12 |
 | Ranking | A Bradley–Terry fit over stored results, plus a matchup matrix | §13 |
+| Tournaments | Single elimination of 8 (4–32), seeded from the ranking, one-on-one and best of 1 by default; a bracket card before each match and a champion card | §17 M19 |
 | Engine | Godot 4.7.2, GDScript | §4 |
 
 ## 3. Goals and non-goals
@@ -1238,6 +1239,7 @@ game/
   presentation/         arena, fighters, camera, HUD, effects
   play/                 player controls, battle flags and the command line's help
   setup/                the setup screen and after-battle menu
+  tournament/           tournament mode: the bracket, seeding, the window's reel and the cards
   data/                 rules constants and override tables (original data)
 tools/
   assets.gd             pipeline entry point
@@ -1246,6 +1248,7 @@ tools/
   convert/              Bedrock geometry, animation and Molang
   batch.gd              headless batch simulation
   record.gd             clip recording driver
+  tournament.gd         tournament driver: headless, or recorded as one video
 tests/
   fixtures/             original, hand-made Bedrock files
 cache/                  git-ignored; contains .gdignore
@@ -1420,10 +1423,33 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **Movesets:** moves a species uses on itself or a foe (Shell Smash, Belly Drum, Curse, Taunt, Leech Seed, Rest…) join the utility slot like any buff, status or heal; field and side moves stay out, like hazards and ally moves; damaging moves with real effects stay eligible as before.
 - **Pull requests:** (1) field and side conditions (rules version 35) done: Tailwind, Trick Room, Gravity, Magic Room, Wonder Room, Safeguard, Mist, Haze, Court Change (§9.11); (2) power and type from the weather and surge (36) done (§9.3); (3) power from HP and state, and proportional damage; (4) odd self-buffs and HP-trading status moves; (5) lingering effects (Taunt, Leech Seed, Yawn…); (6) pivots and phazers.
 
+**M19: tournament mode. Done (2026-11-19).** Tooling and presentation only, with no rules change of its own. Every game is an ordinary battle spec under the current rules, so normal battles and their checksums are untouched; a test replays each tournament game as the plain spec the ranking plays and gets the same checksum. The format was decided by the orchestrating session, which the user delegated it to; the reasons are given with each choice:
+
+- **Single elimination**, 8 entrants by default (`--size=4|8|16|32`). Eight entrants make 7 matches in 3 rounds. The bracket reads at a glance in both clip formats, and a recorded tournament runs about 3–4 minutes. Double elimination and round robins were rejected: they need about twice as many games, their brackets don't fit a vertical frame, and their repeat meetings add little because a battle is fixed by its seed. 32 entrants work but make the card's slots small.
+- **Seeding:** standard bracket order (1 v 8, 4 v 5, 2 v 7, 3 v 6), so the top two can meet only in the final. Ratings come from the newest `results/rank/v<N>/ranked/ranking.json` (§13) with N no higher than the current rules version; `--ranking=<file>` names another. The ranking is deferred until the rules settle. An older ranking is still used: seeding needs only the order, which a rules change moves little. Species missing from the ranking come after those in it, ordered by base stat total. With no ranking at all, every species is seeded by base stat total, and the run says so.
+- **Field:** drawn by the tournament seed from the top species, four times as many as the field needs (the top 32 for 8 entrants). Each seed then gives a new bracket of strong species instead of the same eight. `--pool=N` changes how many it draws from: N equal to the field gives the top seeds directly, and `--pool=all` uses the whole roster. `--entrants=a,b,...` names the field instead.
+- **Battles:** one-on-one singles by default. That is the ranking's own format, so seeds mean what they say, and games last 30–45 s.
+  - `--team-size=2..6` makes team brackets. `--doubles` makes doubles brackets, with teams of 2 unless `--team-size` says otherwise, since 2v2 is the shortest doubles battle.
+  - Team entrants are dealt by tier from the strongest N×k species of the field (N entrants, teams of k): entrant i brings the i-th strongest of each tier of N. Seed 1 is then the strongest in every tier, so seeding still means something with teams. A team is named after its first member ("Team Garchomp").
+- **Matches:** best of 1 by default, so a match is one clip; `--best-of=3|5` plays a series. Sides swap every game. A drawn game is replayed with the next game's seed. After three draws beyond the best-of, the higher seed goes through, shown as "on seeding".
+- **AI:** the `ranked` profile on every side, as in the ranking; `--ai` picks another.
+- **Determinism:** the tournament seed comes from `--seed`, or from the clock when it's missing, and is printed. It draws the field and rolls each entrant's look once (shiny, cosmetic form and, for teams, a trainer). Each game's battle seed is derived from the tournament seed, round, match and game number. The same flags always give the same tournament, and each game's spec, saved with the recording, replays and records on its own.
+- **Cards** (`TournamentCard`), laid out for both clip formats:
+  - A bracket card (5 s) comes before each match. It shows every entrant's portrait and seed, losers dimmed, winners' paths in gold and series scores. The last match's winner moves up into its new slot, and the coming match's pair is lit, with its round and names as the title. In landscape the bracket's halves come in from the left and right to the champion's slot in the middle; in portrait, from the top and bottom.
+  - Each game's intro card names its round ("Semifinal 1 · Game 2"). A game ends on its victory without the credits card.
+  - The champion card (7 s) ends the tournament: the champion's portrait, name and path through the bracket ("Beat … (2–0)"), confetti and the victory sting, then the credits.
+- **Command line:** `tools/tournament.gd` plays a bracket headless: 8 singles entrants in about 6 s, 16 best-of-3 in about 25 s. It prints the seeding, each game and the champion, and writes `results/tournaments/<date>_tournament<size>_<seed>.json`.
+  - With `--record [--format=vertical|landscape|both] [--seconds=10]` it then renders the whole tournament as one video per format: cards and game clips in order, each game checked against its headless checksum as `tools/record.gd` checks a clip.
+  - The output goes to `recordings/<date>_tournament<size>_<seed>/`: `tournament_<format>.mp4`, `tournament.json`, every game's spec in `specs/`, and `credits.txt`.
+- **In the window:** `godot --path . -- --tournament [options]` plays the bracket headless in a second or two, then shows each card and game in turn. Space or Enter skips a card, and Esc goes back to the setup screen. After the champion card, Rematch shows the same tournament again.
+- **Setup screen:** a Tournament mode sets the same options. Its panel holds the size, games a match, team size, AI, field and whether to record; the battle row's singles or doubles, arena, weather and seed apply to every game. It watches the tournament in the window or records it in the background with `tools/tournament.gd`, and shows what the bracket will be seeded by.
+- **Ranking:** a tournament doesn't feed the ranking (§13). Its results are a handful of seeded games, not a schedule.
+- **Checked:** headless brackets of every size, best-of-3 and doubles teams; the cards rendered in both formats at 8 and 16 entrants; and a 4-entrant tournament recorded in both formats. The window's reel was run under Movie Maker. **Not checked live:** the setup screen's Tournament mode and the reel's keys in a real window (Space, Esc, R).
+
 **Later:**
 
 - Arena moves and weather. Done in M10 (§9.11): weather, surges and screens; entry hazards wait for team battles (M15).
-- Tournament mode seeded from the ranking. Format not decided.
+- Tournament mode seeded from the ranking. Done as M19: single elimination of 8, seeded from the ranking (or base stat total without one).
 - Team battles. Done as M15 (singles) and M17 (doubles).
 - Shiny and form variants in clips. Done (§12.8): cosmetic forms and shinies, rolled from the seed or set by flags, with a sparkle on entry and on the name plate.
 

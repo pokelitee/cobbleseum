@@ -7,6 +7,9 @@ extends Control
 ## into the spec, exactly as on the command line; the command line it stands for shows at the
 ## bottom. Watch and play open the battle view with those flags; record runs tools/record.gd in
 ## the background. A launch with arguments goes straight to the battle view, as before.
+## Tournament mode (M19) swaps the sides for SetupTournament and builds tournament flags
+## (tournament_args()): it plays the bracket in the window (TournamentRun), or records it with
+## tools/tournament.gd in the background. A launch with --tournament starts one directly.
 ##
 ## Keys: Tab moves between controls, Enter in a species search picks the first match, F5 or
 ## Ctrl+Enter starts, Esc quits.
@@ -14,11 +17,13 @@ extends Control
 const SCENE := "res://game/setup/setup_screen.tscn"
 const VIEW_SCENE := "res://game/presentation/battle_view.tscn"
 const RECORD_SCRIPT := "res://tools/record.gd"
-const MODES: Array[String] = ["watch", "play", "record"]
+const TOURNAMENT_SCRIPT := "res://tools/tournament.gd"
+const MODES: Array[String] = ["watch", "play", "record", "tournament"]
 const MODE_HINTS := {
 	"watch": "Two AIs fight, with the planned camera, slow motion and replay.",
 	"play": "You control side A against the AI.",
 	"record": "Renders clips to recordings/ (needs ffmpeg; a few minutes).",
+	"tournament": "A seeded bracket of AI battles, watched here or recorded as one video.",
 }
 const WEATHER_CHOICES := {"": "Arena's own", "none": "None", "rain": "Rain", "sun": "Sun", "sand": "Sand", "snow": "Snow"}
 const FORMATS: Array[String] = ["vertical", "landscape", "both"]
@@ -35,6 +40,9 @@ static var _last := {}
 var _data: BattleData
 var _mode := "watch"
 var _sides: Array[SetupSide] = []
+## The two sides' row, which tournament mode swaps for its panel.
+var _sides_row: Control
+var _tournament_panel: SetupTournament
 var _mode_buttons := {}
 var _mode_hint: Label
 var _arena: OptionButton
@@ -91,13 +99,44 @@ static func problem_for(flags: Dictionary, data: BattleData) -> String:
 	return problem if not problem.is_empty() else Appearance.check(spec, data.roster)
 
 
-## The command line that runs the same battle: the game's, or tools/record.gd's with `record`.
-static func command_line(args: PackedStringArray, record: bool) -> String:
+## The tournament flags for a setup in tournament mode: its "tournament" (SetupTournament.choices())
+## and the battle row's doubles, arena, weather and seed, each left out at its default. For the
+## game (--tournament), or for tools/tournament.gd with --record and the format and length when
+## it is recorded.
+static func tournament_args(setup: Dictionary) -> PackedStringArray:
+	var chosen: Dictionary = setup.tournament
+	var args: PackedStringArray = ["--record"] if chosen.record else ["--tournament"]
+	if setup.get("doubles", false):
+		args.append("--doubles")
+	var pool := str(chosen.pool)
+	if pool == "top":
+		var team := int(chosen.team_size) if not str(chosen.team_size).is_empty() else (Tournament.DEFAULT_DOUBLES_TEAM if setup.get("doubles", false) else 1)
+		pool = str((int(chosen.size) if not str(chosen.size).is_empty() else Tournament.DEFAULT_SIZE) * team)
+	var values := [["size", chosen.size], ["best-of", chosen.best_of], ["team-size", chosen.team_size],
+		["ai", "" if chosen.ai == Controllers.DEFAULT_AI else chosen.ai], ["seed", setup.get("seed", "")], ["pool", pool],
+		["arena", setup.get("arena", "")], ["weather", setup.get("weather", "")]]
+	for pair: Array in values:
+		if not str(pair[1]).is_empty():
+			args.append("--%s=%s" % [pair[0], pair[1]])
+	if chosen.record:
+		args.append_array(["--format=%s" % setup.get("format", "vertical"), "--seconds=%d" % int(setup.get("seconds", 10))])
+	return args
+
+
+## Why a setup's tournament can't start, or "": the command line's checks of its options.
+static func tournament_problem(setup: Dictionary) -> String:
+	var parsed := Tournament.parse(tournament_args(setup))
+	return parsed.get("error", "")
+
+
+## The command line that runs the same battle: the game's, or `script`'s (tools/record.gd by
+## default) with `record`.
+static func command_line(args: PackedStringArray, record: bool, script := RECORD_SCRIPT) -> String:
 	var quoted: PackedStringArray = []
 	for arg in args:
 		quoted.append("\"%s\"" % arg if arg.contains(" ") else arg)
 	if record:
-		return "godot --headless --path . --script %s -- %s" % [RECORD_SCRIPT, " ".join(quoted)]
+		return "godot --headless --path . --script %s -- %s" % [script, " ".join(quoted)]
 	return "godot --path . -- " + " ".join(quoted)
 
 
@@ -105,7 +144,11 @@ func _ready() -> void:
 	UiFonts.use_by_default()
 	if not _arguments_used:
 		_arguments_used = true
-		if not OS.get_cmdline_user_args().is_empty():
+		var args := OS.get_cmdline_user_args()
+		if Tournament.wanted(args):
+			_launch_from_command_line.call_deferred(args)
+			return
+		if not args.is_empty():
 			get_tree().change_scene_to_file.call_deferred(VIEW_SCENE)
 			return
 	theme = MenuTheme.build()
@@ -120,6 +163,19 @@ func _ready() -> void:
 	_restore(_last if not _last.is_empty() else {"mode": "watch",
 		"sides": [{"species": DEFAULT_SPECIES}, {"species": DEFAULT_FOE}]})
 	_sides[0].focus_search()
+
+
+## `godot --path . -- --tournament [options]`: --help prints the tournament options; otherwise
+## the tournament plays, or the game quits with why it can't.
+func _launch_from_command_line(args: PackedStringArray) -> void:
+	if Cli.wants_help(args):
+		print(Tournament.HELP)
+		get_tree().quit(0)
+		return
+	var problem := TournamentRun.launch(get_tree(), args)
+	if not problem.is_empty():
+		printerr("error: " + problem)
+		get_tree().quit(1)
 
 
 func _build() -> void:
@@ -169,6 +225,11 @@ func _build() -> void:
 			var vs := MenuTheme.title("VS", 72, Hud.GOLD)
 			vs.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			sides.add_child(vs)
+	_sides_row = sides
+	_tournament_panel = SetupTournament.new()
+	_tournament_panel.visible = false
+	_tournament_panel.changed.connect(func() -> void: _set_mode(_mode))
+	root.add_child(_tournament_panel)
 
 	var footer := PanelContainer.new()
 	footer.add_theme_stylebox_override("panel", MenuTheme.plate())
@@ -263,16 +324,17 @@ func _build() -> void:
 		option.item_selected.connect(func(_index: int) -> void: _refresh())
 
 
-## The setup as chosen (see flags_for()), with the record options.
+## The setup as chosen (see flags_for()), with the record options and the tournament panel's choices.
 func _setup() -> Dictionary:
 	return {"mode": _mode, "sides": _sides.map(func(side: SetupSide) -> Dictionary: return side.member()),
 		"doubles": _value(_battle) == "doubles", "arena": _value(_arena), "weather": _value(_weather), "seed": _seed.text.strip_edges(),
-		"format": _value(_format), "seconds": int(_seconds.value)}
+		"format": _value(_format), "seconds": int(_seconds.value), "tournament": _tournament_panel.choices()}
 
 
 func _restore(setup: Dictionary) -> void:
 	for side in 2:
 		_sides[side].set_member(setup.sides[side])
+	_tournament_panel.set_choices(setup.get("tournament", {}))
 	_choose(_battle, "doubles" if setup.get("doubles", false) else "")
 	_choose(_arena, str(setup.get("arena", "")))
 	_choose(_weather, str(setup.get("weather", "")))
@@ -287,9 +349,16 @@ func _set_mode(mode: String) -> void:
 	_mode = mode
 	_mode_hint.text = MODE_HINTS[mode]
 	_sides[0].set_player(mode == "play")
-	_record_options.visible = mode == "record"
-	_start.text = {"watch": "Watch", "play": "Fight!", "record": "Record"}[mode]
+	_sides_row.visible = mode != "tournament"
+	_tournament_panel.visible = mode == "tournament"
+	_record_options.visible = _records()
+	_start.text = {"watch": "Watch", "play": "Fight!", "record": "Record"}.get(mode, "Record" if _records() else "Start")
 	_refresh()
+
+
+## Whether starting renders a video: record mode, or a tournament set to record.
+func _records() -> bool:
+	return _mode == "record" or (_mode == "tournament" and _tournament_panel.choices().record)
 
 
 ## Keeps the two shiny choices consistent: once one side is set, the other can't stay rolled
@@ -310,18 +379,21 @@ func _refresh() -> void:
 	if _sides.size() < 2 or _start == null:
 		return
 	var setup := _setup()
-	var flags := flags_for(setup)
-	var problem := problem_for(flags, _data)
+	var tournament := _mode == "tournament"
+	var problem := tournament_problem(setup) if tournament else problem_for(flags_for(setup), _data)
 	if _recording != null:
 		return
 	_status.text = problem if not problem.is_empty() else ""
 	_status.add_theme_color_override("font_color", Hud.DANGER if not problem.is_empty() else Color.WHITE)
 	_start.disabled = not problem.is_empty()
-	_command.text = command_line(_arguments(setup), _mode == "record")
+	_command.text = command_line(_arguments(setup), _records(), TOURNAMENT_SCRIPT if tournament else RECORD_SCRIPT)
 
 
-## The command-line arguments for the setup: its battle flags, and the record options.
+## The command-line arguments for the setup: its battle flags, and the record options; or its
+## tournament flags.
 func _arguments(setup: Dictionary) -> PackedStringArray:
+	if setup.mode == "tournament":
+		return tournament_args(setup)
 	var args := SpecFlags.to_args(flags_for(setup))
 	if setup.mode == "record":
 		args.append_array(["--format=%s" % setup.format, "--seconds=%d" % setup.seconds])
@@ -333,27 +405,46 @@ func _on_start() -> void:
 		return
 	var setup := _setup()
 	_last = setup
-	if _mode == "record":
-		_start_recording(_arguments(setup))
+	if _records():
+		_start_recording(_arguments(setup), TOURNAMENT_SCRIPT if _mode == "tournament" else RECORD_SCRIPT)
+		return
+	if _mode == "tournament":
+		_status.remove_theme_color_override("font_color")
+		_status.text = "Playing the bracket…"
+		_start.disabled = true
+		_start_tournament.call_deferred(_arguments(setup))
 		return
 	BattleView.launch_args = _arguments(setup)
 	get_tree().change_scene_to_file(VIEW_SCENE)
 
 
-func _start_recording(args: PackedStringArray) -> void:
+## Plays the bracket (a second or so, longer for big brackets of teams) and shows its first card.
+func _start_tournament(args: PackedStringArray) -> void:
+	# Let the "Playing the bracket…" line draw before the work starts.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var problem := TournamentRun.launch(get_tree(), args)
+	if not problem.is_empty():
+		_status.text = problem
+		_status.add_theme_color_override("font_color", Hud.DANGER)
+		_start.disabled = false
+
+
+func _start_recording(args: PackedStringArray, script: String) -> void:
 	_recording = Thread.new()
-	_recording.start(_record.bind(args))
+	_recording.start(_record.bind(script, args))
 	_start.disabled = true
 	_open_folder.visible = false
 	_status.remove_theme_color_override("font_color")
 	_status.text = "Recording… a render window opens for each format; this takes a few minutes."
 
 
-## Runs tools/record.gd in its own process (on the recording thread).
-static func _record(args: PackedStringArray) -> Dictionary:
+## Runs `script` (tools/record.gd or tools/tournament.gd) in its own process (on the recording
+## thread).
+static func _record(script: String, args: PackedStringArray) -> Dictionary:
 	var output: Array = []
 	var code := OS.execute(OS.get_executable_path(), ["--headless", "--path", ProjectSettings.globalize_path("res://"),
-		"--script", RECORD_SCRIPT, "--"] + Array(args), output, true)
+		"--script", script, "--"] + Array(args), output, true)
 	return {"code": code, "log": "".join(output)}
 
 
