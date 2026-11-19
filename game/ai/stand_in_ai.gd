@@ -123,6 +123,7 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 		return 0.0
 	if move.is_damaging():
 		# Hitting into an absorbing ability only helps the foe.
+		move = MoveEffects.adapt(me, foe, move)
 		if Abilities.absorbs(foe, move):
 			return 0.0
 		return _damage_score(me, move)

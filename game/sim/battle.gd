@@ -579,7 +579,7 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 				fighter.helped = fighter.helping_ticks > 0 and move.is_damaging()
 				if fighter.helped:
 					fighter.helping_ticks = 0
-				_fevent("windup", fighter, _aimed(foe, {"move": move.id}))
+				_fevent("windup", fighter, _aimed(foe, _typed({"move": move.id}, fighter, foe, move)))
 			elif fighter.can_feint(feint) and _gap(fighter, foe) <= fighter.moves[feint].reach():
 				var move := fighter.moves[feint]
 				fighter.action = Fighter.Action.WINDUP
@@ -791,7 +791,7 @@ func _fire(fighter: Fighter, foe: Fighter, move_index: int, direction: Vector2) 
 	if doubles:
 		projectile.target = index_of(foe)
 	projectiles.append(projectile)
-	_fevent("fire", fighter, _aimed(foe, {"move": move.id}))
+	_fevent("fire", fighter, _aimed(foe, _typed({"move": move.id}, fighter, foe, move)))
 
 
 ## An ALLY move (doubles): boosts or a boon for the ally (and the user, for Howl). Without an
@@ -997,6 +997,7 @@ func _move_projectiles() -> void:
 
 ## `spread` is Rules.SPREAD_FACTOR for a spread move hitting several fighters at once, else 1.
 func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0) -> void:
+	move = MoveEffects.adapt(attacker, defender, move)
 	if move.id in ArenaConditions.SCREEN_BREAKERS:
 		for screen: String in conditions.screens[defender.side].keys():
 			conditions.screens[defender.side].erase(screen)
@@ -1017,9 +1018,9 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0)
 		defender.sturdy_used = defender.sturdy_used or holds
 		defender.item_used = defender.item_used or sash
 	defender.hp -= dealt
-	_fevent("hit", attacker, {"move": move.id, "damage": dealt if holds or sash else outcome.damage, "crit": outcome.crit,
+	_fevent("hit", attacker, _typed({"move": move.id, "damage": dealt if holds or sash else outcome.damage, "crit": outcome.crit,
 		"effectiveness": outcome.effectiveness, "hp": defender.hp, "slot": attacker.slot, "target_side": defender.side,
-		"target_slot": defender.slot})
+		"target_slot": defender.slot}, attacker, defender, move))
 	if holds:
 		_ability_event(defender)
 	if sash:
@@ -1052,6 +1053,9 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0)
 		_boost(attacker, move.self_boosts, move.id)
 	if move.clears == "own" and not attacker.is_knocked_out() and not conditions.hazards[attacker.side].is_empty():
 		_clear_side(attacker.side, move.id)
+	if move.id in ArenaConditions.SURGE_BREAKERS and not conditions.surge.is_empty():
+		_fevent("surge_end", attacker, {"surge": conditions.surge, "move": move.id})
+		conditions.set_surge("", 0)
 
 
 ## A hit stopped by the defender's guard: no damage or effects. Parrying a melee strike
@@ -1707,6 +1711,7 @@ static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data:
 ## items, weather and surge), the screens' multiplier (which a critical hit ignores) and the
 ## compressed effectiveness. An ability immunity counts as a type immunity (§9.9).
 static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData) -> Dictionary:
+	move = MoveEffects.adapt(attacker, defender, move)
 	var attack := move.attack_stat(attacker, defender)
 	var defense := defender.stat(attacker.arena.defensive_stat(move))
 	var power := move.power * Abilities.power_factor(attacker, move)
@@ -1864,6 +1869,15 @@ func _aimed(at: Fighter, details: Dictionary) -> Dictionary:
 	if doubles:
 		details.target_side = at.side
 		details.target_slot = at.slot
+	return details
+
+
+## `details` with the move's "move_type" when the battle's state changes it (Weather Ball in rain,
+## MoveEffects), so the view shows the move as it plays.
+static func _typed(details: Dictionary, attacker: Fighter, defender: Fighter, move: BattleMove) -> Dictionary:
+	var shown := MoveEffects.adapt(attacker, defender, move)
+	if shown.type != move.type or move.adapted:
+		details.move_type = shown.type
 	return details
 
 

@@ -37,11 +37,10 @@ const EXCLUDED: Array[String] = ["clangoroussoul", "filletaway", "geomancy", "me
 ## first, Future Sight and Doom Desire land later, Dream Eater needs a sleeping target,
 ## Synchronoise a shared type, Belch a berry; Steel Beam and Mind Blown cost half the user's
 ## HP; Shell Trap and Beak Blast need the user hit first; Water Spout, Eruption and Dragon
-## Energy lose power as the user's HP falls; Steel Roller needs a terrain and Poltergeist a
-## held item.
+## Energy lose power as the user's HP falls; Poltergeist needs a held item.
 const DAMAGING_EXCLUDED: Array[String] = ["focuspunch", "lastresort", "futuresight", "doomdesire", "dreameater",
 	"synchronoise", "belch", "steelbeam", "mindblown", "shelltrap", "beakblast", "waterspout", "eruption",
-	"dragonenergy", "steelroller", "poltergeist"]
+	"dragonenergy", "poltergeist"]
 ## Heal amounts Showdown computes in code, as [numerator, denominator] of max HP.
 const HEAL_OVERRIDES := {"morningsun": [1, 2], "synthesis": [1, 2], "moonlight": [1, 2], "shoreup": [1, 2]}
 ## Doubles' ally moves (M17): what each does to the ally ("helping": Helping Hand, "cheer":
@@ -119,6 +118,25 @@ var with_user := false
 var team_heal := false
 var cures := false
 var wide_guard := false
+## A variant made by MoveEffects for the battle's state (another type or power): it isn't adapted
+## again. Variants of this move, by "type|power".
+var adapted := false
+var _variants := {}
+
+
+## This move with another type and power (MoveEffects), made once and kept.
+func variant(new_type: String, new_power: int) -> BattleMove:
+	var key := "%s|%d" % [new_type, new_power]
+	if not _variants.has(key):
+		var copy := BattleMove.new()
+		for property in get_property_list():
+			if property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE and property.name != "_variants":
+				copy.set(property.name, get(property.name))
+		copy.type = new_type
+		copy.power = new_power
+		copy.adapted = true
+		_variants[key] = copy
+	return _variants[key]
 
 
 ## The attacking stat this move's damage uses, after stages (and burn for Attack).
