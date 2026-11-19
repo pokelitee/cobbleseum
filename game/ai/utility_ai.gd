@@ -111,6 +111,8 @@ const ALLY_PUSH := 0.8
 ## Helping Hand is worth the most once the boost it adds would take this share of the target's
 ## max HP.
 const HELPING_SHARE := 0.1
+## A pivot (U-turn) when the bench has no one better is worth this share of its damage.
+const PIVOT_COST := 0.7
 
 var profile: AIProfile
 var random: SimRandom
@@ -174,6 +176,10 @@ func decide(battle: Battle, index: int) -> Dictionary:
 	if battle.frozen(me) or me.is_knocked_out():
 		_intent = {}
 		return {}
+	# After a pivot (U-turn), pick who comes in.
+	if me.pivot_ticks > 0:
+		var pivot_pick := best_pick(battle, index)
+		return {"switch": pivot_pick} if pivot_pick >= 0 else {}
 	if _doubles:
 		_remember_foes(battle, me)
 		var ally := battle.ally_of(me)
@@ -446,6 +452,9 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 					adjusted = 0.0
 			# The stand-in's value of 0 is a veto (self-destructing early, sinking a stat below -2);
 			# the damage curve's floor would otherwise turn it into a usable score.
+			# A pivot (U-turn) also switches: worth less when no one on the bench trades better.
+			if move.switches == "pivot" and SwitchMoves.bench(me) > 0 and pivot_gain(battle, me, foe) < 0.0:
+				adjusted *= PIVOT_COST
 			considerations.damage = _sample("damage", share * adjusted) if adjusted > 0.0 else 0.0
 			considerations.finisher = _sample("finisher", expected / maxf(foe.hp, 1.0))
 			if move.kind == BattleMove.Kind.MELEE and (Abilities.punishes_contact(foe) or Items.punishes_contact(foe)):
@@ -461,6 +470,8 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		else:
 			var worth := change_value(battle, me, foe, move) if Volatiles.CHANGERS.has(move.id) else StandInAI.move_score(me, foe, move)
+			if SwitchMoves.CODED.has(move.id):
+				worth = SwitchMoves.score(me, foe, move, pivot_gain(battle, me, foe))
 			considerations.value = _sample("value", worth / VALUE_SCALE)
 			if move.channels:
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
@@ -907,6 +918,17 @@ func _add_switch(battle: Battle, me: Fighter, foe: Fighter, urgency: float, cand
 		"gain": minf(SWITCH_BASE + SWITCH_SLOPE * best_gain, SWITCH_TOP),
 		"safe_to_commit": 1.0 - 0.6 * urgency,
 	}, best))
+
+
+## How much better the side's best bench member would trade against `foe` than `me` (a pivot's
+## gain); -1 with no one on the bench.
+static func pivot_gain(battle: Battle, me: Fighter, foe: Fighter) -> float:
+	var staying := trade(me, foe, battle.data())
+	var best := -1.0
+	for member: Fighter in battle.healthy(me.side):
+		if not battle.fighters.has(member):
+			best = maxf(best, switch_worth(member, foe, battle.data()) - staying)
+	return best
 
 
 ## A bench member's worth against `foe`: its trade with the HP it would lose while it lands

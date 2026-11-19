@@ -142,6 +142,9 @@ var damage_rule := ""
 ## Rules version 40: the lingering effect (Volatiles) it leaves on the target, or "self:" one on the
 ## user, when it lands or hits; "" for none.
 var volatile := ""
+## Rules version 41 (SwitchMoves): "pivot" (the user switches out), "phaze" (the target is
+## dragged out) or "wish" (Healing Wish) for moves that switch fighters in team battles; "" else.
+var switches := ""
 var delayed := false
 var cost_share := 0.0
 var crash_share := 0.0
@@ -232,6 +235,7 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		move.self_destructs = id == "finalgambit"
 	move.delayed = id in DELAYED
 	move.volatile = str(Volatiles.ON_HIT.get(id, ""))
+	move.switches = str(SwitchMoves.ON_HIT.get(id, ""))
 	move.cost_share = 0.5 * Rules.HP_SHARE_READING if id in COSTS_HP else 0.0
 	move.crash_share = 0.5 * Rules.HP_SHARE_READING if data.get("hasCrashDamage", false) else 0.0
 	var fixed: Variant = data.get("damage")
@@ -311,6 +315,10 @@ static func _classify_status_move(id: String, data: Dictionary, move: BattleMove
 	if id in StatusMoves.CODED or id in Volatiles.SELF_MOVES:
 		move.kind = Kind.CODED
 		return ""
+	if SwitchMoves.CODED.has(id):
+		move.kind = Kind.CODED
+		move.switches = SwitchMoves.CODED[id]
+		return ""
 	if Volatiles.FOE_MOVES.has(id):
 		move.kind = Kind.STATUS
 		move.volatile = Volatiles.FOE_MOVES[id]
@@ -364,6 +372,7 @@ static func _classify_status_move(id: String, data: Dictionary, move: BattleMove
 		return ""
 	if not weather.is_empty() or not surge.is_empty() or screen in ArenaConditions.SCREENS:
 		move.kind = Kind.ARENA
+		move.switches = "pivot" if id in SwitchMoves.ARENA_PIVOTS else ""
 		move.weather = weather
 		move.surge = surge
 		move.screen = screen if screen in ArenaConditions.SCREENS else ""

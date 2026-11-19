@@ -67,7 +67,9 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 		# Doubles' ally moves likewise, and the field and side conditions (Tailwind, Trick Room,
 		# Gravity, the rooms, Safeguard, Mist), Haze and Court Change, whose worth depends on the
 		# matchup and the team.
-		if not move.hazard.is_empty() or move.clears == "both" or move.is_ally_move() or not move.field_effect.is_empty():
+		# Switching status moves (Teleport, Roar, Healing Wish) only matter in team battles too.
+		if not move.hazard.is_empty() or move.clears == "both" or move.is_ally_move() or not move.field_effect.is_empty() \
+				or SwitchMoves.CODED.has(move.id):
 			continue
 		if move.kind == BattleMove.Kind.ARENA:
 			arena_moves.append(move)

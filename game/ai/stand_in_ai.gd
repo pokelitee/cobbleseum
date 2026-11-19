@@ -70,6 +70,7 @@ func decide(battle: Battle, index: int) -> Dictionary:
 	var me := battle.fighters[index]
 	var foe := battle.target_of(me)
 	var intent := {"use": -1, "move": Vector2.ZERO, "dodge": Vector2.ZERO}
+	# After a pivot (U-turn), the first on the bench comes in (the battle's default).
 	if not me.can_act() or battle.frozen(me):
 		return intent
 	# In doubles it goes for the nearest foe up.
