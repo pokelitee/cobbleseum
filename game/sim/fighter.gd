@@ -92,8 +92,20 @@ var item_used := false
 var can_evolve := false
 ## The arena conditions (weather) the battle shares with both fighters; stats read them.
 var arena := ArenaConditions.new()
-## Multi-hit strikes still to come: {"ticks": int, "move": index, "last": bool}.
+## Multi-hit strikes still to come: {"ticks": int, "move": index, "last": bool, "hit": int}.
 var followups: Array[Dictionary] = []
+## What just happened, for moves that follow it (rules version 37, MoveEffects): ticks left of
+## Rules.RECENT_SECONDS since it was hit by a move, took any damage, missed, or had a stat
+## lowered; hits taken all battle (Rage Fist); ticks since it last came out; the moves it has used
+## since (Last Resort); and its run of one growing move ({"move", "count", "ticks"}, Fury Cutter).
+var hit_ticks := 0
+var hurt_ticks := 0
+var missed_ticks := 0
+var lowered_ticks := 0
+var times_hit := 0
+var out_ticks := 0
+var used_moves := {}
+var combo := {}
 
 
 static func create(side_index: int, species_id_value: String, species: Dictionary, battle_moves: Array[BattleMove], radius_metres: float) -> Fighter:

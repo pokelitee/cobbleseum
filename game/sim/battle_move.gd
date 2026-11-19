@@ -33,14 +33,15 @@ const STATUSES: Array[String] = ["brn", "par", "psn", "tox", "slp", "frz"]
 ## knocking out the user, a gender check), so their data alone would play wrong.
 const EXCLUDED: Array[String] = ["clangoroussoul", "filletaway", "geomancy", "memento", "captivate"]
 ## Damaging moves whose condition or cost lives in Showdown's code, so they'd play as free
-## strong hits: Focus Punch fails if the user is hit, Last Resort needs its other moves used
-## first, Future Sight and Doom Desire land later, Dream Eater needs a sleeping target,
-## Synchronoise a shared type, Belch a berry; Steel Beam and Mind Blown cost half the user's
-## HP; Shell Trap and Beak Blast need the user hit first; Water Spout, Eruption and Dragon
-## Energy lose power as the user's HP falls; Poltergeist needs a held item.
-const DAMAGING_EXCLUDED: Array[String] = ["focuspunch", "lastresort", "futuresight", "doomdesire", "dreameater",
-	"synchronoise", "belch", "steelbeam", "mindblown", "shelltrap", "beakblast", "waterspout", "eruption",
-	"dragonenergy", "poltergeist"]
+## strong hits: Future Sight and Doom Desire land later; Steel Beam and Mind Blown cost half the
+## user's HP; Shell Trap and Beak Blast need the user hit first.
+const DAMAGING_EXCLUDED: Array[String] = ["futuresight", "doomdesire", "steelbeam", "mindblown", "shelltrap", "beakblast"]
+## Moves whose power Showdown works out in code (MoveEffects): the power the rules give them for
+## cooldowns (their power in battle follows the state).
+const CODE_POWER := {"reversal": 60, "flail": 60, "hardpress": 100, "crushgrip": 120, "wringout": 120, "grassknot": 60,
+	"lowkick": 60, "heavyslam": 60, "heatcrash": 60, "gyroball": 60, "electroball": 60, "present": 60}
+## Focus Punch is a channel like a heal: any hit cancels it.
+const CHANNELLED: Array[String] = ["focuspunch"]
 ## Heal amounts Showdown computes in code, as [numerator, denominator] of max HP.
 const HEAL_OVERRIDES := {"morningsun": [1, 2], "synthesis": [1, 2], "moonlight": [1, 2], "shoreup": [1, 2]}
 ## Doubles' ally moves (M17): what each does to the ally ("helping": Helping Hand, "cheer":
@@ -121,6 +122,8 @@ var wide_guard := false
 ## A variant made by MoveEffects for the battle's state (another type or power): it isn't adapted
 ## again. Variants of this move, by "type|power".
 var adapted := false
+## A long wind-up that any hit cancels (heals and Focus Punch).
+var channels := false
 var _variants := {}
 
 
@@ -174,6 +177,7 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		if move.kind == Kind.HEAL:
 			windup = Rules.HEAL_WINDUP
 			move.heal_share *= Rules.HEAL_FACTOR
+			move.channels = true
 		move.windup_ticks = Rules.seconds_to_ticks(windup)
 		move.recovery_ticks = Rules.seconds_to_ticks(Rules.STATUS_MOVE_RECOVERY)
 		var cooldown := Rules.status_move_cooldown_seconds(pp)
@@ -195,6 +199,7 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 
 	if id in DAMAGING_EXCLUDED:
 		return {"error": "%s needs move-specific code, not supported yet" % id}
+	move.power = int(CODE_POWER.get(id, move.power))
 	var fixed: Variant = data.get("damage")
 	if fixed is String and fixed == "level":
 		move.fixed_damage = Rules.LEVEL
@@ -247,6 +252,9 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 	var recovery: float = {Kind.MELEE: Rules.MELEE_RECOVERY, Kind.PROJECTILE: Rules.PROJECTILE_RECOVERY, Kind.AREA: Rules.AREA_RECOVERY}[move.kind]
 	if priority > 0:
 		windup *= Rules.PRIORITY_WINDUP_FACTOR
+	if id in CHANNELLED:
+		windup = Rules.HEAL_WINDUP
+		move.channels = true
 	if move.charges:
 		windup += Rules.CHARGE_EXTRA
 	if move.recharges:

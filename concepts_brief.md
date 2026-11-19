@@ -530,7 +530,7 @@ For the 850 standard moves, 638 are playable under rules version 35: 240 melee, 
 - **Priority:** shortens the wind-up.
 - **Secondary effects** roll on hit using the battle's random stream.
 - **Data effects:** drain, recoil and stat changes come straight from the data.
-- **Moves with extra code:** Showdown implements extra effects in code for 91 damaging moves. Most play as plain hits. Those whose condition or cost would otherwise make them free strong hits are left out: Focus Punch, Last Resort, Future Sight, Doom Desire, Dream Eater, Synchronoise, Belch, Steel Beam, Mind Blown, Shell Trap, Beak Blast, Water Spout, Eruption, Dragon Energy and Poltergeist. M18 (§17) gives the rest their real effects, version by version.
+- **Moves with extra code:** Showdown implements extra effects in code for 91 damaging moves. Most play as plain hits. Those whose condition or cost would otherwise make them free strong hits were left out until M18 (§17) gave them their real effects, version by version; under rules version 37 still out: Future Sight, Doom Desire, Steel Beam, Mind Blown, Shell Trap and Beak Blast.
 - **Weather and surge** (M18, rules version 36; `MoveEffects`): a hit, and every AI estimate of one, asks for the move as it plays now, a variant with another type or power that STAB, effectiveness, abilities, items and the weather all read.
   - Weather Ball takes the weather's type (Water, Fire, Rock, Ice) at 100 power; Terrain Pulse the surge's (Electric, Grass, Fairy, Psychic) at 100 from a grounded user.
   - Rising Voltage doubles against a grounded foe on electric ground; Expanding Force, Psyblade and Misty Explosion are ×1.5 from a grounded user on psychic, electric and misty ground. Expanding Force doesn't spread in doubles.
@@ -539,6 +539,17 @@ For the 850 standard moves, 638 are playable under rules version 35: 240 melee, 
   - Steel Roller can only be used on a surge; it and Ice Spinner end the surge when they hit.
   - Standard movesets see Weather Ball and Terrain Pulse as they play under the weather or surge the species' own ability brings (a Drizzle species' Weather Ball is a 100-power Water attack), and a weather's or surge's value counts these moves' change. The AIs aim with the adapted move.
   - In the view a move that changed type looks like its new type (its events carry `move_type`).
+- **HP and state** (M18, rules version 37; `MoveEffects`): power follows the main series' rules on the battle's state, read the same way for hits and the AI's estimates.
+  - **HP:** Eruption, Water Spout and Dragon Energy (150 × the user's HP share), Reversal and Flail (20–200 as the user's HP falls), Hard Press, Crush Grip and Wring Out (the target's HP share), Brine (×2 against a target at half or less).
+  - **Status, stages, weight, Speed and items:** Facade (×2 with a status of its own, ignoring burn's halving), Hex and Infernal Parade (×2 on a target with a status), Venoshock and Barb Barrage (on a poisoned one); Stored Power and Power Trip (+20 a raised stage); Grass Knot, Low Kick, Heavy Slam and Heat Crash (weights), Gyro Ball and Electro Ball (Speeds after stages and Tailwind); Acrobatics (×2 without a working item), Knock Off (×1.5 against one, which it knocks off for the battle), Grav Apple (×1.5 under Gravity).
+  - **What just happened**, the main series' "this turn" read as the last 3 s (`Rules.RECENT_SECONDS`): Payback, Avalanche and Revenge (×2 after the user was hit), Assurance (after the target took damage), Stomping Tantrum and Temper Flare (after the user missed), Lash Out (after its stats fell), Retaliate (after a teammate fainted).
+  - **The battle so far:** Last Respects (+50 per teammate fainted), Rage Fist (+50 per hit taken, up to 350), Fury Cutter, Rollout, Ice Ball and Echoed Voice (doubling each use while used again within 3 s of the cooldown ending, up to their main-series caps).
+  - **Effectiveness:** Freeze-Dry is super effective on Water, Flying Press adds Flying's effectiveness, Collision Course and Electro Drift are ×4/3 on a super-effective hit, Synchronoise only reaches a foe sharing a type with the user (else ×0.25, as an immunity).
+  - **Rolls and hits:** Fickle Beam doubles 30% of the time; Present deals 40, 80 or 120 or heals the target a sixth of the main series' quarter (§9.9); Triple Axel and Triple Kick hit harder each time; False Swipe never knocks out.
+  - **When they work:** Sucker Punch and Thunderclap only while the foe winds up an attack (a feint counts), Upper Hand only against a priority one; Fake Out and First Impression only in the user's first 2 s out; Dream Eater only on a sleeping foe; Poltergeist only on one holding a working item; Belch after the user has eaten its berry; Last Resort once its other moves have all been used since it came out. Focus Punch is a 1.2 s channel like a heal (§9.5) that any hit breaks. All of these became playable, as did the code-powered moves above.
+  - **Movesets** value a code-powered move at a typical power (an HP-scaled one at 60% HP, the weight and Speed moves at 60) and a move that only works some of the time at a share of its power (Sucker Punch half, Fake Out a tenth).
+  - **AI:** both AIs only consider a move that would work now, aim with its power now, and start Focus Punch only when nothing can hit it first, like a heal.
+  - **Presentation:** callouts when Knock Off takes an item ("Lost its Leftovers!") and when a channel is broken ("Interrupted!").
 
 ### 9.4 Damage
 
@@ -1416,9 +1427,12 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **Scope:** every move with a clear real-time reading, in several pull requests, one rules version each. Left out, documented where they'd go: the Protect family (the guard is its reading), moves that copy or call others, item swaps, accuracy and evasion, turn order, gender and one-hit knockouts.
 - **Trick Room** mirrors Speed within the roster's band for 20 s (§9.11).
 - **Pivots and phazers** (team battles): on a hit, or on release for status ones, the user is recalled for the side's chosen bench member, ignoring the switch cooldown but restarting it; phazers drag in a random member of the foe's bench. In one-on-one they're plain hits (a phazing status move fails).
+- **Counter, Mirror Coat, Metal Burst and Comeuppance** pay back the damage of their kind taken from the target in the last 2 s, ×2 (×1.5 for the last two); nothing taken, nothing dealt.
+- **Proportional HP** (Super Fang, Ruination, Endeavor, Final Gambit; Steel Beam's and Mind Blown's cost; High Jump Kick's crash) read as per-hit shares (§9.9), a sixth of the main series'.
+- **Focus Punch** is a 1.2 s channel any hit breaks. **Future Sight and Doom Desire** mark the foe and land 3 s later wherever it is, unless it's dodging or guarding toward the user then.
 - **Fly, Dig and the like** keep their plain charge: an untouchable charge would be a free extra dodge each cooldown.
 - **Movesets:** moves a species uses on itself or a foe (Shell Smash, Belly Drum, Curse, Taunt, Leech Seed, Rest…) join the utility slot like any buff, status or heal; field and side moves stay out, like hazards and ally moves; damaging moves with real effects stay eligible as before.
-- **Pull requests:** (1) field and side conditions (rules version 35) done: Tailwind, Trick Room, Gravity, Magic Room, Wonder Room, Safeguard, Mist, Haze, Court Change (§9.11); (2) power and type from the weather and surge (36) done (§9.3); (3) power from HP and state, and proportional damage; (4) odd self-buffs and HP-trading status moves; (5) lingering effects (Taunt, Leech Seed, Yawn…); (6) pivots and phazers.
+- **Pull requests:** (1) field and side conditions (rules version 35) done: Tailwind, Trick Room, Gravity, Magic Room, Wonder Room, Safeguard, Mist, Haze, Court Change (§9.11); (2) power and type from the weather and surge (36) done (§9.3); (3) power from HP and state (37) done (§9.3); (4) proportional and returned damage, delayed hits and on-hit effects; (5) odd self-buffs and HP-trading status moves; (6) lingering effects (Taunt, Leech Seed, Yawn…); (7) pivots and phazers.
 
 **Later:**
 

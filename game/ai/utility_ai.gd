@@ -381,7 +381,7 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 	# One line-of-sight check per decision (it's symmetric), shared by every move and tactic.
 	var sight := battle.terrain.highest() <= 0.0 or battle.can_see(me, foe)
 	for i in me.moves.size():
-		if not me.move_ready(i):
+		if not me.move_ready(i) or not MoveEffects.usable(me, foe, me.moves[i]):
 			continue
 		any_ready = true
 		var move := me.moves[i]
@@ -416,6 +416,9 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 				considerations.contact_cost = CONTACT_COST
 			if move.own_stat_drop() < 0 and _other_attack_on(me, i):
 				considerations.stage_cost = stage_cost(me, move)
+			# Focus Punch is a channel like a heal: only worth starting when it won't be hit first.
+			if move.channels:
+				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		elif move.is_ally_move():
 			considerations.value = _sample("value", ally_move_value(battle, me, move) / VALUE_SCALE)
 			if move.kind == BattleMove.Kind.HEAL:

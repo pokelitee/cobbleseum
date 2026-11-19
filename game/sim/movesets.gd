@@ -151,7 +151,9 @@ static func learnable(species_id: String, data: BattleData) -> Array[String]:
 static func attack_value(move: BattleMove, raw: Dictionary, physical: bool, ability := "") -> float:
 	var entry := Abilities.effect(ability)
 	var hits := float(move.hits_max) if entry.get("skill_link", false) else move.expected_hits()
-	var value := FIXED_DAMAGE_VALUE if move.fixed_damage > 0 else move.power * hits * Abilities.move_factor(entry, move)
+	var value := FIXED_DAMAGE_VALUE if move.fixed_damage > 0 else MoveEffects.typical_power(move) * hits * Abilities.move_factor(entry, move)
+	# Moves that only work some of the time (Sucker Punch, Fake Out, Dream Eater) count for that share.
+	value *= float(MoveEffects.MOVESET_SHARE.get(move.id, 1.0))
 	var accuracy: Variant = raw.get("accuracy", 100)
 	value *= 1.0 if accuracy is bool else float(accuracy) / 100.0
 	if move.fixed_damage == 0 and move.physical != physical:
