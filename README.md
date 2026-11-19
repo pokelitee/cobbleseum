@@ -13,7 +13,9 @@ Prerequisites:
 - [Godot 4.7.2](https://godotengine.org/download/archive/4.7.2-stable/) (standard build, not .NET). Put it on your `PATH` as `godot`, or substitute its full path below.
 - Node.js 20 or later, for the asset pipeline's Showdown data export.
 - ffmpeg, for encoding recorded clips to MP4 (coming in milestone 1).
-- For the native move-effect runtime: Python 3 with SCons (`pip install scons==4.9.1`) and a C++ compiler (Visual Studio 2022 Build Tools on Windows, GCC or Clang elsewhere).
+- For the native move-effect runtime: Python 3 with SCons (`pip install scons==4.9.1`) and a C++ compiler (Visual Studio 2022 Build Tools on Windows, the Xcode Command Line Tools on macOS, GCC or Clang on Linux).
+
+The commands below are written for a POSIX shell. On Windows, run `tools/*.sh` from Git Bash; the `godot` commands work the same in PowerShell. [Platform support](#platform-support) says what is checked where.
 
 Build the native move-effect runtime (a GDExtension in `game/native/`; the first build fetches the pinned godot-cpp into `cache/` and compiles it, a few minutes):
 
@@ -160,6 +162,18 @@ Check that no third-party assets are tracked:
 ```bash
 tools/check_no_assets.sh
 ```
+
+### Platform support
+
+Cobbleseum is developed on Windows 11 and is meant to run the same way on macOS and Linux. The Godot binary is `Godot_v4.7.2-stable_win64_console.exe` on Windows (the console build shows the tools' output), `Godot.app/Contents/MacOS/Godot` on macOS and `Godot_v4.7.2-stable_linux.x86_64` on Linux. The native runtime builds for x86_64 on Windows and Linux and as a universal (Apple silicon and Intel) library on macOS.
+
+| Check | Windows | macOS | Linux | Where |
+| --- | --- | --- | --- | --- |
+| Asset guard, native build, import, every unit and determinism test, Showdown download and Node export | Yes | Yes | Yes | `ci` on every pull request (Windows Server 2025, macOS 15 on Apple silicon, Ubuntu 24.04) |
+| Full asset pipeline (every source, model conversion, music render), headless battles and a small parallel ranking | Yes | Yes | Yes | `assets`, when the pipeline changes or by hand; not a required check |
+| Playing or watching in a window, the setup screen, recording clips (Movie Maker and ffmpeg) | By hand | No | No | Not in CI: they need a GPU and a display |
+
+Battles repeat exactly on one platform, but checksums may differ between platforms (concept brief §10), so share specs rather than checksums across machines.
 
 ## Architecture
 
