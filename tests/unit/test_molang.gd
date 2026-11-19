@@ -67,7 +67,23 @@ func test_unknown_names_are_zero_and_reported() -> void:
 
 
 func test_parse_errors_evaluate_to_zero() -> void:
-	for text in ["(1 + 2", "1 +", "1 2", "math.sin(1, 2)", "a == b", "math.s(1)"]:
+	for text in ["(1 + 2", "1 +", "math.sin(1, 2)", "a == b", "math.s(1)", ")"]:
 		var expression := Molang.compile(text)
 		assert_false(expression.error.is_empty(), text)
 		assert_eq(expression.evaluate(0.0, RandomNumberGenerator.new()), 0.0, text)
+
+
+func test_text_after_a_whole_expression_is_ignored_and_reported() -> void:
+	# Cobblemon's own files, which its parser reads up to the stray token.
+	var cases := {
+		"0.3933+math.sin(q.anim_time*90*3-150)*1-1)+6*(math.sin(q.anim_time*90*3/2-90)*10": 0.3933 + sin(deg_to_rad(-150.0)) - 1.0,
+		"2.5+math.cos(q.anim_time*90*3/2)1": 3.5,
+		"0+math.sin(q.anim_time*90*3-130)*4,46": 4.0 * sin(deg_to_rad(-130.0)),
+		"1 2": 1.0,
+	}
+	for text: String in cases:
+		var expression := Molang.compile(text)
+		assert_eq(expression.error, "", text)
+		assert_true(expression.ignored.contains(text), "reported: %s" % expression.ignored)
+		assert_almost_eq(expression.evaluate(0.0, RandomNumberGenerator.new()), cases[text], 1e-6, text)
+	assert_eq(Molang.compile("1 + 2").ignored, "", "nothing left over")

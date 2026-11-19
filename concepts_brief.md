@@ -331,6 +331,8 @@ Each channel is either a constant or a set of timed keyframes:
 
 Unknown queries and variables, such as riding yaw and a few custom variables, evaluate to 0 and are reported. Asset text is never evaluated as code.
 
+**Malformed expressions.** A few of Cobblemon's own files have text left over after a whole expression: a stray `)` in Cyndaquil's, Typhlosion's and Blaziken's (`...*1-1)+6*(...`), a number with no operator before it in Wingull's (`...)1`) and a decimal comma in Grafaiai's (`...*4,46`). Cobblemon's parser (`com.bedrockk.molang`, bundled in its jar) reads one expression, and another only after a `;`, with no error for anything left over, so it evaluates what comes before and ignores the rest. The converter does the same, rather than editing Cobblemon's files or guessing what was meant, and reports the leftovers as `molang_trailing`; those channels used to evaluate to 0. That this matches Cobblemon was read from its parser's structure (its `parse` loop and its only two errors), not checked in Minecraft. Text that isn't an expression at all (an unsupported character, a missing `)`, an unknown function) is still a `molang_errors` problem and evaluates to 0; no roster species has one. Most of these channels are in idle loops given no `animation_length` and no keyframes, which the converter bakes as a single frame, so the fix shows only in their keyframed animations (Blaziken's sleep and attacks) until such loops are converted over a period of their own.
+
 **Posers:**
 
 - For the 657 species with a JSON poser, the converter reads:
@@ -369,7 +371,7 @@ Implemented in `game/presentation/procedural_motion.gd`, as a transform on a nod
 
 Species with a faint animation of their own drop out of a hover to the ground, and are lifted wherever the animation would sink them into it (Tinkaton, Clefairy, Jigglypuff and Raichu sink by 10–40% of their height).
 
-Flying types that can really fly hover and bob throughout: those Cobblemon lets fly (its species' `canFly`, listed in the roster as `flies`) or that have a flying animation, plus any species whose idle is its air idle. Flightless Flying types (Doduo, Dodrio, Natu, Mantine, Mantyke, Archen, Hawlucha) walk. Hovering is presentation only; the simulation's gliding and climbing still follow the Flying type. Serpents whose animations hold their body still (Rayquaza, whose only animation is a held pose, plus Seviper, Silicobra and Eternatus) get a travelling wave down their `segment` bones (`BodyWave`): gentle at rest, stronger and faster when moving, frozen in hit-stop. They slither instead of hopping, and on a knockout drop to the ground without tipping over, which would stand their coils on end. The layer advances per video frame at the animations' speed, so it freezes in hit-stop and slows in slow motion.
+Flying types that can really fly hover and bob throughout: those Cobblemon lets fly (its species' `canFly`, listed in the roster as `flies`) or that have a flying animation, plus any species whose idle is its air idle. Flightless Flying types (Doduo, Dodrio, Natu, Mantine, Mantyke, Archen, Hawlucha) walk. Hovering is presentation only; the simulation's gliding and climbing still follow the Flying type. Serpents are models with at least five `segment` bones (13 species, from Orthworm with five to Rayquaza with fifteen; Burmy's cloak and Golisopod's back have three). Those whose animations hold their body still (Rayquaza, whose only animation is a held pose, plus Seviper, Silicobra and Eternatus) get a travelling wave down their segments (`BodyWave`): gentle at rest, stronger and faster when moving, frozen in hit-stop. They slither instead of hopping. On a knockout without a faint animation of its own, every serpent drops to the ground and slumps instead of tipping over, which would stand its coils on end: over the 20 frames of a tip-over, each bone of its spine (the chain from the root down the segments to the tail tip, and the chain up to the head) loses its rise and keeps its heading, and the body settles onto the ground like a tipped-over one. Before this, Rayquaza's idle, which rears its neck and chest up from a coil held off the ground, stayed raised after a knockout; Steelix, Dratini, Dragonair, Serperior, Eelektrik, Eelektross and Gyarados tipped their curled bodies on end. The layer advances per video frame at the animations' speed, so it freezes in hit-stop and slows in slow motion.
 
 Since M6 it also adds life on top of every animation, for every species:
 
@@ -395,7 +397,7 @@ A QA pass over every roster species reports:
 - animations that leave the model in its rest pose;
 - feet sinking below the floor;
 - wrong facing;
-- unknown Molang;
+- unknown or malformed Molang, and text ignored after an expression;
 - missing animations.
 
 The report feeds the roster flags (§8). The QA runs locally, and its reports stay in the cache.
@@ -404,7 +406,17 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
 
 - **Rest poses aren't real faults.** Comparing rest-pose height with the hitbox flagged 73 species, but rest poses are often stretched out (Seviper's is 10.6 m tall), and every one looked right in its idle pose. The QA now samples the idle animation instead (`pose_mismatch`, 33 species). These are models that are genuinely bigger than their hitbox because of wings, flames, claws or tails, and they also look right.
 - **Missing texture layers.** Resolver variations can add texture layers over the model: emissive eyes, flames and markings, Vivillon's wing patterns, manes and translucent parts. 186 roster entries use them. The converter now draws them as extra material passes: emissive layers unshaded, the rest shaded with alpha.
-- **Animations in the wrong group.** Forms with a poser of their own (Gourgeist's sizes) still use the species' animations, and some species' idle animations are named `air_idle`, `water_idle` or `idle`. Animation lookup now searches the poser's group, then the species', then any other group in the files. It accepts those names, and uses a non-battle standing pose when there's no battle one. Species without an idle animation went from 58 to 7.
+- **Animations in the wrong group.** Forms with a poser of their own (Gourgeist's sizes) still use the species' animations, and some species' idle animations are named `air_idle`, `water_idle` or `idle`. Animation lookup now searches the poser's group, then the species', then any other group in the files. It accepts those names, and uses a non-battle standing pose when there's no battle one. Species without an idle animation went from 58 to 7. Those seven have none in Cobblemon at all (`no_idle`), so the game gives them a held rest pose as their idle (`FighterView.REST_IDLE`), which breathes like any still idle (§7.4) and puts back the bones their other animations move:
+
+| Species | Animations it has | At rest |
+|---|---|---|
+| Tangela | cry | rest pose, breathing |
+| Pupitar | cry, blink (and an unused `demopose`) | rest pose, breathing, blinking |
+| Lillipup, Herdier | cry, blink | rest pose, breathing, blinking |
+| Durant | walk, cry, blink | rest pose, breathing, blinking; walks with its own walk, and stops it when it stops (it used to walk on the spot) |
+| Bounsweet, Pyukumuku | none | rest pose, breathing |
+
+Their rest poses are natural standing poses (checked in roster previews). The QA report still flags them `no_idle`, since that describes Cobblemon's files.
 
 ## 8. Roster and species identity
 
@@ -429,7 +441,7 @@ The report feeds the roster flags (§8). The QA runs locally, and its reports st
   - its shiny and its cosmetic forms, each with its own model and shiny (§12.8).
 
   Headless simulation reads only this file and never loads models.
-- **QA report:** `report.json` counts species per flag: missing animation roles (`no_idle`, `no_faint`, …), `no_poser`, `no_hitbox`, `no_licence_file` (410 entries whose model folder has no licence file), Molang and bone problems, and `pose_mismatch` (33 entries whose height in their idle pose differs from their hitbox by more than 2×; reviewed in M2 and all correct, see §7.5).
+- **QA report:** `report.json` counts species per flag: missing animation roles (`no_idle`, `no_faint`, …), `no_poser`, `no_hitbox`, `no_licence_file` (410 entries whose model folder has no licence file), Molang and bone problems (`molang_errors`, none; `molang_trailing`, the five above; `unknown_names`, 38; `unknown_bones`, 277), and `pose_mismatch` (33 entries whose height in their idle pose differs from their hitbox by more than 2×; reviewed in M2 and all correct, see §7.5).
 - **Caching:** each converted model has a key over its input files and the converter scripts. Rebuilds reuse models whose key still matches, from the previous build or an interrupted one.
 
 ## 9. Battle rules

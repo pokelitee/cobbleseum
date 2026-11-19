@@ -156,15 +156,42 @@ func test_serpents_slither_rather_than_hop_and_wave_harder_when_moving() -> void
 	assert_eq(serpent.wave_phase, paused, "hit-stop freezes it")
 
 
-func test_a_fainted_serpent_drops_without_tipping_over_and_stops_waving() -> void:
+func test_a_fainted_serpent_drops_and_slumps_without_tipping_over_and_stops_waving() -> void:
 	var serpent := ProceduralMotion.new(3.0, true)
 	serpent.slithers = true
+	serpent.slumps = true
 	_advance(serpent, 30)
+	assert_eq(serpent.wave_slump, 0.0, "standing")
 	serpent.faint(PackedVector2Array([Vector2(-1, 0), Vector2(3, 0), Vector2(0, 4)]))
+	_advance(serpent, ProceduralMotion.FAINT_FRAMES / 2)
+	assert_true(serpent.wave_slump > 0.0 and serpent.wave_slump < 1.0, "slumping")
 	_advance(serpent, ProceduralMotion.FAINT_FRAMES * 3)
 	assert_almost_eq(serpent.transform().basis.get_euler().z, 0.0, 1e-4, "its coils stay down")
 	assert_almost_eq(serpent.transform().origin.y, 0.0, 1e-4, "out of the hover, on the ground")
 	assert_almost_eq(serpent.wave_strength, 0.0, 1e-3)
+	assert_eq(serpent.wave_slump, 1.0, "slumped flat")
+	serpent.revive()
+	_advance(serpent, 1)
+	assert_eq(serpent.wave_slump, 0.0, "up again for the replay")
+
+
+func test_a_serpent_whose_body_moves_slumps_too_but_never_waves() -> void:
+	var serpent := ProceduralMotion.new(2.0, false)
+	serpent.slumps = true
+	_advance(serpent, 30)
+	assert_eq(serpent.wave_strength, 0.0, "its own animations move it")
+	serpent.faint(PackedVector2Array([Vector2(-1, 0), Vector2(3, 0), Vector2(0, 4)]))
+	_advance(serpent, ProceduralMotion.FAINT_FRAMES * 2)
+	assert_almost_eq(serpent.transform().basis.get_euler().z, 0.0, 1e-4, "not tipped over")
+	assert_eq(serpent.wave_slump, 1.0)
+
+
+func test_a_serpent_with_a_faint_animation_leaves_the_slump_to_it() -> void:
+	var serpent := ProceduralMotion.new(2.0, false)
+	serpent.slumps = true
+	serpent.fall()
+	_advance(serpent, ProceduralMotion.FAINT_FRAMES * 2)
+	assert_eq(serpent.wave_slump, 0.0)
 
 
 

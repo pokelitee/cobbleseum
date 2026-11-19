@@ -242,7 +242,7 @@ static func _roster_entry(entry: Dictionary, report: Dictionary, source_dir: Str
 	var licensed := FileAccess.file_exists(source_dir.path_join(CobblemonSpecies.BEDROCK).path_join("models").path_join(entry.folder).path_join("license"))
 	if not licensed:
 		flags.append("no_licence_file")
-	for problem in ["unknown_bones", "molang_errors", "unknown_names"]:
+	for problem in ["unknown_bones", "molang_errors", "molang_trailing", "unknown_names"]:
 		if report.has(problem):
 			flags.append(problem)
 	var roster_entry := {
@@ -252,7 +252,7 @@ static func _roster_entry(entry: Dictionary, report: Dictionary, source_dir: Str
 		"flags": flags, "licence": LICENCE,
 	}
 	var qa := {"flags": flags, "model_height": model_height, "hitbox_height": hitbox_height}
-	for problem in ["unknown_bones", "molang_errors", "unknown_names", "missing_texture"]:
+	for problem in ["unknown_bones", "molang_errors", "molang_trailing", "unknown_names", "missing_texture"]:
 		if report.has(problem):
 			qa[problem] = report[problem]
 	return {"entry": roster_entry, "qa": qa}

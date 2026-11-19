@@ -13,7 +13,7 @@ const CHANNELS: Array[String] = ["rotation", "position", "scale"]
 
 ## Converts one animation's JSON (`source`). `rest_rotations` maps bone name -> Bedrock rest
 ## rotation [x, y, z]; `skeleton` supplies rest positions. Problems are appended to `report`
-## ({"unknown_bones", "molang_errors", "unknown_names"} dictionaries used as sets).
+## ({"unknown_bones", "molang_errors", "molang_trailing", "unknown_names"} dictionaries used as sets).
 static func build(source: Dictionary, animation_name: String, skeleton: Skeleton3D, rest_rotations: Dictionary,
 		skeleton_path: String, report: Dictionary) -> Animation:
 	var rng := RandomNumberGenerator.new()
@@ -95,6 +95,8 @@ static func _compile_vector(raw: Variant, report: Dictionary) -> Array:
 			var expression := Molang.compile(part)
 			if not expression.error.is_empty():
 				report.get_or_add("molang_errors", {})[expression.error] = true
+			if not expression.ignored.is_empty():
+				report.get_or_add("molang_trailing", {})[expression.ignored] = true
 			for name in expression.unknown_names:
 				report.get_or_add("unknown_names", {})[name] = true
 			compiled.append(expression)
