@@ -1014,6 +1014,10 @@ func _play_events() -> void:
 				_fx.announce(_event_view(event), "Protected!", GUARD_CALLOUT, 52)
 			"failed":
 				_fx.announce(_event_view(event), "But it failed!", Color(0.85, 0.85, 0.9), 48)
+			"interrupt":
+				_fx.announce(_event_view(event), "Interrupted!", Color(0.85, 0.85, 0.9), 48)
+			"knocked_off":
+				_fx.announce(_event_view(event), "Lost its %s!" % event.name, ITEM_CALLOUT, 52)
 			"knockout":
 				# Only the final knockout ends the battle: the winner celebrates and the music cuts.
 				var final := int(event.get("left", 0)) == 0

@@ -60,7 +60,10 @@ func test_moves_are_classified() -> void:
 	assert_true(_move("hyperbeam").recovery_ticks >= Rules.seconds_to_ticks(Rules.PROJECTILE_RECOVERY + Rules.RECHARGE_EXTRA) - 1)
 	assert_eq(_move("seismictoss").fixed_damage, Rules.LEVEL)
 	assert_true(_move("explosion").self_destructs)
-	assert_true(BattleMove.from_showdown("flail", MOVES.flail).has("error"), "power computed in code")
+	# Flail's power follows the user's HP since rules version 37 (MoveEffects); a move whose power
+	# Showdown computes in code with no reading of ours stays unplayable.
+	assert_eq(_move("flail").power, BattleMove.CODE_POWER.flail)
+	assert_true(BattleMove.from_showdown("endeavor", MOVES.flail).has("error"), "power computed in code")
 
 
 func test_hit_counts_follow_the_main_series_weights() -> void:

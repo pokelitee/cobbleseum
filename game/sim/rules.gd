@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 36
+const RULES_VERSION := 37
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -193,6 +193,14 @@ const TAILWIND_SECONDS := 16.0
 ## Trick Room mirrors a Speed stat within the band from the roster's slowest (a base-5 species) to
 ## SPEED_STAT_FOR_MAX, so the slowest walk, turn and recharge dodges like the fastest.
 const SLOWEST_SPEED_STAT := 25.0
+
+## Moves that follow what just happened (rules version 37, MoveEffects) read the main series'
+## "this turn" as the last RECENT_SECONDS; Fake Out and First Impression work only in a fighter's
+## first FIRST_SECONDS out; a move that grows with repeated use (Fury Cutter, Rollout) keeps
+## growing if it's used again within COMBO_SECONDS of its cooldown ending.
+const RECENT_SECONDS := 3.0
+const FIRST_SECONDS := 2.0
+const COMBO_SECONDS := 3.0
 
 ## Stat stages run from -6 to +6 with the main-series multipliers (§9.5). They wear off:
 ## every STAGE_DECAY_SECONDS without a change, each stage moves one step back toward 0.

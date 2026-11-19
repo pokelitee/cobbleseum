@@ -89,7 +89,7 @@ func decide(battle: Battle, index: int) -> Dictionary:
 	var ranged_ready := false
 	var melee_ready := false
 	for i in me.moves.size():
-		if not me.move_ready(i):
+		if not me.move_ready(i) or not MoveEffects.usable(me, foe, me.moves[i]):
 			continue
 		var move := me.moves[i]
 		var score := move_score(me, foe, move)

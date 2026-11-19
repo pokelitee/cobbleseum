@@ -132,6 +132,10 @@ var bench := PackedInt32Array([0, 0])
 ## The field conditions up, {name: ticks left}, and each side's side conditions likewise.
 var field := {}
 var sides: Array[Dictionary] = [{}, {}]
+## Each side's teammates fainted so far (Last Respects) and ticks left of Rules.RECENT_SECONDS
+## since its last fainted (Retaliate), kept by the battle.
+var fainted := PackedInt32Array([0, 0])
+var fainted_ticks := PackedInt32Array([0, 0])
 
 
 ## The weather a Showdown move sets ("" for none).
@@ -184,6 +188,8 @@ func tick() -> Array[Dictionary]:
 			if sides[side][name] <= 0:
 				sides[side].erase(name)
 				ended.append({"side_condition": name, "side": side})
+	for side in 2:
+		fainted_ticks[side] = maxi(0, fainted_ticks[side] - 1)
 	for name: String in field.keys():
 		field[name] -= 1
 		if field[name] <= 0:
