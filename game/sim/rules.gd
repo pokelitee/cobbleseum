@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 37
+const RULES_VERSION := 38
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -201,6 +201,13 @@ const SLOWEST_SPEED_STAT := 25.0
 const RECENT_SECONDS := 3.0
 const FIRST_SECONDS := 2.0
 const COMBO_SECONDS := 3.0
+## Rules version 38: Counter and its kin pay back damage taken in the last RETURN_SECONDS;
+## Future Sight and Doom Desire land DELAYED_SECONDS after they're used; the main series' shares
+## of HP (Super Fang's half, Steel Beam's cost, High Jump Kick's crash) are read as per-hit shares,
+## HP_SHARE_READING of the main series' (a fighter takes about six times as many hits, §9.9).
+const RETURN_SECONDS := 2.0
+const DELAYED_SECONDS := 3.0
+const HP_SHARE_READING := 1.0 / 6.0
 
 ## Stat stages run from -6 to +6 with the main-series multipliers (§9.5). They wear off:
 ## every STAGE_DECAY_SECONDS without a change, each stage moves one step back toward 0.

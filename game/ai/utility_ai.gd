@@ -652,6 +652,8 @@ func _guarded_when_landing(me: Fighter, seen: Dictionary, gap: float, move: Batt
 static func expected_damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData) -> float:
 	if move.fixed_damage > 0:
 		return move.fixed_damage * move.expected_hits()
+	if not move.damage_rule.is_empty():
+		return MoveEffects.rule_damage(attacker, defender, move)
 	var parts := Battle.damage_parts(attacker, defender, move, data)
 	return parts.base * parts.factor * parts.screen * (Rules.ROLL_MIN + Rules.ROLL_MAX) * 0.5 * move.expected_hits()
 
@@ -761,6 +763,19 @@ func _threat(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary) -> Dic
 		var threat := {"key": "p%d" % int(projectile.id),
 			"direction": velocity.normalized(), "ticks": t, "melee": false,
 			"danger": expected_damage(shooter, me, move, data) / maxf(me.hp, 1.0) if move.is_damaging() else 0.1}
+		if best.is_empty() or threat.ticks < best.ticks:
+			best = threat
+	# A Future Sight about to land on this fighter's place is dodged like any other hit.
+	for member: Fighter in battle.teams[1 - me.side]:
+		if member.foresight.is_empty() or int(member.foresight.target) != Battle.index_of(me):
+			continue
+		var ticks := float(int(member.foresight.ticks))
+		if ticks > THREAT_HORIZON:
+			continue
+		var move := member.moves[int(member.foresight.move)]
+		var threat := {"key": "f%d.%d" % [member.slot, battle.tick + int(member.foresight.ticks)],
+			"direction": (me.position - member.position).normalized(), "ticks": ticks, "melee": false,
+			"danger": expected_damage(member, me, move, data) / maxf(me.hp, 1.0)}
 		if best.is_empty() or threat.ticks < best.ticks:
 			best = threat
 	var attackers: Array[Fighter] = [foe]

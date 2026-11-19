@@ -106,6 +106,15 @@ var times_hit := 0
 var out_ticks := 0
 var used_moves := {}
 var combo := {}
+## Rules version 38: ticks left of Rules.RECENT_SECONDS since a stat of its rose (Alluring Voice);
+## the hits it took in the last Rules.RETURN_SECONDS, newest last ({"ticks", "amount",
+## "physical", and the attacker's "side" and "slot"}, Counter: indices, not the Fighter, so no
+## reference cycle keeps fighters alive); and its Future Sight on the way ({"ticks", "move":
+## index, "target": the foe's index in Battle.fighters}, {} for none), which lands even if it
+## has been recalled since.
+var raised_ticks := 0
+var taken: Array[Dictionary] = []
+var foresight := {}
 
 
 static func create(side_index: int, species_id_value: String, species: Dictionary, battle_moves: Array[BattleMove], radius_metres: float) -> Fighter:

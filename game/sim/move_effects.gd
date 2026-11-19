@@ -93,15 +93,27 @@ const RISING_HITS: Array[String] = ["tripleaxel", "triplekick"]
 const FICKLE_CHANCE := 0.3
 const PRESENT_HEAL_CHANCE := 0.2
 const PRESENT_HEAL := 0.25 / 6.0
+## Rules version 38: Counter and Mirror Coat pay back twice the physical or special damage taken
+## from the target in the last Rules.RETURN_SECONDS, Metal Burst and Comeuppance 1.5 times any.
+const RETURNS := {"counter": ["physical", 2.0], "mirrorcoat": ["special", 2.0], "metalburst": ["any", 1.5],
+	"comeuppance": ["any", 1.5]}
+## Moves that hit a random status: [chance in %, statuses].
+const RANDOM_STATUS := {"triattack": [20, ["brn", "par", "frz"]], "direclaw": [50, ["psn", "par", "slp"]]}
+## Moves that punish a foe whose stats rose in the last Rules.RECENT_SECONDS: Alluring Voice
+## confuses it, Burning Jealousy burns it.
+const AFTER_RAISING := {"alluringvoice": "confusion", "burningjealousy": "brn"}
+## Moves that lay a hazard on the target's side when they hit.
+const LAYS_HAZARD := {"ceaselessedge": "spikes", "stoneaxe": "stealthrock"}
 ## Valuing a move for a standard moveset: an HP-scaled move at the average HP share over a battle,
 ## and typical powers for moves whose data has none (or a misleading one).
 const TYPICAL_HP_SHARE := 0.6
 const TYPICAL_POWER := {"reversal": 60, "flail": 60, "grassknot": 60, "lowkick": 60, "heavyslam": 60, "heatcrash": 60,
 	"gyroball": 60, "electroball": 60, "storedpower": 40, "powertrip": 40, "ragefist": 100, "present": 60}
-## Moves that only work some of the time (usable()) count for about this share of their power in
-## a standard moveset.
+## Moves that only work some of the time (usable()), or land late (Future Sight), count for about
+## this share of their power in a standard moveset.
 const MOVESET_SHARE := {"suckerpunch": 0.5, "thunderclap": 0.5, "upperhand": 0.1, "fakeout": 0.1, "firstimpression": 0.2,
-	"dreameater": 0.1, "belch": 0.2, "lastresort": 0.3, "synchronoise": 0.3, "focuspunch": 0.6, "poltergeist": 0.9}
+	"dreameater": 0.1, "belch": 0.2, "lastresort": 0.3, "synchronoise": 0.3, "focuspunch": 0.6, "poltergeist": 0.9,
+	"futuresight": 0.85, "doomdesire": 0.85, "endeavor": 0.4, "counter": 0.4, "mirrorcoat": 0.4, "metalburst": 0.4, "comeuppance": 0.4}
 
 
 ## `move` as `attacker` would use it on `defender` now.
@@ -252,7 +264,40 @@ static func usable(fighter: Fighter, foe: Fighter, move: BattleMove) -> bool:
 				if other != move and not fighter.used_moves.has(other.id):
 					return false
 			return fighter.moves.size() > 1
+		"endeavor":
+			return foe.hp > fighter.hp
+	if RETURNS.has(move.id):
+		return returned(fighter, foe, move) > 0
+	# One Future Sight at a time.
+	if move.delayed:
+		return fighter.foresight.is_empty()
 	return true
+
+
+## Damage a rule-damage move (BattleMove.damage_rule) deals now, before overtime; the main series'
+## shares of HP read as per-hit shares (Rules.HP_SHARE_READING).
+static func rule_damage(attacker: Fighter, defender: Fighter, move: BattleMove) -> int:
+	match move.damage_rule:
+		"half":
+			return maxi(1, floori(defender.hp * 0.5 * Rules.HP_SHARE_READING))
+		"gap":
+			return maxi(0, floori((defender.hp - attacker.hp) * Rules.HP_SHARE_READING))
+		"gambit":
+			return maxi(1, floori(attacker.hp * Rules.HP_SHARE_READING))
+	return returned(attacker, defender, move)
+
+
+## What Counter and its kin would pay back now: the damage of their kind `fighter` took from
+## `foe` in the last Rules.RETURN_SECONDS, times their factor.
+static func returned(fighter: Fighter, foe: Fighter, move: BattleMove) -> int:
+	var rule: Array = RETURNS.get(move.id, [])
+	if rule.is_empty():
+		return 0
+	var total := 0
+	for taken: Dictionary in fighter.taken:
+		if int(taken.side) == foe.side and int(taken.slot) == foe.slot and (rule[0] == "any" or (rule[0] == "physical") == taken.physical):
+			total += int(taken.amount)
+	return floori(total * float(rule[1]))
 
 
 ## Power for valuing `move` in a standard moveset where its power follows the battle's state

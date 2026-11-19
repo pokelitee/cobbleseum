@@ -151,7 +151,7 @@ static func learnable(species_id: String, data: BattleData) -> Array[String]:
 static func attack_value(move: BattleMove, raw: Dictionary, physical: bool, ability := "") -> float:
 	var entry := Abilities.effect(ability)
 	var hits := float(move.hits_max) if entry.get("skill_link", false) else move.expected_hits()
-	var value := FIXED_DAMAGE_VALUE if move.fixed_damage > 0 else MoveEffects.typical_power(move) * hits * Abilities.move_factor(entry, move)
+	var value := FIXED_DAMAGE_VALUE if move.fixed_damage > 0 or not move.damage_rule.is_empty() else MoveEffects.typical_power(move) * hits * Abilities.move_factor(entry, move)
 	# Moves that only work some of the time (Sucker Punch, Fake Out, Dream Eater) count for that share.
 	value *= float(MoveEffects.MOVESET_SHARE.get(move.id, 1.0))
 	var accuracy: Variant = raw.get("accuracy", 100)
@@ -162,7 +162,8 @@ static func attack_value(move: BattleMove, raw: Dictionary, physical: bool, abil
 		value *= CHARGE_FACTOR
 	if move.recharges:
 		value *= RECHARGE_FACTOR
-	if move.recoil_share > 0.0 and not entry.get("no_recoil", false) and not entry.get("magic_guard", false):
+	if (move.recoil_share > 0.0 or move.cost_share > 0.0 or move.crash_share > 0.0) and not entry.get("no_recoil", false) \
+			and not entry.get("magic_guard", false):
 		value *= RECOIL_FACTOR
 	if move.self_destructs:
 		value *= SELF_DESTRUCT_FACTOR

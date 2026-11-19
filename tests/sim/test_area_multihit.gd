@@ -63,7 +63,7 @@ func test_moves_are_classified() -> void:
 	# Flail's power follows the user's HP since rules version 37 (MoveEffects); a move whose power
 	# Showdown computes in code with no reading of ours stays unplayable.
 	assert_eq(_move("flail").power, BattleMove.CODE_POWER.flail)
-	assert_true(BattleMove.from_showdown("endeavor", MOVES.flail).has("error"), "power computed in code")
+	assert_true(BattleMove.from_showdown("psywave", MOVES.flail).has("error"), "power computed in code")
 
 
 func test_hit_counts_follow_the_main_series_weights() -> void:

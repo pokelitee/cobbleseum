@@ -56,7 +56,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 39
+const FIGHTER_STATE_SIZE := 42
 ## Values hashed per side for team battles: the slot out, the send-out countdown, the shield,
 ## the switch cooldown and the layers of each entry hazard.
 const TEAM_STATE_SIZE := 8
@@ -414,6 +414,7 @@ func step() -> void:
 		var index := i if tick % 2 == 0 else i ^ 1
 		_act(fighters[index], intents[index])
 	_move_projectiles()
+	_tick_foresight()
 	if doubles:
 		_tick_side_moves()
 	if _drop_projectiles:
@@ -470,6 +471,11 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 	fighter.hurt_ticks = maxi(0, fighter.hurt_ticks - 1)
 	fighter.missed_ticks = maxi(0, fighter.missed_ticks - 1)
 	fighter.lowered_ticks = maxi(0, fighter.lowered_ticks - 1)
+	fighter.raised_ticks = maxi(0, fighter.raised_ticks - 1)
+	for taken in fighter.taken:
+		taken.ticks -= 1
+	while not fighter.taken.is_empty() and int(fighter.taken[0].ticks) <= 0:
+		fighter.taken.pop_front()
 	if not fighter.combo.is_empty():
 		fighter.combo.ticks -= 1
 		if fighter.combo.ticks <= 0:
@@ -719,7 +725,16 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 			_boost(fighter, move.boosts, move.id)
 			if move.clears == "both":
 				_clear_hazards(fighter, move, false)
+	elif move.delayed:
+		# Future Sight: the hit lands on whoever is in the foe's place a while later.
+		fighter.foresight = {"ticks": Rules.seconds_to_ticks(Rules.DELAYED_SECONDS), "move": fighter.action_move,
+			"target": index_of(foe)}
+		_fevent("foresight", fighter, _aimed(foe, {"move": move.id}))
 	else:
+		if move.cost_share > 0.0 and not Abilities.magic_guard(fighter):
+			_hurt(fighter, maxi(1, roundi(fighter.max_hp * move.cost_share)), "self_cost", {"move": move.id})
+			if fighter.is_knocked_out():
+				return
 		var hits := _roll_hits(fighter, move)
 		var parried := _strike(fighter, foe, fighter.action_move)
 		var interval := Rules.seconds_to_ticks(Rules.MULTI_HIT_INTERVAL)
@@ -753,11 +768,14 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int, hit := 0) -> bool:
 			var reach_up := Rules.MELEE_HEIGHT if move.kind == BattleMove.Kind.MELEE else Rules.AREA_HEIGHT
 			if _gap(fighter, foe) > reach or foe.is_knocked_out() or absf(foe.ground - fighter.ground) > reach_up:
 				_fevent("miss", fighter, _aimed(foe, {"move": move.id}))
+				_crash(fighter, move)
 			elif foe.is_invulnerable():
 				_fevent("miss", fighter, _aimed(foe, {"move": move.id}))
 				_fevent("dodged", foe, {"move": move.id})
+				_crash(fighter, move)
 			elif foe.guards_against(fighter.position - foe.position):
 				_guarded(fighter, foe, move)
+				_crash(fighter, move)
 				return move.kind == BattleMove.Kind.MELEE
 			else:
 				_hit(fighter, foe, move)
@@ -774,6 +792,38 @@ func _strike(fighter: Fighter, foe: Fighter, move_index: int, hit := 0) -> bool:
 					and can_see(fighter, other):
 				_fire(fighter, other, move_index, (other.position - fighter.position).normalized())
 	return false
+
+
+## High Jump Kick and the like: missing costs the user a share of its max HP.
+func _crash(fighter: Fighter, move: BattleMove) -> void:
+	if move.crash_share > 0.0 and not Abilities.magic_guard(fighter):
+		_hurt(fighter, maxi(1, roundi(fighter.max_hp * move.crash_share)), "crash", {"move": move.id})
+
+
+## Future Sight and Doom Desire counting down, for every team member (a recalled user's still
+## lands): on the fighter in the target's place then, unless it's dodging or guarding toward the
+## user, or the place is between Pokémon.
+func _tick_foresight() -> void:
+	for team: Array in teams:
+		for member: Fighter in team:
+			if member.foresight.is_empty():
+				continue
+			member.foresight.ticks -= 1
+			if member.foresight.ticks > 0:
+				continue
+			var move := member.moves[int(member.foresight.move)]
+			var index := int(member.foresight.target)
+			member.foresight = {}
+			var target := fighters[index]
+			if target.is_knocked_out() or is_waiting(index):
+				_fevent("miss", member, {"move": move.id})
+			elif target.is_invulnerable():
+				_fevent("miss", member, {"move": move.id})
+				_fevent("dodged", target, {"move": move.id})
+			elif target.guards_against(member.position - target.position):
+				_guarded(member, target, move)
+			else:
+				_hit(member, target, move)
 
 
 ## The foe out other than `foe` in doubles, if it's up; else null.
@@ -1049,6 +1099,9 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0)
 		defender.sturdy_used = defender.sturdy_used or holds
 		defender.item_used = defender.item_used or sash
 	defender.hp -= dealt
+	if dealt > 0:
+		defender.taken.append({"ticks": Rules.seconds_to_ticks(Rules.RETURN_SECONDS), "amount": dealt, "physical": move.physical,
+			"side": attacker.side, "slot": attacker.slot})
 	defender.hit_ticks = Rules.seconds_to_ticks(Rules.RECENT_SECONDS)
 	defender.hurt_ticks = defender.hit_ticks
 	defender.times_hit += 1
@@ -1078,6 +1131,8 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0)
 			for effect in move.secondaries:
 				if _random.chance(effect.chance / 100.0 * Abilities.secondary_chance_factor(attacker)):
 					_apply_effect(attacker, defender, effect, move.id)
+			_coded_secondaries(attacker, defender, move)
+		_take_berry(attacker, defender, move)
 	if move.drain_share > 0.0 and not attacker.is_knocked_out():
 		_heal(attacker, maxi(1, roundi(dealt * move.drain_share)), move.id)
 	if move.recoil_share > 0.0 and not Abilities.no_recoil(attacker):
@@ -1095,6 +1150,52 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0)
 	if move.id in ArenaConditions.SURGE_BREAKERS and not conditions.surge.is_empty():
 		_fevent("surge_end", attacker, {"surge": conditions.surge, "move": move.id})
 		conditions.set_surge("", 0)
+
+
+## Effects on hit that Showdown codes (rules version 38): Tri Attack's and Dire Claw's random
+## status, Alluring Voice and Burning Jealousy against a foe whose stats just rose, Clear Smog
+## clearing stages, Sparkling Aria curing a burn, Ceaseless Edge and Stone Axe laying a hazard.
+func _coded_secondaries(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
+	var roll: Array = MoveEffects.RANDOM_STATUS.get(move.id, [])
+	if not roll.is_empty() and _random.chance(roll[0] / 100.0 * Abilities.secondary_chance_factor(attacker)):
+		var statuses: Array = roll[1]
+		_inflict(defender, statuses[_random.next_u32() % statuses.size()], attacker)
+	if MoveEffects.AFTER_RAISING.has(move.id) and defender.raised_ticks > 0:
+		var effect := str(MoveEffects.AFTER_RAISING[move.id])
+		_apply_effect(attacker, defender, {"confuses": effect == "confusion", "status": "" if effect == "confusion" else effect}, move.id)
+	match move.id:
+		"clearsmog":
+			for stat: String in defender.boosts:
+				defender.boosts[stat] = 0
+			_fevent("haze", defender, {"move": move.id})
+		"sparklingaria":
+			if defender.status == "brn":
+				_end_status(defender)
+	if MoveEffects.LAYS_HAZARD.has(move.id) and not attacker.is_knocked_out():
+		var hazard := str(MoveEffects.LAYS_HAZARD[move.id])
+		var side := defender.side
+		var layers := int(conditions.hazards[side].get(hazard, 0))
+		if layers < int(ArenaConditions.HAZARDS[hazard]):
+			conditions.hazards[side][hazard] = layers + 1
+			_fevent("hazard", attacker, {"hazard": hazard, "layers": layers + 1, "target_side": side, "move": move.id})
+
+
+## Incinerate burns up the defender's unused berry; Bug Bite and Pluck eat it, the attacker
+## getting its effect (Sitrus Berry's healing, Lum Berry's cure).
+func _take_berry(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
+	if not move.id in ["incinerate", "bugbite", "pluck"] or not MoveEffects.item_works(defender):
+		return
+	var berry := defender.item_effect
+	if not (berry.has("berry_heal") or berry.get("cures_status", false)):
+		return
+	defender.item_used = true
+	_fevent("berry_taken", defender, {"item": defender.item, "name": Items.display_name(defender.item), "eaten": move.id != "incinerate"})
+	if move.id == "incinerate" or attacker.is_knocked_out():
+		return
+	if berry.has("berry_heal"):
+		_heal(attacker, maxi(1, roundi(attacker.max_hp * float(berry.berry_heal))), defender.item)
+	if berry.get("cures_status", false) and not attacker.status.is_empty():
+		_end_status(attacker)
 
 
 ## A hit stopped by the defender's guard: no damage or effects. Parrying a melee strike
@@ -1340,6 +1441,8 @@ static func _leave(fighter: Fighter) -> void:
 	fighter.lowered_ticks = 0
 	fighter.used_moves = {}
 	fighter.combo = {}
+	fighter.raised_ticks = 0
+	fighter.taken.clear()
 
 
 ## The team slot `side` sends out next: its first member healthy and on the bench, or -1.
@@ -1643,6 +1746,8 @@ func _boost(fighter: Fighter, changes: Dictionary, move_id: String, foe: Fighter
 		fighter.stage_ticks = 0
 		if applied.values().any(func(stages: int) -> bool: return stages < 0):
 			fighter.lowered_ticks = Rules.seconds_to_ticks(Rules.RECENT_SECONDS)
+		if applied.values().any(func(stages: int) -> bool: return stages > 0):
+			fighter.raised_ticks = Rules.seconds_to_ticks(Rules.RECENT_SECONDS)
 		_fevent("boost", fighter, {"boosts": applied, "move": move_id})
 	var answer: Dictionary = fighter.ability_effect.get("on_lowered", {})
 	if foe != null and not answer.is_empty() and applied.values().any(func(stages: int) -> bool: return stages < 0):
@@ -1749,6 +1854,10 @@ func _hurt_in_confusion(fighter: Fighter) -> void:
 static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData, random: SimRandom) -> Dictionary:
 	if move.fixed_damage > 0:
 		return {"damage": move.fixed_damage, "crit": false, "effectiveness": 1.0}
+	# Super Fang, Counter and the like follow a rule rather than the formula (and, like fixed
+	# damage, ignore stats, type and crits).
+	if not move.damage_rule.is_empty():
+		return {"damage": MoveEffects.rule_damage(attacker, defender, move), "crit": false, "effectiveness": 1.0}
 	var parts := damage_parts(attacker, defender, move, data)
 	var crit := random.chance(Rules.CHEER_CRIT_CHANCE if attacker.cheer_ticks > 0 else Rules.CRIT_CHANCE)
 	var roll := random.range_float(Rules.ROLL_MIN, Rules.ROLL_MAX)
@@ -1871,6 +1980,9 @@ func _record_state() -> void:
 		_state[i + 36] = fighter.times_hit
 		_state[i + 37] = int(fighter.combo.get("count", 0)) * 10000 + int(fighter.combo.get("ticks", 0))
 		_state[i + 38] = 1.0 if fighter.item_effect.is_empty() else 0.0
+		_state[i + 39] = fighter.raised_ticks
+		_state[i + 40] = fighter.taken.size()
+		_state[i + 41] = int(fighter.foresight.get("ticks", 0))
 		i += FIGHTER_STATE_SIZE
 	_state[i] = ArenaConditions.WEATHERS.find(conditions.weather)
 	_state[i + 1] = conditions.weather_ticks
