@@ -1,13 +1,14 @@
 class_name PlateEffects
 extends RefCounted
 ## What a fighter's name plate shows in its row under the HP bar (concepts_brief.md §12.5): its
-## status condition, confusion and its side's screens, each with the share of its time left,
+## status condition, confusion and its side's screens and side conditions (Tailwind, Safeguard,
+## Mist), each with the share of its time left,
 ## then its changed stat stages, read from the battle every video frame. One per fighter: it
 ## remembers each timed effect's full length, since the battle only keeps the ticks left.
 
 ## Badge order along the row.
 const TIMED: Array[String] = ["brn", "par", "psn", "tox", "slp", "frz", "confusion",
-	"reflect", "lightscreen", "auroraveil"]
+	"reflect", "lightscreen", "auroraveil", "tailwind", "safeguard", "mist"]
 ## Stat stages, in badge order after the timed effects.
 const STAGES: Array[String] = ["atk", "def", "spa", "spd", "spe"]
 
@@ -28,6 +29,9 @@ func read(fighter: Fighter) -> Array[Dictionary]:
 	var screens: Dictionary = fighter.arena.screens[fighter.side]
 	for screen: String in screens:
 		ticks[screen] = screens[screen]
+	var sides: Dictionary = fighter.arena.sides[fighter.side]
+	for condition: String in sides:
+		ticks[condition] = sides[condition]
 	var entries: Array[Dictionary] = []
 	for key in TIMED:
 		if not ticks.has(key):
@@ -63,4 +67,6 @@ static func standard_ticks(key: String) -> int:
 			return Rules.seconds_to_ticks(Rules.CONFUSION_SECONDS)
 		"reflect", "lightscreen", "auroraveil":
 			return Rules.seconds_to_ticks(Rules.SCREEN_SECONDS)
+		"tailwind", "safeguard", "mist":
+			return ArenaConditions.field_ticks(key)
 	return Rules.seconds_to_ticks(Rules.STATUS_SECONDS)

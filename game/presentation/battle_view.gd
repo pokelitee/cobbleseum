@@ -97,6 +97,14 @@ const SURGE_STARTS := {"electric": "The ground crackles with electricity!", "gra
 	"misty": "Mist swirled over the field!", "psychic": "The field turned weird!"}
 const SURGE_ENDS := {"electric": "The electricity faded.", "grassy": "The grass withered away.",
 	"misty": "The mist cleared.", "psychic": "The weirdness faded."}
+## Field conditions (rules version 35): what's said when each starts and ends (colours from
+## FieldLooks), and side conditions' callouts over the side's fighter.
+const FIELD_STARTS := {"trickroom": "The dimensions twisted!", "gravity": "Gravity intensified!",
+	"magicroom": "Held items lost their power!", "wonderroom": "Defense and Sp. Def swapped!"}
+const FIELD_ENDS := {"trickroom": "The dimensions returned to normal.", "gravity": "Gravity returned to normal.",
+	"magicroom": "Held items work again.", "wonderroom": "Defense and Sp. Def swapped back."}
+const SIDE_STARTS := {"tailwind": "Tailwind!", "safeguard": "Safeguard!", "mist": "Shrouded in mist!"}
+const SIDE_ENDS := {"tailwind": "The tailwind petered out.", "safeguard": "Safeguard wore off.", "mist": "The mist faded."}
 ## Metres a fighter must move in a tick to play its walk animation.
 const WALK_THRESHOLD := 0.01
 ## Hits taking at least this share of the defender's HP (or big ones) make the crowd cheer;
@@ -928,6 +936,25 @@ func _play_events() -> void:
 			"surge_end":
 				if not _replaying:
 					_hud.flash_title(SURGE_ENDS[event.surge], ArenaSurge.COLOURS[event.surge])
+			"field":
+				if not _replaying:
+					_hud.flash_title(FIELD_STARTS[event.field], FieldLooks.COLOURS[event.field])
+			"field_end":
+				if not _replaying:
+					_hud.flash_title(FIELD_ENDS[event.field], FieldLooks.COLOURS[event.field])
+			"side_condition":
+				var colour: Color = Hud.STATUS_BADGES[event.condition][1].lightened(0.3)
+				_move_fx.aura(_event_view(event), colour, true)
+				_fx.announce(_event_view(event), SIDE_STARTS[event.condition], colour, 56)
+			"side_condition_end":
+				_fx.announce(_views[int(event.side)], SIDE_ENDS[event.condition], Hud.STATUS_BADGES[event.condition][1].lightened(0.3), 44)
+			"mist_blocked":
+				_fx.announce(_event_view(event), "Protected by the mist!", Hud.STATUS_BADGES.mist[1].lightened(0.3), 48)
+			"haze":
+				if not _replaying:
+					_hud.flash_title("All stat changes were eliminated!", Color(0.75, 0.9, 1.0))
+			"court_change":
+				_fx.announce(_event_view(event), "Sides swapped!", Color(0.85, 0.95, 1.0), 52)
 			"screen_end":
 				if event.get("shattered", false):
 					_fx.announce(_event_view(event), "Shattered!", ScreenPanes.COLOURS[event.screen], 56)
@@ -1074,6 +1101,11 @@ var _trainers: Array = [null, null]
 ## Screen panes in front of shielded fighters, and entry hazards on the field.
 var _screen_panes: ScreenPanes
 var _hazard_marks: HazardMarks
+## Field and side conditions' looks (rooms, Gravity, Tailwind).
+var _field_looks: FieldLooks
+## Ticks each field condition shown lasted when set, and its ticks left last frame.
+var _field_totals := {}
+var _field_lefts := {}
 ## What each plate (by Battle.index_of) shows under its HP bar.
 var _plate_effects: Array[PlateEffects] = [PlateEffects.new(), PlateEffects.new(), PlateEffects.new(), PlateEffects.new()]
 var _weather_seen := ""
@@ -1111,6 +1143,11 @@ func _sync_conditions() -> void:
 		_hazard_marks.setup(int(battle.spec.seed))
 		add_child(_hazard_marks)
 	_hazard_marks.sync(conditions.hazards, battle)
+	if _field_looks == null:
+		_field_looks = FieldLooks.new()
+		_field_looks.setup(int(battle.spec.seed))
+		add_child(_field_looks)
+	_field_looks.sync(conditions, fronts)
 	for index in _views.size():
 		_hud.set_effects(index, _plate_effects[index].read(battle.fighters[index]))
 	for side in 2:
@@ -1132,6 +1169,16 @@ func _sync_conditions() -> void:
 			"colour": ArenaSurge.COLOURS[conditions.surge], "left": conditions.surge_ticks / _surge_total})
 	_surge_seen = conditions.surge
 	_surge_left = conditions.surge_ticks
+	for name in ArenaConditions.FIELDS:
+		if not conditions.has_field(name):
+			_field_lefts.erase(name)
+			continue
+		var left: int = conditions.field[name]
+		if not _field_lefts.has(name) or left > int(_field_lefts[name]):
+			_field_totals[name] = maxf(left, ArenaConditions.field_ticks(name))
+		_field_lefts[name] = left
+		entries.append({"key": name, "text": ArenaConditions.field_display_name(name), "colour": FieldLooks.COLOURS[name],
+			"left": left / float(_field_totals[name])})
 	_hud.set_conditions(entries)
 
 

@@ -137,11 +137,33 @@ func stat(name: String) -> float:
 	return value
 
 
-## Walking speed after Speed stages, the ability and paralysis.
+## Walking speed after Speed stages, the ability, Tailwind and paralysis; under Trick Room, from
+## the Speed stat mirrored (Rules.mirrored_speed), then paralysis.
 func current_move_speed() -> float:
-	var speed := move_speed * Rules.stage_multiplier(boosts.spe) * Abilities.stat_factor(self, "spe")
+	var speed := move_speed * Rules.stage_multiplier(boosts.spe) * Abilities.stat_factor(self, "spe") * arena.speed_factor(self)
+	if arena.field.has("trickroom"):
+		speed = Rules.move_speed(Rules.mirrored_speed(stat("spe")))
 	var slowed: bool = status == "par" and not ability_effect.get("ignores_paralysis", false)
 	return speed * (Rules.PARALYSIS_SPEED_FACTOR if slowed else 1.0)
+
+
+## Agility (acceleration and turning) now: from the mirrored Speed stat under Trick Room.
+func current_agility() -> float:
+	if arena.field.has("trickroom"):
+		return Rules.agility(Rules.mirrored_speed(stat("spe")), weight_kg)
+	return agility
+
+
+## Ticks a dodge charge takes to recharge now: from the mirrored Speed stat under Trick Room.
+func dodge_recharge_needed() -> int:
+	if arena.field.has("trickroom"):
+		return Rules.seconds_to_ticks(Rules.dodge_recharge_seconds(Rules.mirrored_speed(stat("spe"))))
+	return dodge_recharge_total
+
+
+## How high the fighter can step up now: Gravity holds fliers to the ground's step.
+func step_height() -> float:
+	return Rules.CLIMB if arena.field.has("gravity") else climb
 
 
 ## Asleep, frozen or stunned: can't act or move.

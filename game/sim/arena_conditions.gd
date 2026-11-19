@@ -77,6 +77,37 @@ const EXTRA_ENTRIES := 0.5
 ## walking speed is worth this share of HP a second.
 const DAMAGE_SECONDS := 40.0
 const SPEED_GAIN := 0.005
+## Field conditions (rules version 35), from Showdown's `pseudoWeather` on moves: each acts on
+## every fighter for Rules.FIELD_SECONDS, and using its move while it's up ends it early (Gravity
+## fails instead). Trick Room mirrors every fighter's Speed within the roster's band (slow species
+## walk, turn and recharge dodges like fast ones); Gravity grounds everyone (Flying types and
+## Levitate lose their Ground immunity and climb like the rest), sends projectiles at full
+## accuracy's speed and stops moves flagged `gravity` (Fly, Bounce, High Jump Kick); Magic Room
+## turns held items off; Wonder Room makes physical moves hit Sp. Def and special ones Defense.
+const FIELDS: Array[String] = ["trickroom", "gravity", "magicroom", "wonderroom"]
+const FIELD_NAMES := {"trickroom": "Trick Room", "gravity": "Gravity", "magicroom": "Magic Room", "wonderroom": "Wonder Room"}
+## Side conditions (rules version 35), from `sideCondition`: on the user's side for a while.
+## Tailwind doubles walking speed (Rules.TAILWIND_SECONDS); Safeguard blocks major status and
+## confusion and Mist stat drops from foes (Rules.FIELD_SECONDS). Using one while it's up fails.
+const SIDE_CONDITIONS: Array[String] = ["tailwind", "safeguard", "mist"]
+const SIDE_NAMES := {"tailwind": "Tailwind", "safeguard": "Safeguard", "mist": "Mist"}
+const TAILWIND_FACTOR := 2.0
+## Haze (every fighter's stat stages back to 0) and Court Change (the sides' conditions and
+## hazards swap) act once, with no condition left behind.
+const ONCE: Array[String] = ["haze", "courtchange"]
+## Valuing: a held item is worth about this share of the damage swung over a battle (a paired
+## probe put items at about 10 points of win rate); shielding from status and from stat drops
+## are worth these shares of HP a second against a foe that inflicts them (Safeguard as Misty
+## Terrain's shield).
+const ITEM_WORTH := 0.15
+const SAFEGUARD_WORTH := 0.002
+const MIST_WORTH := 0.001
+## Gravity: a Ground move on an airborne foe goes from an immunity's ×0.25 to about neutral.
+const GROUNDED_GAIN := 3.0
+## Haze: a stat stage held is worth this share of HP; Court Change: a screen or side condition
+## changing hands is worth this share.
+const HAZE_STAGE_WORTH := 0.025
+const COURT_CONDITION_WORTH := 0.05
 
 var weather := ""
 ## Ticks the weather has left; -1 for one that lasts the battle (an arena's starting weather).
@@ -89,6 +120,9 @@ var screens: Array[Dictionary] = [{}, {}]
 var hazards: Array[Dictionary] = [{}, {}]
 ## Each side's healthy Pokémon on the bench, kept by the battle, for valuing hazards.
 var bench := PackedInt32Array([0, 0])
+## The field conditions up, {name: ticks left}, and each side's side conditions likewise.
+var field := {}
+var sides: Array[Dictionary] = [{}, {}]
 
 
 ## The weather a Showdown move sets ("" for none).
@@ -136,7 +170,68 @@ func tick() -> Array[Dictionary]:
 			if screens[side][name] <= 0:
 				screens[side].erase(name)
 				ended.append({"screen": name, "side": side})
+		for name: String in sides[side].keys():
+			sides[side][name] -= 1
+			if sides[side][name] <= 0:
+				sides[side].erase(name)
+				ended.append({"side_condition": name, "side": side})
+	for name: String in field.keys():
+		field[name] -= 1
+		if field[name] <= 0:
+			field.erase(name)
+			ended.append({"field": name})
 	return ended
+
+
+## The field or side condition (FIELDS, SIDE_CONDITIONS) or one-off effect (ONCE) a Showdown move
+## brings, or "".
+static func field_effect_of_move(id: String, data: Dictionary) -> String:
+	var pseudo := str(data.get("pseudoWeather", ""))
+	if pseudo in FIELDS:
+		return pseudo
+	var side := str(data.get("sideCondition", ""))
+	if side in SIDE_CONDITIONS:
+		return side
+	return id if id in ONCE else ""
+
+
+static func field_display_name(name: String) -> String:
+	return str(FIELD_NAMES.get(name, SIDE_NAMES.get(name, name)))
+
+
+## Whether field condition `name` is up.
+func has_field(name: String) -> bool:
+	return field.has(name)
+
+
+## Ticks a field or side condition lasts when set.
+static func field_ticks(name: String) -> int:
+	return Rules.seconds_to_ticks(Rules.TAILWIND_SECONDS if name == "tailwind" else Rules.FIELD_SECONDS)
+
+
+## Walking speed's multiplier from `fighter`'s side's conditions: Tailwind doubles it.
+func speed_factor(fighter: Fighter) -> float:
+	return TAILWIND_FACTOR if sides[fighter.side].has("tailwind") else 1.0
+
+
+## Whether Safeguard on `fighter`'s side keeps statuses and confusion off it.
+func safeguarded(fighter: Fighter) -> bool:
+	return sides[fighter.side].has("safeguard")
+
+
+## Whether Mist on `fighter`'s side keeps foes from lowering its stats.
+func misted(fighter: Fighter) -> bool:
+	return sides[fighter.side].has("mist")
+
+
+## The stat a hit of `move` is taken on: Wonder Room swaps Defense and Sp. Def.
+func defensive_stat(move: BattleMove) -> String:
+	if field.has("wonderroom"):
+		if move.defensive_stat == "def":
+			return "spd"
+		if move.defensive_stat == "spd":
+			return "def"
+	return move.defensive_stat
 
 
 ## Raises screen `name` on `side` for `ticks`.
@@ -163,8 +258,11 @@ static func covers(up: Dictionary, move: BattleMove) -> bool:
 	return up.has("auroraveil") or up.has("reflect" if move.physical else "lightscreen")
 
 
-## Whether `fighter` can use `move` under the conditions: Aurora Veil only in snow.
+## Whether `fighter` can use `move` under the conditions: Aurora Veil only in snow, nothing
+## airborne under Gravity.
 func usable(fighter: Fighter, move: BattleMove) -> bool:
+	if move.flags.has("gravity") and field.has("gravity"):
+		return false
 	return move.screen != "auroraveil" or weather == "snow"
 
 
@@ -207,9 +305,10 @@ static func surge_ticks_for(setter: Fighter) -> int:
 	return Rules.seconds_to_ticks(Rules.WEATHER_EXTENDED_SECONDS if extended else Rules.WEATHER_SECONDS)
 
 
-## Whether a surge reaches `fighter`: not a Flying type or a Levitate user.
+## Whether a surge reaches `fighter`: not a Flying type or a Levitate user, unless Gravity
+## grounds everyone.
 static func grounded(fighter: Fighter) -> bool:
-	return _grounded(fighter.types, fighter.ability)
+	return fighter.arena.field.has("gravity") or _grounded(fighter.types, fighter.ability)
 
 
 static func _grounded(types: Array, ability_id: String) -> bool:
@@ -302,8 +401,11 @@ static func type_factor(name: String, move_type: String) -> float:
 	return 1.0
 
 
-## A stat's multiplier from the weather: Rock types' Sp. Def in sand, Ice types' Defense in snow.
+## A stat's multiplier from the conditions: Rock types' Sp. Def in sand, Ice types' Defense in
+## snow, Speed in a Tailwind.
 func stat_factor(fighter: Fighter, stat: String) -> float:
+	if stat == "spe":
+		return speed_factor(fighter)
 	var boost: Dictionary = DEFENSE_BOOSTS.get(weather, {})
 	if not boost.is_empty() and boost.stat == stat and boost.type in fighter.types:
 		return DEFENSE_BOOST
@@ -317,9 +419,10 @@ func windup_ticks(fighter: Fighter, move: BattleMove, ticks: int) -> int:
 	return ticks
 
 
-## A projectile's speed in m/s: Thunder and Hurricane in rain, Blizzard in snow fly as if sure to hit.
+## A projectile's speed in m/s: Thunder and Hurricane in rain, Blizzard in snow and everything
+## under Gravity fly as if sure to hit.
 func projectile_speed(fighter: Fighter, move: BattleMove) -> float:
-	if SURE_IN.has(move.id) and weather_for(fighter) == SURE_IN[move.id]:
+	if field.has("gravity") or (SURE_IN.has(move.id) and weather_for(fighter) == SURE_IN[move.id]):
 		return Rules.projectile_speed(100)
 	return move.projectile_speed
 
@@ -339,9 +442,9 @@ func heal_share(fighter: Fighter, move: BattleMove) -> float:
 
 ## Whether the conditions stop `fighter` getting `status` ("confusion" included): nobody freezes
 ## in sun, grounded fighters don't fall asleep on electric ground or get any status on misty
-## ground.
+## ground, and Safeguard keeps every status off its side.
 func blocks_status(fighter: Fighter, status: String) -> bool:
-	if status == "frz" and weather_for(fighter) == "sun":
+	if (status == "frz" and weather_for(fighter) == "sun") or safeguarded(fighter):
 		return true
 	var ground := surge_for(fighter)
 	return ground == "misty" or (ground == "electric" and status == "slp")
@@ -475,3 +578,173 @@ func weather_seconds_left() -> float:
 	if weather.is_empty():
 		return 0.0
 	return INF if weather_ticks < 0 else weather_ticks / float(Rules.TICK_RATE)
+
+
+## What using field move `name` (a field or side condition, Haze or Court Change) now would swing
+## toward `me` and its ally against `foe` and its ally, as a share of HP; 0 or less when it would
+## fail or not help. Using a room that's up ends it, so that's worth what's left of it, reversed.
+func field_value(me: Fighter, foe: Fighter, name: String) -> float:
+	var seconds := field_ticks(name) / float(Rules.TICK_RATE)
+	var mine := _team_up(me)
+	var theirs := _team_up(foe)
+	match name:
+		"haze":
+			var stages := 0
+			for fighter in theirs:
+				stages += _stages(fighter)
+			for fighter in mine:
+				stages -= _stages(fighter)
+			return HAZE_STAGE_WORTH * stages
+		"courtchange":
+			var swing := hazards_worth(me.side) - hazards_worth(foe.side)
+			swing += COURT_CONDITION_WORTH * (screens[foe.side].size() + sides[foe.side].size() - screens[me.side].size() - sides[me.side].size())
+			return swing
+		"tailwind", "safeguard", "mist":
+			if sides[me.side].has(name):
+				return 0.0
+			if name == "tailwind":
+				var before := _speeds(mine, theirs)
+				sides[me.side][name] = 1
+				var after := _speeds(mine, theirs)
+				sides[me.side].erase(name)
+				return _speed_swing(before, after, mine.size()) * SPEED_GAIN * seconds
+			var worth := SAFEGUARD_WORTH if name == "safeguard" else MIST_WORTH
+			var threatened := theirs.any(func(f: Fighter) -> bool: return inflicts_status(f) if name == "safeguard" else lowers_stats(f))
+			return worth * seconds * mine.size() if threatened else 0.0
+		"gravity":
+			if field.has(name):
+				return 0.0
+			var swing := 0.0
+			for fighter in mine:
+				for other in theirs:
+					swing += _grounding_gain(fighter, other) - _grounding_gain(other, fighter)
+				swing -= _grounded_moves_share(fighter)
+			return swing * seconds / DAMAGE_SECONDS
+	# The rooms: what turning one on is worth, or turning it off for the time it has left.
+	var up := field.has(name)
+	if up:
+		seconds = field[name] / float(Rules.TICK_RATE)
+	var gain := 0.0
+	match name:
+		"trickroom":
+			var before := _speeds(mine, theirs)
+			if up:
+				field.erase(name)
+			else:
+				field[name] = 1
+			var after := _speeds(mine, theirs)
+			if up:
+				field[name] = roundi(seconds * Rules.TICK_RATE)
+			else:
+				field.erase(name)
+			return _speed_swing(before, after, mine.size()) * SPEED_GAIN * seconds
+		"magicroom":
+			for fighter in theirs:
+				gain += _item_live(fighter)
+			for fighter in mine:
+				gain -= _item_live(fighter)
+			gain *= ITEM_WORTH
+		"wonderroom":
+			for fighter in mine:
+				for other in theirs:
+					gain += _swap_taken(other, fighter) - _swap_taken(fighter, other)
+	return (-gain if up else gain) * seconds / DAMAGE_SECONDS
+
+
+## `fighter` and its ally up (doubles).
+static func _team_up(fighter: Fighter) -> Array[Fighter]:
+	var team: Array[Fighter] = [fighter]
+	if fighter.ally != null and not fighter.ally.is_knocked_out():
+		team.append(fighter.ally)
+	return team
+
+
+static func _stages(fighter: Fighter) -> int:
+	var total := 0
+	for stat: String in fighter.boosts:
+		total += int(fighter.boosts[stat])
+	return total
+
+
+## Walking speeds now of `mine` then `theirs`.
+static func _speeds(mine: Array[Fighter], theirs: Array[Fighter]) -> Array[float]:
+	var speeds: Array[float] = []
+	for fighter in mine + theirs:
+		speeds.append(maxf(fighter.current_move_speed(), 0.1))
+	return speeds
+
+
+## How much a change of walking speeds (`before`, `after`, the first `count` its own side's) swings
+## toward that side: each fighter's doubling (or halving) counts as one, within ±1.5.
+static func _speed_swing(before: Array[float], after: Array[float], count: int) -> float:
+	var swing := 0.0
+	for i in before.size():
+		var change := clampf(log(after[i] / before[i]) / log(2.0), -1.5, 1.5)
+		swing += change if i < count else -change
+	return swing
+
+
+## Whether `fighter` can give a status or confusion: a status move, a secondary that does, or a
+## contact-punishing ability.
+static func inflicts_status(fighter: Fighter) -> bool:
+	if fighter.ability_effect.has("contact_status"):
+		return true
+	for move: BattleMove in fighter.moves:
+		if move.kind == BattleMove.Kind.STATUS or move.secondaries.any(func(e: Dictionary) -> bool: return e.has("status") or e.has("confuses")):
+			return true
+	return false
+
+
+## Whether `fighter` can lower a foe's stats: a debuff, a secondary that does, or Intimidate.
+static func lowers_stats(fighter: Fighter) -> bool:
+	if fighter.ability_effect.get("intimidate", false):
+		return true
+	for move: BattleMove in fighter.moves:
+		if move.kind == BattleMove.Kind.DEBUFF or move.secondaries.any(func(e: Dictionary) -> bool: return e.has("boosts")):
+			return true
+	return false
+
+
+## What Gravity adds to `attacker`'s damage on `defender` over a battle's worth of attacks, as a
+## share of its damage: its Ground moves on a defender that wasn't grounded.
+static func _grounding_gain(attacker: Fighter, defender: Fighter) -> float:
+	if _grounded(defender.types, defender.ability):
+		return 0.0
+	return _share_of(attacker, func(move: BattleMove) -> bool: return move.type == "Ground") * GROUNDED_GAIN
+
+
+## The share of `fighter`'s attacks (by power) Gravity would stop (Fly, Bounce).
+static func _grounded_moves_share(fighter: Fighter) -> float:
+	return _share_of(fighter, func(move: BattleMove) -> bool: return move.flags.has("gravity"))
+
+
+## The share of `fighter`'s damaging moves' power in moves that `which` picks.
+static func _share_of(fighter: Fighter, which: Callable) -> float:
+	var total := 0.0
+	var picked := 0.0
+	for move: BattleMove in fighter.moves:
+		if not move.is_damaging():
+			continue
+		var weight := move.power * move.expected_hits()
+		total += weight
+		if which.call(move):
+			picked += weight
+	return picked / total if total > 0.0 else 0.0
+
+
+## 1 if `fighter` holds an item that still works (not a spent one-use item), else 0.
+static func _item_live(fighter: Fighter) -> float:
+	var held := Items.effect(fighter.item)
+	if held.is_empty():
+		return 0.0
+	var one_use: bool = held.has("berry_heal") or held.get("focus_sash", false) or held.get("cures_status", false)
+	return 0.0 if one_use and fighter.item_used else 1.0
+
+
+## How much more (or, negative, less) `defender` would take from `attacker`'s attacks with Defense
+## and Sp. Def swapped, as a share of its damage: physical hits meet Sp. Def, special ones Defense.
+static func _swap_taken(attacker: Fighter, defender: Fighter) -> float:
+	var physical := _share_of(attacker, func(move: BattleMove) -> bool: return move.physical and move.defensive_stat == "def")
+	var special := _share_of(attacker, func(move: BattleMove) -> bool: return not move.physical and move.defensive_stat == "spd")
+	var ratio := float(defender.stats.def) / float(defender.stats.spd)
+	return physical * (ratio - 1.0) + special * (1.0 / ratio - 1.0)

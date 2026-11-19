@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 34
+const RULES_VERSION := 35
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -184,6 +184,15 @@ const SCREEN_COOLDOWN := 14.0
 ## Entry hazards (§9.11) are cheap to lay and last until cleared, so their moves cool down for
 ## HAZARD_COOLDOWN between layers.
 const HAZARD_COOLDOWN := 12.0
+## Field and side conditions (§9.11, rules version 35): Trick Room, Gravity, the rooms, Safeguard
+## and Mist last the main series' five turns read as weather is (FIELD_SECONDS), Tailwind its four;
+## their moves cool down like the other arena moves (ARENA_MOVE_COOLDOWN). Court Change swaps the
+## sides' conditions and cools down like a hazard; Haze like any status move.
+const FIELD_SECONDS := 20.0
+const TAILWIND_SECONDS := 16.0
+## Trick Room mirrors a Speed stat within the band from the roster's slowest (a base-5 species) to
+## SPEED_STAT_FOR_MAX, so the slowest walk, turn and recharge dodges like the fastest.
+const SLOWEST_SPEED_STAT := 25.0
 
 ## Stat stages run from -6 to +6 with the main-series multipliers (§9.5). They wear off:
 ## every STAGE_DECAY_SECONDS without a change, each stage moves one step back toward 0.
@@ -259,13 +268,18 @@ static func knockback_speed(damage_share: float, weight_kg: float) -> float:
 	return KNOCKBACK_SPEED * clampf(damage_share / KNOCKBACK_FULL_SHARE, 0.0, 1.0) * weight_factor
 
 
-static func move_speed(speed_stat: int) -> float:
+static func move_speed(speed_stat: float) -> float:
 	return lerpf(MIN_MOVE_SPEED, MAX_MOVE_SPEED, clampf(speed_stat / SPEED_STAT_FOR_MAX, 0.0, 1.0))
 
 
 ## Seconds to recharge one dodge charge: faster for faster species.
-static func dodge_recharge_seconds(speed_stat: int) -> float:
+static func dodge_recharge_seconds(speed_stat: float) -> float:
 	return lerpf(DODGE_RECHARGE_SLOW, DODGE_RECHARGE_FAST, clampf(speed_stat / SPEED_STAT_FOR_MAX, 0.0, 1.0))
+
+
+## A Speed stat as Trick Room reads it: mirrored within SLOWEST_SPEED_STAT-SPEED_STAT_FOR_MAX.
+static func mirrored_speed(speed_stat: float) -> float:
+	return SPEED_STAT_FOR_MAX + SLOWEST_SPEED_STAT - clampf(speed_stat, SLOWEST_SPEED_STAT, SPEED_STAT_FOR_MAX)
 
 
 static func status_move_cooldown_seconds(pp: int) -> float:

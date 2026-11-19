@@ -514,10 +514,10 @@ In the code, multi-hit, charge and recharge are properties of the melee, project
 - **Fixed damage** (Seismic Toss, Night Shade, Dragon Rage, Sonic Boom) deals its main-series amount, unscaled, like every other move's damage, so it keeps its balance against them.
 - **Self-destructing moves** (Explosion, Self-Destruct, Misty Explosion) knock out the user.
 
-For the 850 standard moves, 628 are playable: 243 melee, 238 projectile, 64 area, 26 self-buff, 18 debuff, 17 status, 10 heal and 12 arena moves (§9.11). The rest are other arena moves, special cases and moves whose power is computed in code.
+For the 850 standard moves, 638 are playable under rules version 35: 240 melee, 231 projectile, 58 area, 27 self-buff, 18 debuff, 17 status, 13 heal (three of them doubles' team heals), 27 arena moves (§9.11) and 7 ally moves. The rest are special cases and moves whose power is computed in code, which M18 works through (§17).
 
 **Not in the first version:**
-- The side and field conditions besides weather, surges, screens and entry hazards (§9.11) are special cases.
+- The side and field conditions besides weather, surges, screens, entry hazards and M18's field and side conditions (§9.11), such as Fairy Lock, are special cases.
 - 106 special-case moves, such as Protect, Substitute, Counter and Transform.
 
 **Phases.** Every move has a wind-up, an active window and a recovery.
@@ -788,7 +788,27 @@ Arena moves set a condition on the whole arena or on one side for a while instea
 - **Presentation:** callouts ("Helping Hand!", "Pumped up!", "Center of attention!", "Wide Guard!", "Protected!") with a glow on the fighter helped and the guard's look on both of a Wide Guard's side.
 - **Determinism:** the timers and the side's pull and Wide Guard are hashed in doubles.
 
-- **Left out:** Tailwind, Safeguard, Mist, Trick Room, Magic Room, Wonder Room, Gravity, Quick Guard, Wide Guard and Fairy Lock (special cases, §9.3); Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide and Steel Roller's surge readings; the seeds, Protosynthesis, Quark Drive and other abilities of species missing from the roster; Sand Veil and Snow Cloak (accuracy).
+**Field and side conditions** (M18, rules version 35): the rest of the main series' field and side conditions with a clear real-time reading. Standard movesets never pick them (like hazards and ally moves): what they're worth depends on the matchup and the team, so singles movesets and the ranking are unchanged; specs, `--moves` and the setup screen give them. Each is an arena move (0.4 s wind-up, no range) with the usual 30 s cooldown.
+
+| Move | Condition | Effect |
+|---|---|---|
+| Trick Room | field, 20 s | Every fighter's Speed stat (after stages, abilities and Tailwind) is mirrored within the roster's band, 25–150: slow species walk, turn and recharge dodges like fast ones and the fastest like the slowest; paralysis still halves walking after that. Using it while it's up ends it. |
+| Gravity | field, 20 s | Everyone is grounded: Flying types and Levitate users take Ground moves (and surges, Spikes) like anyone, and fliers step up only 0.5 m; projectiles fly at full accuracy's speed; Fly, Bounce and High Jump Kick (Showdown's `gravity` flag) can't be used. Using it again fails. |
+| Magic Room | field, 20 s | Held items do nothing (one-use items stay spent). Using it while it's up ends it. |
+| Wonder Room | field, 20 s | Physical moves hit Sp. Def and special moves Defense (stages go with the stat used). Using it while it's up ends it. |
+| Tailwind | side, 16 s | The side's walking speed (and Speed stat) doubles, as Swift Swim does. |
+| Safeguard | side, 20 s | No major status or confusion reaches the side (Toxic Spikes included). |
+| Mist | side, 20 s | Foes can't lower the side's stats (Intimidate and Sticky Web included); its own drops still count. |
+| Haze | once | Every fighter out loses its stat stages; a status move's cooldown. |
+| Court Change | once | The sides swap screens, side conditions and hazards; a hazard's 12 s cooldown. |
+
+- **Durations:** the main series' five turns read as 20 s like weather, Tailwind's four as 16 s. Tailwind, Safeguard and Mist fail while already up.
+- **AI:** both AIs value each by the difference it makes, as a share of HP over its time (`ArenaConditions.field_value`): Tailwind and Trick Room by how much every fighter's walking speed changes (a doubling counts as a speed-doubling ability, `SPEED_GAIN`), so the slower side sets Trick Room and the faster side ends it, and Tailwind is never set under a Trick Room that would turn it against the user; Gravity by the user's Ground moves reaching airborne foes, less the reverse and less its own grounded moves; Magic Room by the live items it switches off on each side; Wonder Room by the defences each side's attacks would meet; Safeguard and Mist only against a foe that inflicts statuses or lowers stats; Haze by the stages held on each side; Court Change by the hazards and conditions that change hands. Everything counts both fighters a side in doubles.
+- **Presentation** (`FieldLooks`): a room puts a cage of glowing pixel-grid lines around the arena in its colour (pink Trick Room, violet Magic Room, teal Wonder Room; rooms up together nest), Gravity hangs a dark ceiling over the arena with heavy purple streaks pressing down, and Tailwind blows pale green streaks past its side's fighter toward the foe. Field conditions get a pill with a draining timer beside the weather's and callouts when they start and end; side conditions a timed badge in the effect row of the side's plates (WIND, SAFE, MIST, icons drawn in-house), a glow and callout when raised and when they end, and "Protected by the mist!" when Mist stops a drop. `tools/preview_fields.gd` renders each in both formats.
+- **Determinism:** every field and side condition's ticks left are hashed.
+- **Not done:** fliers' hovering doesn't drop in the view under Gravity (the simulation already grounds them).
+
+- **Left out:** Quick Guard and the Protect family (the guard, §9.2, is their real-time reading); Fairy Lock (one roster species learns it, and a short ban on switching has no clear effect when switching isn't turn-locked); the seeds, Protosynthesis, Quark Drive and other abilities of species missing from the roster; Sand Veil and Snow Cloak (accuracy). Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide and Steel Roller's surge readings come in M18 (§17).
 
 ## 10. Simulation and determinism
 
@@ -1364,6 +1384,15 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **HUD:** two slimmer plates stacked per side (top-left and top-right in landscape, top and bottom in portrait), team balls once per side under the pair; play mode marks the player's lock.
 - **Ranking:** stays one-on-one (§13).
 - **Pull requests:** (1) two out per side in the simulation, targeting, spread moves and ally fire (rules version 30); (2) the AI for doubles (31); (3) `--doubles`, the setup screen, the director, the HUD and clips; (4) ally moves (32); (5) ally and both-foe abilities (33); (6) doubles pace (34), which marks M17 done.
+
+**M18: special moves.** The moves that played as plain hits or not at all because their real effect lives in Showdown's code, after M17, before the rules settle and the ranking (§13) runs. Designed 2026-11-19 with the user (every choice the recommended one). A survey of the 685 standard Gen 9 moves found 160 the rules couldn't play and 144 that played without part of their code (some, such as screens and hazards, already handled).
+
+- **Scope:** every move with a clear real-time reading, in several pull requests, one rules version each. Left out, documented where they'd go: the Protect family (the guard is its reading), moves that copy or call others, item swaps, accuracy and evasion, turn order, gender and one-hit knockouts.
+- **Trick Room** mirrors Speed within the roster's band for 20 s (§9.11).
+- **Pivots and phazers** (team battles): on a hit, or on release for status ones, the user is recalled for the side's chosen bench member, ignoring the switch cooldown but restarting it; phazers drag in a random member of the foe's bench. In one-on-one they're plain hits (a phazing status move fails).
+- **Fly, Dig and the like** keep their plain charge: an untouchable charge would be a free extra dodge each cooldown.
+- **Movesets:** moves a species uses on itself or a foe (Shell Smash, Belly Drum, Curse, Taunt, Leech Seed, Rest…) join the utility slot like any buff, status or heal; field and side moves stay out, like hazards and ally moves; damaging moves with real effects stay eligible as before.
+- **Pull requests:** (1) field and side conditions (rules version 35) done: Tailwind, Trick Room, Gravity, Magic Room, Wonder Room, Safeguard, Mist, Haze, Court Change (§9.11); (2) power and type from the weather and surge; (3) power from HP and state, and proportional damage; (4) odd self-buffs and HP-trading status moves; (5) lingering effects (Taunt, Leech Seed, Yawn…); (6) pivots and phazers.
 
 **Later:**
 

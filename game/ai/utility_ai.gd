@@ -365,7 +365,7 @@ func _remember_foes(battle: Battle, me: Fighter) -> void:
 ## can't climb (pillars, cliffs).
 static func _around_terrain(battle: Battle, me: Fighter, intent: Dictionary) -> Dictionary:
 	if intent.has("move"):
-		intent.move = battle.terrain.steer(me.position, me.radius, me.ground, me.climb, intent.move)
+		intent.move = battle.terrain.steer(me.position, me.radius, me.ground, me.step_height(), intent.move)
 	return intent
 
 
@@ -519,7 +519,7 @@ static func find_spot(battle: Battle, me: Fighter, foe_eye: Vector3, visible: bo
 			if spot.length() > Rules.ARENA_RADIUS - me.radius - 0.5:
 				continue
 			var ground := terrain.height_at(spot)
-			if ground > me.ground + me.climb:
+			if ground > me.ground + me.step_height():
 				continue
 			var chest := Vector3(spot.x, ground + Rules.CHEST_HEIGHT, spot.y)
 			if terrain.clear_line(foe_eye, chest) == visible:
@@ -937,7 +937,7 @@ func _movement_intent(me: Fighter, seen: Dictionary, action: String) -> Dictiona
 	if _strafe_ticks <= 0:
 		_strafe = 1.0 if random.chance(0.5) else -1.0
 		# Agile species switch sides sooner, so they dart rather than orbit.
-		_strafe_ticks = roundi((STRAFE_MIN_TICKS + int(random.next_u32() % (STRAFE_MAX_TICKS - STRAFE_MIN_TICKS + 1))) / me.agility)
+		_strafe_ticks = roundi((STRAFE_MIN_TICKS + int(random.next_u32() % (STRAFE_MAX_TICKS - STRAFE_MIN_TICKS + 1))) / me.current_agility())
 		_band_shift = (random.next_float() * 2.0 - 1.0) * BAND_JITTER
 	var toward: Vector2 = ((seen.position as Vector2) - me.position).normalized()
 	var side := Vector2(-toward.y, toward.x) * _strafe

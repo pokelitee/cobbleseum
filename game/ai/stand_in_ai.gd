@@ -112,7 +112,7 @@ func decide(battle: Battle, index: int) -> Dictionary:
 		band = Vector2(0.0, Rules.MELEE_DASH_RANGE * 0.8)
 	elif ranged_ready:
 		band = RANGED_GAP
-	intent.move = battle.terrain.steer(me.position, me.radius, me.ground, me.climb, _steer(me, foe, gap, band))
+	intent.move = battle.terrain.steer(me.position, me.radius, me.ground, me.step_height(), _steer(me, foe, gap, band))
 	return intent
 
 
@@ -155,12 +155,15 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 	return 0.0
 
 
-## What setting `move`'s weather or surge is worth now: the HP it would swing toward `me` against
-## keeping the current one, or 0 if it's too little or the same one has plenty of time left.
+## What setting `move`'s weather, surge or other arena condition is worth now: the HP it would
+## swing toward `me` against keeping the current one, or 0 if it's too little or the same one has
+## plenty of time left.
 static func arena_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 	var arena := me.arena
 	var value := 0.0
-	if not move.hazard.is_empty():
+	if not move.field_effect.is_empty():
+		value = arena.field_value(me, foe, move.field_effect)
+	elif not move.hazard.is_empty():
 		value = arena.hazard_value(foe.side, move.hazard, foe)
 	elif move.kind == BattleMove.Kind.ARENA and move.clears == "both":
 		value = arena.hazards_worth(me.side) - arena.hazards_worth(foe.side)

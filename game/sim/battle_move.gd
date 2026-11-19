@@ -12,7 +12,8 @@ extends RefCounted
 ## - DEBUFF and STATUS: status moves fired at the opponent as projectiles, lowering its stats
 ##   or inflicting a status condition or confusion;
 ## - ARENA: arena moves (§9.11), applied on release like a self-buff, setting a weather, a
-##   surge or a screen on the user's side (or Wide Guard, M17);
+##   surge, a screen, a field or side condition (Trick Room, Tailwind, ...) or acting on the
+##   whole field once (Haze, Court Change), or Wide Guard (M17);
 ## - ALLY and REDIRECT (M17, doubles): applied on release to the ally (boosts, Helping Hand,
 ##   Dragon Cheer; Howl the user too) or drawing the foes' attacks (Follow Me, Rage Powder).
 ##   Team heals are HEAL moves that heal the ally too.
@@ -84,6 +85,9 @@ var screen := ""
 ## it clears: "own", "both" or "".
 var hazard := ""
 var clears := ""
+## The field or side condition it sets ("trickroom", "tailwind", ...), or "haze" or
+## "courtchange" (ArenaConditions.FIELDS, SIDE_CONDITIONS and ONCE); "" for none.
+var field_effect := ""
 ## Showdown's priority: above 0 winds up faster (Rules.PRIORITY_WINDUP_FACTOR).
 var priority := 0
 ## Shares of max HP healed (HEAL), of damage dealt healed (drain) or taken back (recoil).
@@ -161,6 +165,10 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 				cooldown = Rules.HAZARD_COOLDOWN
 			if move.wide_guard:
 				cooldown = Rules.WIDE_GUARD_COOLDOWN
+			if move.field_effect == "courtchange":
+				cooldown = Rules.HAZARD_COOLDOWN
+			elif move.field_effect == "haze":
+				cooldown = Rules.status_move_cooldown_seconds(pp)
 		if move.kind == Kind.REDIRECT:
 			cooldown = Rules.REDIRECT_COOLDOWN
 		move.cooldown_ticks = Rules.seconds_to_ticks(cooldown)
@@ -258,6 +266,11 @@ static func _classify_status_move(id: String, data: Dictionary, move: BattleMove
 	if id == "wideguard":
 		move.kind = Kind.ARENA
 		move.wide_guard = true
+		return ""
+	var field_effect := ArenaConditions.field_effect_of_move(id, data)
+	if not field_effect.is_empty():
+		move.kind = Kind.ARENA
+		move.field_effect = field_effect
 		return ""
 	var weather := ArenaConditions.weather_of_move(data)
 	var surge := ArenaConditions.surge_of_move(data)

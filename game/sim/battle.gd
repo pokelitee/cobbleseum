@@ -64,6 +64,8 @@ const TEAM_STATE_SIZE := 8
 ## its fighter's Helping Hand and Dragon Cheer timers and whether its move is helped (then per
 ## side, the pull's and Wide Guard's ticks left).
 const PLACE_STATE_SIZE := 7
+## Values hashed for the field conditions and each side's side conditions.
+const FIELD_STATE_SIZE := 10
 var _state := PackedFloat64Array()
 ## Projectiles fired so far; each gets the next number as a stable id.
 var _projectile_count := 0
@@ -424,6 +426,12 @@ func step() -> void:
 	for ended in conditions.tick():
 		if ended.has("screen"):
 			_event("screen_end", int(ended.side), {"screen": ended.screen})
+		elif ended.has("side_condition"):
+			_event("side_condition_end", int(ended.side), {"condition": ended.side_condition})
+		elif ended.has("field"):
+			_event("field_end", -1, ended)
+			if ended.field == "magicroom":
+				_sync_items()
 		else:
 			_event("weather_end" if ended.has("weather") else "surge_end", -1, ended)
 	if tick == overtime_tick:
@@ -460,7 +468,7 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 	fighter.cheer_ticks = maxi(0, fighter.cheer_ticks - 1)
 	if fighter.dodge_charges < Rules.DODGE_CHARGES:
 		fighter.dodge_recharge_ticks += 1
-		if fighter.dodge_recharge_ticks >= fighter.dodge_recharge_total:
+		if fighter.dodge_recharge_ticks >= fighter.dodge_recharge_needed():
 			fighter.dodge_charges += 1
 			fighter.dodge_recharge_ticks = 0
 	_tick_conditions(fighter)
@@ -620,7 +628,7 @@ func _walk(fighter: Fighter, direction: Vector2) -> void:
 ## Eases the fighter's velocity toward `target` (m/s) at Rules.ACCELERATION and moves it. The
 ## velocity kept is what it actually moved, so walls and the others' bodies stop it.
 func _drift(fighter: Fighter, target: Vector2) -> void:
-	var rate := Rules.ACCELERATION * fighter.agility
+	var rate := Rules.ACCELERATION * fighter.current_agility()
 	if fighter.glides and target.length_squared() < fighter.velocity.length_squared():
 		rate *= Rules.GLIDE_BRAKING
 	fighter.velocity = fighter.velocity.move_toward(target, rate / Rules.TICK_RATE)
@@ -633,7 +641,7 @@ func _drift(fighter: Fighter, target: Vector2) -> void:
 static func _turn(fighter: Fighter, direction: Vector2, degrees_per_second: float) -> void:
 	if direction.length_squared() < 1e-8:
 		return
-	var step := deg_to_rad(degrees_per_second * fighter.agility) / Rules.TICK_RATE
+	var step := deg_to_rad(degrees_per_second * fighter.current_agility()) / Rules.TICK_RATE
 	fighter.facing = fighter.facing.rotated(clampf(fighter.facing.angle_to(direction), -step, step)).normalized()
 
 
@@ -655,7 +663,7 @@ func _slide(fighter: Fighter, delta: Vector2) -> void:
 	var limit := Rules.ARENA_RADIUS - fighter.radius
 	if next.length() > limit:
 		next = next.normalized() * limit
-	next = terrain.push_out(next, fighter.radius, fighter.ground, fighter.climb)
+	next = terrain.push_out(next, fighter.radius, fighter.ground, fighter.step_height())
 	if next.length() > limit:
 		next = next.normalized() * limit
 	fighter.position = next
@@ -667,7 +675,9 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 	fighter.action = Fighter.Action.RECOVERY
 	fighter.action_ticks = move.recovery_ticks
 	if move.is_self():
-		if move.kind == BattleMove.Kind.HEAL and move.team_heal:
+		if not move.field_effect.is_empty():
+			_field_move(fighter, move)
+		elif move.kind == BattleMove.Kind.HEAL and move.team_heal:
 			_team_heal(fighter, move)
 		elif move.kind == BattleMove.Kind.HEAL:
 			_heal(fighter, roundi(fighter.max_hp * conditions.heal_share(fighter, move)), move.id)
@@ -806,6 +816,51 @@ func _support(fighter: Fighter, move: BattleMove) -> void:
 				target.helping_ticks = Rules.seconds_to_ticks(Rules.HELPING_HAND_SECONDS)
 			"cheer":
 				target.cheer_ticks = Rules.seconds_to_ticks(Rules.CHEER_SECONDS)
+
+
+## A field or side condition's move (§9.11), or Haze or Court Change. A room used while it's up
+## ends it; Gravity, Tailwind, Safeguard and Mist fail while they're up.
+func _field_move(fighter: Fighter, move: BattleMove) -> void:
+	var name := move.field_effect
+	if name == "haze":
+		for other in fighters:
+			if not other.is_knocked_out():
+				for stat: String in other.boosts:
+					other.boosts[stat] = 0
+				other.stage_ticks = 0
+		_fevent("haze", fighter, {"move": move.id})
+	elif name == "courtchange":
+		conditions.screens.reverse()
+		conditions.hazards.reverse()
+		conditions.sides.reverse()
+		_fevent("court_change", fighter, {"move": move.id})
+	elif name in ArenaConditions.SIDE_CONDITIONS:
+		if conditions.sides[fighter.side].has(name):
+			_fevent("failed", fighter, {"move": move.id})
+			return
+		var ticks := ArenaConditions.field_ticks(name)
+		conditions.sides[fighter.side][name] = ticks
+		_fevent("side_condition", fighter, {"condition": name, "move": move.id, "seconds": ticks / float(Rules.TICK_RATE)})
+	elif conditions.field.has(name):
+		if name == "gravity":
+			_fevent("failed", fighter, {"move": move.id})
+			return
+		conditions.field.erase(name)
+		_fevent("field_end", fighter, {"field": name, "move": move.id})
+	else:
+		var ticks := ArenaConditions.field_ticks(name)
+		conditions.field[name] = ticks
+		_fevent("field", fighter, {"field": name, "move": move.id, "seconds": ticks / float(Rules.TICK_RATE)})
+	if name == "magicroom":
+		_sync_items()
+
+
+## Magic Room turns every held item off while it's up (one-use items stay spent).
+func _sync_items() -> void:
+	var off := conditions.has_field("magicroom")
+	for team: Array in teams:
+		for member: Fighter in team:
+			member.item_effect = {} if off else Items.effect(member.item)
 
 
 ## A team heal: the user and its ally up each heal their share, and with Jungle Healing or Lunar
@@ -1518,6 +1573,14 @@ func _boost(fighter: Fighter, changes: Dictionary, move_id: String, foe: Fighter
 		if allowed.size() < changes.size():
 			_ability_event(fighter)
 		changes = allowed
+		if conditions.misted(fighter):
+			var kept := {}
+			for stat: String in changes:
+				if int(changes[stat]) > 0:
+					kept[stat] = changes[stat]
+			if kept.size() < changes.size():
+				_fevent("mist_blocked", fighter, {"move": move_id})
+			changes = kept
 	var applied := {}
 	for stat: String in changes:
 		var before: int = fighter.boosts[stat]
@@ -1645,11 +1708,15 @@ static func damage(attacker: Fighter, defender: Fighter, move: BattleMove, data:
 ## compressed effectiveness. An ability immunity counts as a type immunity (§9.9).
 static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData) -> Dictionary:
 	var attack := move.attack_stat(attacker, defender)
-	var defense := defender.stat(move.defensive_stat)
+	var defense := defender.stat(attacker.arena.defensive_stat(move))
 	var power := move.power * Abilities.power_factor(attacker, move)
 	var base := floorf(floorf(floorf(2.0 * Rules.LEVEL / 5.0 + 2.0) * power * attack / defense) / 50.0) + 2.0
 	var stab := Abilities.stab(attacker) if move.type in attacker.types else 1.0
-	var main_series := Abilities.effectiveness(attacker, defender, move, data.effectiveness(move.type, defender.types))
+	var defender_types := defender.types
+	# Gravity grounds Flying types: Ground moves reach them as if they weren't Flying.
+	if move.type == "Ground" and "Flying" in defender_types and attacker.arena.has_field("gravity"):
+		defender_types = defender_types.filter(func(type: String) -> bool: return type != "Flying")
+	var main_series := Abilities.effectiveness(attacker, defender, move, data.effectiveness(move.type, defender_types))
 	var effectiveness := Rules.compressed_effectiveness(main_series)
 	var factor := stab * effectiveness * Abilities.taken_factor(defender, move, main_series) * Items.power_factor(attacker, move, main_series) 		* attacker.arena.damage_factor(attacker, defender, move)
 	if attacker.helped:
@@ -1698,7 +1765,7 @@ func _time_up_result() -> Result:
 
 ## Hashes every value that defines the state. Runs every tick, so it fills a reused array.
 func _record_state() -> void:
-	_state.resize(FIGHTER_STATE_SIZE * fighters.size() + 4 + 2 * ArenaConditions.SCREENS.size() + projectiles.size() * 3
+	_state.resize(FIGHTER_STATE_SIZE * fighters.size() + 4 + 2 * ArenaConditions.SCREENS.size() + FIELD_STATE_SIZE + projectiles.size() * 3
 		+ (TEAM_STATE_SIZE * 2 if _hash_teams else 0) + ((PLACE_STATE_SIZE * fighters.size() + 4) if doubles else 0))
 	var i := 0
 	for fighter in fighters:
@@ -1744,6 +1811,12 @@ func _record_state() -> void:
 		for screen in ArenaConditions.SCREENS:
 			_state[i] = conditions.screens[side].get(screen, 0)
 			i += 1
+		for condition in ArenaConditions.SIDE_CONDITIONS:
+			_state[i] = conditions.sides[side].get(condition, 0)
+			i += 1
+	for name in ArenaConditions.FIELDS:
+		_state[i] = conditions.field.get(name, 0)
+		i += 1
 	for projectile in projectiles:
 		_state[i] = projectile.position.x
 		_state[i + 1] = projectile.position.y
