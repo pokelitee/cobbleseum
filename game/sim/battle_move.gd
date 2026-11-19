@@ -32,10 +32,18 @@ const STATUSES: Array[String] = ["brn", "par", "psn", "tox", "slp", "frz"]
 ## Status moves whose real behaviour lives in Showdown's code (an HP cost, a charge turn,
 ## knocking out the user, a gender check), so their data alone would play wrong.
 const EXCLUDED: Array[String] = ["clangoroussoul", "filletaway", "geomancy", "memento", "captivate"]
-## Damaging moves whose condition or cost lives in Showdown's code, so they'd play as free
-## strong hits: Future Sight and Doom Desire land later; Steel Beam and Mind Blown cost half the
-## user's HP; Shell Trap and Beak Blast need the user hit first.
-const DAMAGING_EXCLUDED: Array[String] = ["futuresight", "doomdesire", "steelbeam", "mindblown", "shelltrap", "beakblast"]
+## Damaging moves whose condition lives in Showdown's code, so they'd play as free strong hits:
+## Shell Trap and Beak Blast need the user hit first (one roster species each; left out).
+const DAMAGING_EXCLUDED: Array[String] = ["shelltrap", "beakblast"]
+## Moves whose damage follows a rule rather than the formula (rules version 38, MoveEffects.rule_damage):
+## a share of the target's HP, the gap between HPs, the user's HP, or damage taken paid back.
+const DAMAGE_RULES := {"superfang": "half", "ruination": "half", "naturesmadness": "half", "endeavor": "gap",
+	"finalgambit": "gambit", "counter": "counter", "mirrorcoat": "mirrorcoat", "metalburst": "metalburst",
+	"comeuppance": "comeuppance"}
+## Moves that land later (Future Sight, Doom Desire), cost the user HP when used (Steel Beam, Mind
+## Blown) or crash when they miss (High Jump Kick, Axe Kick, Supercell Slam).
+const DELAYED: Array[String] = ["futuresight", "doomdesire"]
+const COSTS_HP: Array[String] = ["steelbeam", "mindblown"]
 ## Moves whose power Showdown works out in code (MoveEffects): the power the rules give them for
 ## cooldowns (their power in battle follows the state).
 const CODE_POWER := {"reversal": 60, "flail": 60, "hardpress": 100, "crushgrip": 120, "wringout": 120, "grassknot": 60,
@@ -124,6 +132,12 @@ var wide_guard := false
 var adapted := false
 ## A long wind-up that any hit cancels (heals and Focus Punch).
 var channels := false
+## Rules version 38: the rule its damage follows (DAMAGE_RULES), whether it lands later, the share
+## of max HP it costs the user when used, and the share it costs when it misses.
+var damage_rule := ""
+var delayed := false
+var cost_share := 0.0
+var crash_share := 0.0
 var _variants := {}
 
 
@@ -200,6 +214,15 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 	if id in DAMAGING_EXCLUDED:
 		return {"error": "%s needs move-specific code, not supported yet" % id}
 	move.power = int(CODE_POWER.get(id, move.power))
+	move.damage_rule = str(DAMAGE_RULES.get(id, ""))
+	if not move.damage_rule.is_empty():
+		# Counter and its kin are "scripted" at whoever hit the user: here, the foe aimed at.
+		target = "normal"
+		move.power = Rules.FIXED_DAMAGE_POWER
+		move.self_destructs = id == "finalgambit"
+	move.delayed = id in DELAYED
+	move.cost_share = 0.5 * Rules.HP_SHARE_READING if id in COSTS_HP else 0.0
+	move.crash_share = 0.5 * Rules.HP_SHARE_READING if data.get("hasCrashDamage", false) else 0.0
 	var fixed: Variant = data.get("damage")
 	if fixed is String and fixed == "level":
 		move.fixed_damage = Rules.LEVEL
@@ -222,7 +245,7 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		move.hits_max = int(multihit)
 	move.charges = flags.has("charge")
 	move.recharges = flags.has("recharge")
-	move.self_destructs = data.get("selfdestruct") == "always"
+	move.self_destructs = move.self_destructs or data.get("selfdestruct") == "always"
 	move.drain_share = _share(data.get("drain"))
 	move.recoil_share = _share(data.get("recoil"))
 	move.self_boosts = _stat_changes(data.get("self", {}).get("boosts", data.get("selfBoost", {}).get("boosts", {})))

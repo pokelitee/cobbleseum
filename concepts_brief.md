@@ -530,7 +530,7 @@ For the 850 standard moves, 638 are playable under rules version 35: 240 melee, 
 - **Priority:** shortens the wind-up.
 - **Secondary effects** roll on hit using the battle's random stream.
 - **Data effects:** drain, recoil and stat changes come straight from the data.
-- **Moves with extra code:** Showdown implements extra effects in code for 91 damaging moves. Most play as plain hits. Those whose condition or cost would otherwise make them free strong hits were left out until M18 (§17) gave them their real effects, version by version; under rules version 37 still out: Future Sight, Doom Desire, Steel Beam, Mind Blown, Shell Trap and Beak Blast.
+- **Moves with extra code:** Showdown implements extra effects in code for 91 damaging moves. Most play as plain hits. Those whose condition or cost would otherwise make them free strong hits were left out until M18 (§17) gave them their real effects, version by version; under rules version 38 still out: Shell Trap and Beak Blast.
 - **Weather and surge** (M18, rules version 36; `MoveEffects`): a hit, and every AI estimate of one, asks for the move as it plays now, a variant with another type or power that STAB, effectiveness, abilities, items and the weather all read.
   - Weather Ball takes the weather's type (Water, Fire, Rock, Ice) at 100 power; Terrain Pulse the surge's (Electric, Grass, Fairy, Psychic) at 100 from a grounded user.
   - Rising Voltage doubles against a grounded foe on electric ground; Expanding Force, Psyblade and Misty Explosion are ×1.5 from a grounded user on psychic, electric and misty ground. Expanding Force doesn't spread in doubles.
@@ -550,6 +550,15 @@ For the 850 standard moves, 638 are playable under rules version 35: 240 melee, 
   - **Movesets** value a code-powered move at a typical power (an HP-scaled one at 60% HP, the weight and Speed moves at 60) and a move that only works some of the time at a share of its power (Sucker Punch half, Fake Out a tenth).
   - **AI:** both AIs only consider a move that would work now, aim with its power now, and start Focus Punch only when nothing can hit it first, like a heal.
   - **Presentation:** callouts when Knock Off takes an item ("Lost its Leftovers!") and when a channel is broken ("Interrupted!").
+- **Damage by rule, delayed hits, costs and on-hit effects** (M18, rules version 38). The main series' shares of HP read as per-hit shares, a sixth of theirs (`Rules.HP_SHARE_READING`, §9.9). Like fixed damage, rule damage ignores stats, type and crits.
+  - Super Fang, Ruination and Nature's Madness take 1/12 of the target's HP; Endeavor a sixth of the gap when the target has more HP than the user (it can't be used otherwise); Final Gambit deals a sixth of the user's HP and knocks the user out.
+  - Counter and Mirror Coat pay back twice the physical or special damage the user took from the target in the last 2 s, Metal Burst and Comeuppance 1.5 times any; with nothing to pay back they can't be used.
+  - Steel Beam and Mind Blown cost the user 1/12 of its max HP when used, High Jump Kick, Axe Kick and Supercell Slam the same when they miss (dodged, guarded or out of reach); Magic Guard spares both.
+  - Future Sight and Doom Desire mark the foe and land 3 s later on whoever is then in its place, the user's own if it has been recalled since, unless the fighter is dodging or guarding toward the user; one at a time per user.
+  - On hit: Tri Attack (20%: burn, paralysis or freeze) and Dire Claw (50%: poison, paralysis or sleep) roll a random status; Alluring Voice confuses and Burning Jealousy burns a foe whose stats rose in the last 3 s; Clear Smog clears the target's stages; Sparkling Aria cures its burn; Ceaseless Edge and Stone Axe lay a layer of Spikes or Stealth Rock on its side; Incinerate burns up its unused berry, and Bug Bite and Pluck eat it, the attacker getting its effect.
+  - **Movesets** value rule damage like fixed damage (Endeavor and the paybacks at 40%) and HP costs and crashes like recoil. Both AIs aim with rule damage, only use Endeavor while behind and a payback with something to pay back.
+  - **Presentation:** "Foresaw an attack!" with a glow on the marked foe, the costs and crashes shown like recoil, and callouts when a berry is eaten or burned.
+  - **Left out:** Shell Trap and Beak Blast (one roster species each; their hit-me-first condition would need a new stance), one-hit knockouts (Fissure, Horn Drill, Sheer Cold, Guillotine: no reading keeps both their threat and real-time HP), Beat Up, Fling and Natural Gift (items and team members' stats), Shell Side Arm, Photon Geyser and the form-typed moves (Raging Bull, Aura Wheel, Ivy Cudgel, Judgment, Revelation Dance, Tera Blast; their species' forms are missing or play the base move), Eerie Spell (no PP).
 
 ### 9.4 Damage
 
@@ -1433,7 +1442,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **Focus Punch** is a 1.2 s channel any hit breaks. **Future Sight and Doom Desire** mark the foe and land 3 s later wherever it is, unless it's dodging or guarding toward the user then.
 - **Fly, Dig and the like** keep their plain charge: an untouchable charge would be a free extra dodge each cooldown.
 - **Movesets:** moves a species uses on itself or a foe (Shell Smash, Belly Drum, Curse, Taunt, Leech Seed, Rest…) join the utility slot like any buff, status or heal; field and side moves stay out, like hazards and ally moves; damaging moves with real effects stay eligible as before.
-- **Pull requests:** (1) field and side conditions (rules version 35) done: Tailwind, Trick Room, Gravity, Magic Room, Wonder Room, Safeguard, Mist, Haze, Court Change (§9.11); (2) power and type from the weather and surge (36) done (§9.3); (3) power from HP and state (37) done (§9.3); (4) proportional and returned damage, delayed hits and on-hit effects; (5) odd self-buffs and HP-trading status moves; (6) lingering effects (Taunt, Leech Seed, Yawn…); (7) pivots and phazers.
+- **Pull requests:** (1) field and side conditions (rules version 35) done: Tailwind, Trick Room, Gravity, Magic Room, Wonder Room, Safeguard, Mist, Haze, Court Change (§9.11); (2) power and type from the weather and surge (36) done (§9.3); (3) power from HP and state (37) done (§9.3); (4) proportional and returned damage, delayed hits and on-hit effects (38) done (§9.3); (5) odd self-buffs and HP-trading status moves; (6) lingering effects (Taunt, Leech Seed, Yawn…); (7) pivots and phazers.
 
 **Later:**
 

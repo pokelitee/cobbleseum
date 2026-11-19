@@ -190,6 +190,8 @@ static func _damage_score(me: Fighter, move: BattleMove) -> float:
 	var score := move.power * move.expected_hits()
 	if move.fixed_damage > 0:
 		score = move.fixed_damage * FIXED_DAMAGE_FACTOR
+	elif not move.damage_rule.is_empty():
+		score = Rules.FIXED_DAMAGE_POWER
 	if move.charges:
 		score *= CHARGE_FACTOR
 	if move.recharges:

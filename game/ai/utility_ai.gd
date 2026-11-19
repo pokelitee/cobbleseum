@@ -652,6 +652,8 @@ func _guarded_when_landing(me: Fighter, seen: Dictionary, gap: float, move: Batt
 static func expected_damage(attacker: Fighter, defender: Fighter, move: BattleMove, data: BattleData) -> float:
 	if move.fixed_damage > 0:
 		return move.fixed_damage * move.expected_hits()
+	if not move.damage_rule.is_empty():
+		return MoveEffects.rule_damage(attacker, defender, move)
 	var parts := Battle.damage_parts(attacker, defender, move, data)
 	return parts.base * parts.factor * parts.screen * (Rules.ROLL_MIN + Rules.ROLL_MAX) * 0.5 * move.expected_hits()
 

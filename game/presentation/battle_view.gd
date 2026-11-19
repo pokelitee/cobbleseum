@@ -1002,6 +1002,14 @@ func _play_events() -> void:
 				_fx.announce(_event_view(event), "Protected!", GUARD_CALLOUT, 52)
 			"failed":
 				_fx.announce(_event_view(event), "But it failed!", Color(0.85, 0.85, 0.9), 48)
+			"foresight":
+				_move_fx.aura(_event_view(event, true), Color(0.85, 0.6, 1.0), true)
+				_fx.announce(_event_view(event, true), "Foresaw an attack!", Color(0.85, 0.6, 1.0), 48)
+			"berry_taken":
+				_fx.announce(_event_view(event), ("Its %s was eaten!" if event.eaten else "Its %s burned up!") % event.name, ITEM_CALLOUT, 48)
+			"crash", "self_cost":
+				_event_view(event).take_hit()
+				_fx.announce(_event_view(event), "-%d" % event.damage, Color(1, 1, 1), 44)
 			"interrupt":
 				_fx.announce(_event_view(event), "Interrupted!", Color(0.85, 0.85, 0.9), 48)
 			"knocked_off":
