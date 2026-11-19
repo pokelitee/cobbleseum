@@ -132,3 +132,8 @@ func test_weather_values_and_movesets_count_weather_ball() -> void:
 	assert_true(StandInAI.arena_score(rainy.fighters[0], rainy.fighters[1], rainy.fighters[0].moves[1]) > 0.0)
 	var moves: Array = Movesets.generate("rainy", _data()).moves
 	assert_eq(moves[0], "weatherball", "a rain setter takes Weather Ball as a Water attack")
+
+
+func test_movesets_skip_steel_roller_without_a_surge_of_their_own() -> void:
+	var data := BattleData.new(SPECIES, MOVES, TYPES, {"plain": {"learnset": {"steelroller": ["9L1"], "tackle": ["9L1"]}}})
+	assert_eq(Movesets.generate("plain", data).moves, ["tackle"])

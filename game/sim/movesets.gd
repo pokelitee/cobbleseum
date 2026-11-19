@@ -75,6 +75,9 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 			# Weather Ball and the like as they play under the weather or surge the species' own
 			# ability brings.
 			var entry := Abilities.effect(ability)
+			# Steel Roller only works on a surge, so only a species that brings its own counts on it.
+			if move.id == ArenaConditions.NEEDS_SURGE and not entry.has("sets_surge"):
+				continue
 			move = MoveEffects.in_conditions(move, str(entry.get("sets_weather", "")), str(entry.get("sets_surge", "")))
 			attacks.append({"id": move_id, "type": move.type, "value": attack_value(move, data.moves[move_id], physical, ability)})
 		else:
