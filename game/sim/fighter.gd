@@ -115,6 +115,21 @@ var combo := {}
 var raised_ticks := 0
 var taken: Array[Dictionary] = []
 var foresight := {}
+## Rules version 39 (StatusMoves): its Substitute's HP and ticks left; Aqua Ring's or Ingrain's
+## ticks left; Charge's (its next Electric move doubled); its stockpile; its Wish on the way
+## ({"ticks", "amount", "target": its place's index}); whether it has used No Retreat; and, while
+## Power Split or Guard Split holds, the ticks left and its own stats to go back to.
+var substitute_hp := 0
+var substitute_ticks := 0
+var ring_ticks := 0
+var charged_ticks := 0
+var stockpile := 0
+var wish := {}
+var no_retreat := false
+var split_ticks := 0
+var own_stats := {}
+## The HP stat its max HP was scaled from (Strength Sap heals by the foe's Attack on that scale).
+var hp_stat := 1
 
 
 static func create(side_index: int, species_id_value: String, species: Dictionary, battle_moves: Array[BattleMove], radius_metres: float) -> Fighter:
@@ -128,6 +143,7 @@ static func create(side_index: int, species_id_value: String, species: Dictionar
 		"atk": Rules.stat(base.atk), "def": Rules.stat(base.def),
 		"spa": Rules.stat(base.spa), "spd": Rules.stat(base.spd), "spe": Rules.stat(base.spe),
 	}
+	fighter.hp_stat = Rules.hp_stat(base.hp)
 	fighter.max_hp = roundi(Rules.hp_stat(base.hp) * Rules.HP_MULTIPLIER)
 	fighter.hp = fighter.max_hp
 	fighter.radius = radius_metres

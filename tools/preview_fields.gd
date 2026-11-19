@@ -4,7 +4,7 @@ extends SceneTree
 ## Usage (needs a window, not --headless):
 ##   godot --path . --script res://tools/preview_fields.gd -- [--arena=stadium] [condition ...]
 ## Two fighters stand 6 m apart. For each condition (Trick Room, Gravity, the rooms, Tailwind on
-## the left fighter's side), the battle's wide shot and an over-the-shoulder shot are captured in
+## the left fighter's side, and the left fighter's Substitute), the battle's wide shot and an over-the-shoulder shot are captured in
 ## landscape and vertical, once it has faded in, to cache/previews/field_<arena>_<condition>.png.
 ## Previews show Cobblemon art, so they stay in the cache.
 
@@ -30,7 +30,7 @@ func _run() -> void:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--arena="):
 			arena_name = arg.get_slice("=", 1)
-		elif FieldLooks.COLOURS.has(arg):
+		elif FieldLooks.COLOURS.has(arg) or arg == "substitute":
 			names.append(arg)
 		else:
 			printerr("error: unknown argument '%s'" % arg)
@@ -91,7 +91,15 @@ func _shot(data: BattleData, arena_name: String, name: String, size: Vector2i, s
 		var me := Vector3(-GAP * 0.5, 0, 0)
 		camera.look_at_from_position(me + Vector3(-2.4 * back, 1.6 * k + lift, 2.0 * back), Vector3(GAP * 0.5, heights[1] * 0.5, 0))
 	var conditions := ArenaConditions.new()
-	if name == "tailwind":
+	var dolls := SubstituteDolls.new()
+	viewport.add_child(dolls)
+	var fighters: Array[Fighter] = [Fighter.new(), Fighter.new()]
+	for side in 2:
+		fighters[side].radius = float(data.roster[SPECIES[side]].get("radius", Fighter.DEFAULT_RADIUS))
+		fighters[side].hp = 1
+	if name == "substitute":
+		fighters[0].substitute_ticks = 100
+	elif name == "tailwind":
 		conditions.sides[0][name] = 100
 	else:
 		conditions.field[name] = 100
@@ -100,6 +108,7 @@ func _shot(data: BattleData, arena_name: String, name: String, size: Vector2i, s
 	looks.setup(1)
 	for frame in SETTLE_FRAMES:
 		looks.sync(conditions, views)
+		dolls.sync(fighters, views, [views[1], views[0]] as Array[FighterView])
 		await process_frame
 	await RenderingServer.frame_post_draw
 	var image := viewport.get_texture().get_image()

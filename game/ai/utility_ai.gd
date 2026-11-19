@@ -421,11 +421,11 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		elif move.is_ally_move():
 			considerations.value = _sample("value", ally_move_value(battle, me, move) / VALUE_SCALE)
-			if move.kind == BattleMove.Kind.HEAL:
+			if move.channels:
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		else:
 			considerations.value = _sample("value", StandInAI.move_score(me, foe, move) / VALUE_SCALE)
-			if move.kind == BattleMove.Kind.HEAL:
+			if move.channels:
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		if not move.is_self() and _guarded_when_landing(me, seen, gap, move):
 			considerations.into_guard = INTO_GUARD

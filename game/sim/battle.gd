@@ -56,7 +56,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 42
+const FIGHTER_STATE_SIZE := 49
 ## Values hashed per side for team battles: the slot out, the send-out countdown, the shield,
 ## the switch cooldown and the layers of each entry hazard.
 const TEAM_STATE_SIZE := 8
@@ -415,6 +415,7 @@ func step() -> void:
 		_act(fighters[index], intents[index])
 	_move_projectiles()
 	_tick_foresight()
+	_tick_wishes()
 	if doubles:
 		_tick_side_moves()
 	if _drop_projectiles:
@@ -472,6 +473,20 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 	fighter.missed_ticks = maxi(0, fighter.missed_ticks - 1)
 	fighter.lowered_ticks = maxi(0, fighter.lowered_ticks - 1)
 	fighter.raised_ticks = maxi(0, fighter.raised_ticks - 1)
+	fighter.charged_ticks = maxi(0, fighter.charged_ticks - 1)
+	if fighter.substitute_ticks > 0:
+		fighter.substitute_ticks -= 1
+		if fighter.substitute_ticks == 0:
+			fighter.substitute_hp = 0
+			_fevent("substitute_end", fighter, {})
+	if fighter.ring_ticks > 0:
+		fighter.ring_ticks -= 1
+		if tick % Rules.TICK_RATE == 0:
+			_heal(fighter, maxi(1, roundi(fighter.max_hp * StatusMoves.RING_HEAL)), "aquaring", "regen")
+	if fighter.split_ticks > 0:
+		fighter.split_ticks -= 1
+		if fighter.split_ticks == 0:
+			_unsplit(fighter)
 	for taken in fighter.taken:
 		taken.ticks -= 1
 	while not fighter.taken.is_empty() and int(fighter.taken[0].ticks) <= 0:
@@ -701,6 +716,8 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 			_heal(fighter, roundi(fighter.max_hp * conditions.heal_share(fighter, move)), move.id)
 		elif move.kind == BattleMove.Kind.ALLY:
 			_support(fighter, move)
+		elif move.kind == BattleMove.Kind.CODED:
+			_coded(fighter, foe, move)
 		elif move.kind == BattleMove.Kind.REDIRECT:
 			_draw_attacks(fighter, move)
 		elif move.kind == BattleMove.Kind.ARENA and move.wide_guard:
@@ -722,7 +739,15 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 		elif move.kind == BattleMove.Kind.ARENA:
 			_set_weather(fighter, move.weather, {"move": move.id})
 		else:
-			_boost(fighter, move.boosts, move.id)
+			var cost := float(StatusMoves.HP_COSTS.get(move.id, 0.0))
+			if cost > 0.0:
+				_hurt(fighter, roundi(fighter.max_hp * cost), "self_cost", {"move": move.id})
+			fighter.no_retreat = fighter.no_retreat or move.id == "noretreat"
+			var boosts := move.boosts
+			# Growth raises twice as much in sun.
+			if move.id == "growth" and conditions.weather_for(fighter) == "sun":
+				boosts = {"atk": 2, "spa": 2}
+			_boost(fighter, boosts, move.id)
 			if move.clears == "both":
 				_clear_hazards(fighter, move, false)
 	elif move.delayed:
@@ -737,6 +762,8 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 				return
 		var hits := _roll_hits(fighter, move)
 		var parried := _strike(fighter, foe, fighter.action_move)
+		if move.id == "spitup":
+			_spend_stockpile(fighter)
 		var interval := Rules.seconds_to_ticks(Rules.MULTI_HIT_INTERVAL)
 		for i in range(1, hits if not parried else 1):
 			fighter.followups.append({"ticks": i * interval, "move": fighter.action_move, "last": i == hits - 1, "hit": i})
@@ -885,6 +912,136 @@ func _support(fighter: Fighter, move: BattleMove) -> void:
 				target.helping_ticks = Rules.seconds_to_ticks(Rules.HELPING_HAND_SECONDS)
 			"cheer":
 				target.cheer_ticks = Rules.seconds_to_ticks(Rules.CHEER_SECONDS)
+
+
+## A coded status move (StatusMoves, rules version 39), released by `fighter` with `foe` targeted.
+func _coded(fighter: Fighter, foe: Fighter, move: BattleMove) -> void:
+	_fevent("coded", fighter, _aimed(foe, {"move": move.id}))
+	var cost := float(StatusMoves.HP_COSTS.get(move.id, 0.0))
+	if cost > 0.0:
+		_hurt(fighter, roundi(fighter.max_hp * cost), "self_cost", {"move": move.id})
+	match move.id:
+		"bellydrum":
+			_boost(fighter, {"atk": Rules.MAX_STAGE * 2}, move.id)
+		"rest":
+			_heal(fighter, roundi(fighter.max_hp * Rules.HEAL_FACTOR), move.id)
+			if not fighter.status.is_empty():
+				_end_status(fighter)
+			fighter.status = "slp"
+			fighter.status_ticks = Rules.seconds_to_ticks(StatusMoves.REST_SLEEP_SECONDS)
+			fighter.followups.clear()
+			_fevent("status", fighter, {"status": "slp", "move": move.id})
+		"painsplit":
+			var average := (fighter.hp + foe.hp) / 2.0
+			for target: Fighter in [fighter, foe]:
+				var change := roundi((average - target.hp) * Rules.HP_SHARE_READING)
+				if change > 0:
+					_heal(target, change, move.id)
+				elif change < 0:
+					_hurt(target, -change, "pain_split", {"move": move.id})
+		"strengthsap":
+			if foe.boosts.atk > -Rules.MAX_STAGE:
+				var scale := float(fighter.max_hp) / fighter.hp_stat
+				_heal(fighter, roundi(foe.stat("atk") * scale * Rules.HEAL_FACTOR), move.id)
+				_boost(foe, {"atk": -1}, move.id, fighter)
+			else:
+				_fevent("failed", fighter, {"move": move.id})
+		"wish":
+			fighter.wish = {"ticks": Rules.seconds_to_ticks(Rules.DELAYED_SECONDS), "target": index_of(fighter),
+				"amount": roundi(fighter.max_hp * StatusMoves.WISH_SHARE * Rules.HEAL_FACTOR)}
+		"healbell", "aromatherapy":
+			for member: Fighter in teams[fighter.side]:
+				if not member.status.is_empty() and not member.is_knocked_out():
+					if _benched(member):
+						member.status = ""
+						member.status_ticks = 0
+					else:
+						_end_status(member)
+		"takeheart":
+			if not fighter.status.is_empty():
+				_end_status(fighter)
+			_boost(fighter, {"spa": 1, "spd": 1}, move.id)
+		"aquaring", "ingrain":
+			fighter.ring_ticks = Rules.seconds_to_ticks(Abilities.ABILITY_SECONDS)
+		"substitute":
+			fighter.substitute_hp = roundi(fighter.max_hp * cost)
+			fighter.substitute_ticks = Rules.seconds_to_ticks(Abilities.ABILITY_SECONDS)
+		"focusenergy":
+			fighter.cheer_ticks = Rules.seconds_to_ticks(Rules.CHEER_SECONDS)
+		"charge":
+			fighter.charged_ticks = Rules.seconds_to_ticks(Abilities.ABILITY_SECONDS)
+			_boost(fighter, {"spd": 1}, move.id)
+		"stockpile":
+			fighter.stockpile += 1
+			_boost(fighter, {"def": 1, "spd": 1}, move.id)
+		"swallow":
+			_heal(fighter, roundi(fighter.max_hp * StatusMoves.SWALLOW_SHARES[fighter.stockpile] * Rules.HEAL_FACTOR), move.id)
+			_spend_stockpile(fighter)
+		"psychup":
+			for stat: String in fighter.boosts:
+				fighter.boosts[stat] = foe.boosts[stat]
+			fighter.stage_ticks = 0
+		"powerswap", "guardswap", "heartswap":
+			var stats: Array = {"powerswap": ["atk", "spa"], "guardswap": ["def", "spd"], "heartswap": BattleMove.STATS}[move.id]
+			for stat: String in stats:
+				var mine: int = fighter.boosts[stat]
+				fighter.boosts[stat] = foe.boosts[stat]
+				foe.boosts[stat] = mine
+			fighter.stage_ticks = 0
+			foe.stage_ticks = 0
+		"powersplit", "guardsplit":
+			var stats: Array = ["atk", "spa"] if move.id == "powersplit" else ["def", "spd"]
+			for target: Fighter in [fighter, foe]:
+				if target.split_ticks == 0:
+					target.own_stats = target.stats.duplicate()
+				target.split_ticks = Rules.seconds_to_ticks(Abilities.ABILITY_SECONDS)
+			for stat: String in stats:
+				var shared := floori((fighter.stats[stat] + foe.stats[stat]) / 2.0)
+				fighter.stats[stat] = shared
+				foe.stats[stat] = shared
+		"topsyturvy":
+			for stat: String in foe.boosts:
+				foe.boosts[stat] = -int(foe.boosts[stat])
+			foe.stage_ticks = 0
+		"acupressure":
+			var open: Array[String] = []
+			for stat: String in BattleMove.STATS:
+				if fighter.boosts[stat] < Rules.MAX_STAGE:
+					open.append(stat)
+			if not open.is_empty():
+				_boost(fighter, {open[_random.next_u32() % open.size()]: StatusMoves.ACUPRESSURE_STAGES}, move.id)
+
+
+## Swallow and Spit Up use up the stockpile, and with it the stages Stockpile raised.
+func _spend_stockpile(fighter: Fighter) -> void:
+	if fighter.stockpile > 0:
+		_boost(fighter, {"def": -fighter.stockpile, "spd": -fighter.stockpile}, "stockpile")
+	fighter.stockpile = 0
+
+
+## Power Split and Guard Split wearing off: the fighter's own stats come back.
+static func _unsplit(fighter: Fighter) -> void:
+	if not fighter.own_stats.is_empty():
+		fighter.stats = fighter.own_stats
+		fighter.own_stats = {}
+	fighter.split_ticks = 0
+
+
+## Wishes counting down, for every team member: the heal lands on whoever is then in the place.
+func _tick_wishes() -> void:
+	for team: Array in teams:
+		for member: Fighter in team:
+			if member.wish.is_empty():
+				continue
+			member.wish.ticks -= 1
+			if member.wish.ticks > 0:
+				continue
+			var target := fighters[int(member.wish.target)]
+			var amount := int(member.wish.amount)
+			member.wish = {}
+			if not target.is_knocked_out():
+				_fevent("wish", target, {})
+				_heal(target, amount, "wish")
 
 
 ## A field or side condition's move (§9.11), or Haze or Court Change. A room used while it's up
@@ -1067,6 +1224,8 @@ func _move_projectiles() -> void:
 ## `spread` is Rules.SPREAD_FACTOR for a spread move hitting several fighters at once, else 1.
 func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0) -> void:
 	move = MoveEffects.adapt(attacker, defender, move)
+	if move.type == "Electric" and attacker.charged_ticks > 0:
+		attacker.charged_ticks = 0
 	# Present: a random power, or a little healing instead.
 	if move.id == "present":
 		var roll := _random.next_float()
@@ -1084,6 +1243,15 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0)
 	if spread < 1.0:
 		outcome.damage = maxi(1, floori(outcome.damage * spread))
 	outcome.damage = maxi(1, floori(outcome.damage * Rules.overtime_factor(tick, overtime_tick / float(Rules.TICK_RATE))))
+	# A Substitute takes the hit (sound moves and Infiltrator get past it).
+	if _behind_substitute(attacker, defender, move):
+		var absorbed := mini(outcome.damage, defender.substitute_hp)
+		defender.substitute_hp -= absorbed
+		_fevent("substitute_hit", defender, {"move": move.id, "damage": absorbed})
+		if defender.substitute_hp <= 0:
+			defender.substitute_ticks = 0
+			_fevent("substitute_end", defender, {"broken": true})
+		return
 	var immune := Abilities.immune(defender, move)
 	var dealt := mini(outcome.damage, defender.hp)
 	# False Swipe never knocks out.
@@ -1443,6 +1611,12 @@ static func _leave(fighter: Fighter) -> void:
 	fighter.combo = {}
 	fighter.raised_ticks = 0
 	fighter.taken.clear()
+	fighter.substitute_hp = 0
+	fighter.substitute_ticks = 0
+	fighter.ring_ticks = 0
+	fighter.charged_ticks = 0
+	fighter.stockpile = 0
+	_unsplit(fighter)
 
 
 ## The team slot `side` sends out next: its first member healthy and on the bench, or -1.
@@ -1657,8 +1831,20 @@ func _tick_weather(fighter: Fighter) -> void:
 		_end_status(fighter)
 
 
+## Whether `defender`'s Substitute stands between it and `attacker`'s `move`.
+static func _behind_substitute(attacker: Fighter, defender: Fighter, move: BattleMove) -> bool:
+	return defender.substitute_ticks > 0 and attacker != defender and not move.flags.has("sound") \
+		and not attacker.ability_effect.get("infiltrator", false)
+
+
 ## A debuff or status projectile reaching its target.
 func _land(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
+	# Memento: the user faints as it lands its drops.
+	if move.self_destructs and not attacker.is_knocked_out():
+		_hurt(attacker, attacker.hp, "self_destruct", {"move": move.id})
+	if _behind_substitute(attacker, defender, move):
+		_fevent("substitute_hit", defender, {"move": move.id, "damage": 0})
+		return
 	_fevent("landed", attacker, _aimed(defender, {"move": move.id}))
 	_apply_effect(attacker, defender, {"boosts": move.boosts, "status": move.status, "confuses": move.confuses}, move.id)
 
@@ -1983,6 +2169,13 @@ func _record_state() -> void:
 		_state[i + 39] = fighter.raised_ticks
 		_state[i + 40] = fighter.taken.size()
 		_state[i + 41] = int(fighter.foresight.get("ticks", 0))
+		_state[i + 42] = fighter.substitute_hp
+		_state[i + 43] = fighter.substitute_ticks
+		_state[i + 44] = fighter.ring_ticks
+		_state[i + 45] = fighter.charged_ticks
+		_state[i + 46] = fighter.stockpile
+		_state[i + 47] = int(fighter.wish.get("ticks", 0))
+		_state[i + 48] = fighter.split_ticks
 		i += FIGHTER_STATE_SIZE
 	_state[i] = ArenaConditions.WEATHERS.find(conditions.weather)
 	_state[i + 1] = conditions.weather_ticks

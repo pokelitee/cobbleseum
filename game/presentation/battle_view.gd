@@ -109,6 +109,16 @@ const FIELD_ENDS := {"trickroom": "The dimensions returned to normal.", "gravity
 	"magicroom": "Held items work again.", "wonderroom": "Defense and Sp. Def swapped back."}
 const SIDE_STARTS := {"tailwind": "Tailwind!", "safeguard": "Safeguard!", "mist": "Shrouded in mist!"}
 const SIDE_ENDS := {"tailwind": "The tailwind petered out.", "safeguard": "Safeguard wore off.", "mist": "The mist faded."}
+## Coded status moves (rules version 39): what's said over the user when each is released.
+const CODED_CALLOUTS := {"bellydrum": "Maxed out its Attack!", "rest": "Slept and became healthy!",
+	"painsplit": "Shared the pain!", "strengthsap": "Sapped its strength!", "wish": "Made a wish!",
+	"healbell": "A bell chimed!", "aromatherapy": "A soothing aroma!", "aquaring": "Veiled in water!",
+	"ingrain": "Planted its roots!", "substitute": "Put in a substitute!", "focusenergy": "Getting pumped!",
+	"charge": "Began charging power!", "stockpile": "Stockpiled!", "swallow": "Swallowed it down!",
+	"psychup": "Copied the stat changes!", "powerswap": "Swapped power!", "guardswap": "Swapped guard!",
+	"heartswap": "Swapped stat changes!", "powersplit": "Shared power!", "guardsplit": "Shared guard!",
+	"topsyturvy": "Stat changes inverted!", "acupressure": "Acupressure!", "takeheart": "Took heart!"}
+const CODED_COLOUR := Color(0.95, 0.9, 0.6)
 ## Metres a fighter must move in a tick to play its walk animation.
 const WALK_THRESHOLD := 0.01
 ## Hits taking at least this share of the defender's HP (or big ones) make the crowd cheer;
@@ -1022,6 +1032,18 @@ func _play_events() -> void:
 			"crash", "self_cost":
 				_event_view(event).take_hit()
 				_fx.announce(_event_view(event), "-%d" % event.damage, Color(1, 1, 1), 44)
+			"coded":
+				_fx.announce(_event_view(event), CODED_CALLOUTS.get(event.move, ""), CODED_COLOUR, 50)
+			"wish":
+				_move_fx.aura(_event_view(event), HEAL_COLOUR, true, true)
+				_fx.announce(_event_view(event), "Its wish came true!", HEAL_COLOUR, 50)
+			"substitute_hit":
+				_fx.announce(_event_view(event), "The substitute took it!", CODED_COLOUR, 46)
+			"substitute_end":
+				_fx.announce(_event_view(event), "The substitute faded!", CODED_COLOUR, 46)
+			"pain_split":
+				_event_view(event).take_hit()
+				_fx.announce(_event_view(event), "-%d" % event.damage, Color(1, 1, 1), 44)
 			"interrupt":
 				_fx.announce(_event_view(event), "Interrupted!", Color(0.85, 0.85, 0.9), 48)
 			"knocked_off":
@@ -1127,6 +1149,8 @@ var _screen_panes: ScreenPanes
 var _hazard_marks: HazardMarks
 ## Field and side conditions' looks (rooms, Gravity, Tailwind).
 var _field_looks: FieldLooks
+## Substitutes' decoys (rules version 39).
+var _dolls: SubstituteDolls
 ## Ticks each field condition shown lasted when set, and its ticks left last frame.
 var _field_totals := {}
 var _field_lefts := {}
@@ -1172,6 +1196,13 @@ func _sync_conditions() -> void:
 		_field_looks.setup(int(battle.spec.seed))
 		add_child(_field_looks)
 	_field_looks.sync(conditions, fronts)
+	if _dolls == null:
+		_dolls = SubstituteDolls.new()
+		add_child(_dolls)
+	var foes: Array[FighterView] = []
+	for fighter in battle.fighters:
+		foes.append(_views[maxi(0, battle.fighters.find(battle.target_of(fighter)))])
+	_dolls.sync(battle.fighters, _views, foes)
 	for index in _views.size():
 		_hud.set_effects(index, _plate_effects[index].read(battle.fighters[index]))
 	for side in 2:

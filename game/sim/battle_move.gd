@@ -17,8 +17,10 @@ extends RefCounted
 ## - ALLY and REDIRECT (M17, doubles): applied on release to the ally (boosts, Helping Hand,
 ##   Dragon Cheer; Howl the user too) or drawing the foes' attacks (Follow Me, Rage Powder).
 ##   Team heals are HEAL moves that heal the ally too.
+## - CODED (rules version 39): status moves whose effect StatusMoves codes (Belly Drum, Rest,
+##   Substitute, Pain Split...), applied on release with no range.
 
-enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA, ARENA, ALLY, REDIRECT }
+enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA, ARENA, ALLY, REDIRECT, CODED }
 
 ## Showdown targets that mean "one opponent" in a one-on-one battle.
 const SINGLE_TARGETS: Array[String] = ["normal", "any", "adjacentFoe", "randomNormal"]
@@ -31,7 +33,7 @@ const STATS: Array[String] = ["atk", "def", "spa", "spd", "spe"]
 const STATUSES: Array[String] = ["brn", "par", "psn", "tox", "slp", "frz"]
 ## Status moves whose real behaviour lives in Showdown's code (an HP cost, a charge turn,
 ## knocking out the user, a gender check), so their data alone would play wrong.
-const EXCLUDED: Array[String] = ["clangoroussoul", "filletaway", "geomancy", "memento", "captivate"]
+const EXCLUDED: Array[String] = ["geomancy", "captivate"]
 ## Damaging moves whose condition lives in Showdown's code, so they'd play as free strong hits:
 ## Shell Trap and Beak Blast need the user hit first (one roster species each; left out).
 const DAMAGING_EXCLUDED: Array[String] = ["shelltrap", "beakblast"]
@@ -47,7 +49,7 @@ const COSTS_HP: Array[String] = ["steelbeam", "mindblown"]
 ## Moves whose power Showdown works out in code (MoveEffects): the power the rules give them for
 ## cooldowns (their power in battle follows the state).
 const CODE_POWER := {"reversal": 60, "flail": 60, "hardpress": 100, "crushgrip": 120, "wringout": 120, "grassknot": 60,
-	"lowkick": 60, "heavyslam": 60, "heatcrash": 60, "gyroball": 60, "electroball": 60, "present": 60}
+	"lowkick": 60, "heavyslam": 60, "heatcrash": 60, "gyroball": 60, "electroball": 60, "present": 60, "spitup": 100}
 ## Focus Punch is a channel like a heal: any hit cancels it.
 const CHANNELLED: Array[String] = ["focuspunch"]
 ## Heal amounts Showdown computes in code, as [numerator, denominator] of max HP.
@@ -55,7 +57,8 @@ const HEAL_OVERRIDES := {"morningsun": [1, 2], "synthesis": [1, 2], "moonlight":
 ## Doubles' ally moves (M17): what each does to the ally ("helping": Helping Hand, "cheer":
 ## Dragon Cheer, "": only its boosts), the team heals (shares of max HP, Jungle Healing's and Lunar
 ## Blessing's from Showdown's code, which also cure a status), and the redirecting moves.
-const ALLY_MOVES := {"helpinghand": "helping", "dragoncheer": "cheer", "coaching": "", "aromaticmist": "", "howl": ""}
+const ALLY_MOVES := {"helpinghand": "helping", "dragoncheer": "cheer", "coaching": "", "aromaticmist": "", "howl": "",
+	"decorate": ""}
 const TEAM_HEALS := {"lifedew": [1, 4], "junglehealing": [1, 4], "lunarblessing": [1, 4]}
 const CURING_HEALS: Array[String] = ["junglehealing", "lunarblessing"]
 const REDIRECTS: Array[String] = ["followme", "ragepowder"]
@@ -188,6 +191,9 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		if not classified.is_empty():
 			return {"error": classified}
 		var windup := Rules.STATUS_MOVE_WINDUP * (Rules.PRIORITY_WINDUP_FACTOR if priority > 0 else 1.0)
+		if id in StatusMoves.HEALS:
+			windup = Rules.HEAL_WINDUP
+			move.channels = true
 		if move.kind == Kind.HEAL:
 			windup = Rules.HEAL_WINDUP
 			move.heal_share *= Rules.HEAL_FACTOR
@@ -297,6 +303,20 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 static func _classify_status_move(id: String, data: Dictionary, move: BattleMove) -> String:
 	if id in EXCLUDED:
 		return "%s needs move-specific code, not supported yet" % id
+	if id in StatusMoves.CODED:
+		move.kind = Kind.CODED
+		return ""
+	if id in StatusMoves.SELF_BUFFS:
+		move.kind = Kind.SELF_BUFF
+		move.boosts = _stat_changes(data.get("boosts", {}))
+		return ""
+	if id in StatusMoves.MIXED_FOE or id == "memento":
+		move.boosts = _stat_changes(data.get("boosts", {}))
+		move.status = str(data.get("status", ""))
+		move.confuses = data.get("volatileStatus", "") == "confusion"
+		move.kind = Kind.STATUS if move.confuses or not move.status.is_empty() else Kind.DEBUFF
+		move.self_destructs = id == "memento"
+		return ""
 	if ALLY_MOVES.has(id):
 		move.kind = Kind.ALLY
 		move.ally_effect = ALLY_MOVES[id]
@@ -394,7 +414,8 @@ func is_projectile() -> bool:
 ## True for kinds applied on release without reaching the foe (to the user, its ally or the
 ## arena).
 func is_self() -> bool:
-	return kind == Kind.SELF_BUFF or kind == Kind.HEAL or kind == Kind.ARENA or kind == Kind.ALLY or kind == Kind.REDIRECT
+	return kind == Kind.SELF_BUFF or kind == Kind.HEAL or kind == Kind.ARENA or kind == Kind.ALLY or kind == Kind.REDIRECT \
+		or kind == Kind.CODED
 
 
 ## True for doubles' ally moves, which standard movesets never pick (§9.6).
