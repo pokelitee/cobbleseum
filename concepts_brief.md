@@ -61,7 +61,7 @@ Non-goals:
 - **External tools:**
   - Node.js 20 or later, for one pipeline step only (§5.1).
   - ffmpeg, for the final MP4 encode (§12).
-- **Platforms:** Windows, macOS and Linux.
+- **Platforms:** Windows, macOS and Linux. CI checks all three (§16.1); the windowed game and recording are checked by hand on Windows only.
 - **Fully local:** no accounts and no telemetry. The only network access is fetching the pinned asset sources.
 - **No third-party assets in git, ever.** That covers downloads, extracted files, converted output, and screenshots or videos made from them.
 
@@ -855,7 +855,7 @@ Battles with a player also record the intents on every tick.
 
 **What's guaranteed:**
 - The same spec produces the same battle on the same Godot build and platform.
-- Functions such as sin, cos and atan2 may give slightly different results on different operating systems or CPUs, so identical results across platforms aren't promised.
+- Functions such as sin, cos and atan2 may give slightly different results on different operating systems or CPUs, so identical results across platforms aren't promised. In practice (§16.1) battles have played out the same on Windows, macOS and Linux, but their checksums differ.
 - A replay whose checksum doesn't match fails loudly instead of rendering a different battle.
 - A spec that names another rules or data version stops with an error before it plays.
 
@@ -1266,7 +1266,23 @@ results/                git-ignored
   - The same spec run twice gives the same checksum.
   - A different seed gives a different battle.
 - **Real-asset QA** (§7.5) runs locally, because it needs the cache. No screenshots or renders of converted Pokémon are committed, since they would be derived from Cobblemon's assets.
-- **CI** runs the unit tests and the asset guard without downloading any sources.
+- **CI** runs the unit tests and the asset guard on Windows, macOS and Linux, downloading only Showdown's data (§16.1).
+
+### 16.1 Platforms
+
+Two workflows cover the three platforms (Windows Server 2025, macOS 15 on Apple silicon and Ubuntu 24.04). Both share one setup action that installs the pinned Godot build for the runner's OS, verified by SHA-512, then builds the native runtime and imports the project.
+
+- **`ci`** runs on every pull request and push to `main`, about two minutes per platform. On each platform it runs the asset guard, builds the native runtime, runs every test (the native runtime's tests fail if it didn't load) and prepares the Showdown source: it downloads the 17 MB npm package, verifies it, untars it and exports the data with Node.js 20. The platforms run as a matrix that feeds one aggregate job, `ci`, the single required check, so adding or removing a platform never changes the branch ruleset.
+- **`assets`** runs the whole pipeline, then headless battles and a small ranking over parallel processes. It downloads about 205 MB (cached by the sources' hashes) and converts every model and renders the music, about 20 minutes per platform, far longer than a CI run should take. It runs when the pipeline, its sources or the workflow change, or by hand, and isn't a required check. Its first run (2026-11-19) converted all 1,005 species (2,388 models and skins, none failed) on every platform. The showcase battle's seeds 1–5 ended with the same winner, hits, HP left and length on all three, but every checksum differed between platforms, as §10 allows. Replays and recordings stay checked against a run on the same machine, so this doesn't affect them.
+
+Not covered by CI, because they need a GPU and a display: playing and watching in a window, the setup screen, the live camera, and recording (Movie Maker renders in a window, then ffmpeg encodes). These are checked by hand on Windows. On macOS and Linux they use the same code paths (`OS.get_executable_path()` for the second Godot process, `ffmpeg` and `node` from `PATH`), but nobody has run them there yet.
+
+Decisions:
+
+- Windows runs in CI too, so a change can't pass on the platforms nobody develops on while breaking the one everybody does.
+- Runner images are pinned (`ubuntu-24.04`, `macos-15`, `windows-2025`) rather than `-latest`, so an image upgrade can't fail a pull request that changed nothing.
+- macOS loads the native runtime as the universal `.dylib` the build writes, not as a `.framework` bundle; a framework only matters for signing an exported app, which the project doesn't ship.
+- Only the Showdown step runs in every CI run: it is the pipeline's one external tool (Node.js) and exercises download, verification and extraction, for a few seconds. The rest waits for `assets`, so a pull request isn't held up by a 205 MB download and a long conversion.
 
 ## 17. Milestones
 
@@ -1279,7 +1295,7 @@ results/                git-ignored
   - About 37 ms per battle headless, with identical checksums across processes.
 - **Recording:** checksum-verified 10-second clips in vertical and landscape, encoded to MP4.
 
-So far M1 has been tested on Windows only. macOS and Linux get checked before M2 ends.
+M1 was first tested on Windows only. Since 2026-11-19, CI checks Windows, macOS and Linux (§16.1).
 
 **M2: rules and roster.**
 
