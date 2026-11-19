@@ -90,6 +90,27 @@ func test_base_animations_put_back_bones_only_other_animations_move() -> void:
 	skeleton.free()
 
 
+func test_a_species_without_an_idle_holds_its_rest_pose_and_returns_to_it() -> void:
+	var skeleton := Skeleton3D.new()
+	for bone in ["body", "leg"]:
+		skeleton.add_bone(bone)
+	skeleton.set_bone_rest(1, Transform3D(Basis.IDENTITY, Vector3(0, 0.5, 0)))
+	var library := AnimationLibrary.new()
+	library.add_animation("walk", _animation({"leg": Vector3(0, 0.5, 0.2)}, Animation.LOOP_LINEAR))
+	var roles := {"walk": "walk"}
+	FighterView.add_rest_idle(library, roles)
+	FighterView.pad_base_animations(library, roles, skeleton)
+	assert_eq(roles.idle, FighterView.REST_IDLE)
+	var idle := library.get_animation(roles.idle)
+	var track := idle.find_track(NodePath("Skeleton:leg"), Animation.TYPE_POSITION_3D)
+	assert_true(track >= 0 and idle.position_track_interpolate(track, 0.5) == Vector3(0, 0.5, 0), "the leg stops at rest")
+	assert_true(AnimationTiming.is_still(idle), "so it breathes")
+	var own := {"idle": "walk"}
+	FighterView.add_rest_idle(library, own)
+	assert_eq(own.idle, "walk", "a species' own idle is kept")
+	skeleton.free()
+
+
 func test_looping_one_offs_play_once_and_a_faint_is_left_as_authored() -> void:
 	var library := AnimationLibrary.new()
 	library.add_animation("idle", _animation({}, Animation.LOOP_LINEAR))

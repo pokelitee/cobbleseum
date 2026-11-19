@@ -62,6 +62,9 @@ var _ground_shown := 0.0
 var _placed := false
 var _animations: Dictionary = {}
 var _fainted := false
+## How far a serpent slumping flat on a knockout (BodyWave) moves to rest on the ground once
+## it has slumped: down out of a pose that holds its body up, or up out of the ground.
+var _slump_lift := 0.0
 ## The looping animation between one-off animations: "walk" while moving (if the species has
 ## one), else "idle".
 var _base_role := "idle"
@@ -95,6 +98,9 @@ const BASE_ROLES: Array[String] = ["idle", "walk", "run", "air_idle", "air_fly",
 ## authored, since nothing follows it.
 const ONE_OFF_ROLES: Array[String] = ["physical", "special", "status", "recoil", "cry", "shock", "angry", "sad"]
 ## Procedural stand-ins for one-off roles the species has no animation for.
+## The idle given to a species that has none (concepts_brief.md §7.5): its model's own pose,
+## held, so it breathes like any still idle and comes back to it after a cry or a walk.
+const REST_IDLE := "rest_idle"
 const PROCEDURAL_ROLES := {"physical": "lunge", "special": "rear", "status": "spin", "recoil": "tilt"}
 
 
@@ -146,6 +152,7 @@ static func from_model(path: String, scale: float, model_height: float, skin := 
 		view._head.bone = skeleton.find_bone(HEAD_BONE)
 		skeleton.add_child(view._head)
 	view._add_body_wave(skeleton)
+	add_rest_idle(view._player.get_animation_library(""), view._animations)
 	pad_base_animations(view._player.get_animation_library(""), view._animations, skeleton)
 	play_one_offs_once(view._player.get_animation_library(""), view._animations)
 	view._player.animation_finished.connect(view._on_animation_finished)
@@ -166,22 +173,23 @@ static func from_model(path: String, scale: float, model_height: float, skin := 
 	return view
 
 
-## Gives a serpent whose base animations hold its body segments still a BodyWave, so it
-## undulates and slithers instead of hopping and gliding about rigidly.
+## Gives a serpent (BodyWave.SERPENT_SEGMENTS) a BodyWave, so it slumps flat on a knockout
+## rather than tipping over and standing its coils on end. One whose base animations hold its
+## body segments still also undulates and slithers instead of hopping and gliding about rigidly.
 func _add_body_wave(skeleton: Skeleton3D) -> void:
 	var segments := BodyWave.find_segments(skeleton)
-	if segments.is_empty():
+	if segments.size() < BodyWave.SERPENT_SEGMENTS:
 		return
+	_wave = BodyWave.new()
+	_wave.segments = segments
+	_wave.spine_bones = BodyWave.spine(skeleton, segments, skeleton.find_bone(HEAD_BONE))
+	skeleton.add_child(_wave)
+	_motion.slumps = true
 	var base: Array[Animation] = []
 	for role in ["idle", "walk", "run", "air_idle", "air_fly"]:
 		if _animations.has(role):
 			base.append(_player.get_animation(_animations[role]))
-	if BodyWave.animated(base, skeleton, segments):
-		return
-	_wave = BodyWave.new()
-	_wave.segments = segments
-	skeleton.add_child(_wave)
-	_motion.slithers = true
+	_motion.slithers = not BodyWave.animated(base, skeleton, segments)
 
 
 ## Gives each base animation (BASE_ROLES in `roles`) a rest-pose track for every bone channel
@@ -217,6 +225,19 @@ static func pad_base_animations(library: AnimationLibrary, roles: Dictionary, sk
 					animation.rotation_track_insert_key(track, 0.0, rest.basis.get_rotation_quaternion())
 				Animation.TYPE_SCALE_3D:
 					animation.scale_track_insert_key(track, 0.0, rest.basis.get_scale())
+
+
+## Gives `roles` an idle that holds the model's own pose (REST_IDLE) when it has none, for
+## the seven species without one in Cobblemon (Tangela, Pupitar, Lillipup, Herdier, Durant,
+## Bounsweet, Pyukumuku). pad_base_animations() fills it with the rest pose of every bone the
+## other animations move; without it nothing would put back the bones a cry or Durant's walk
+## leaves posed, and Durant would walk on the spot once it stopped.
+static func add_rest_idle(library: AnimationLibrary, roles: Dictionary) -> void:
+	if roles.has("idle"):
+		return
+	if not library.has_animation(REST_IDLE):
+		library.add_animation(REST_IDLE, Animation.new())
+	roles.idle = REST_IDLE
 
 
 ## Makes the animations of ONE_OFF_ROLES in `roles` play once, so the fighter returns to its
@@ -385,6 +406,7 @@ func next_frame() -> void:
 	if _wave != null:
 		_wave.phase = _motion.wave_phase
 		_wave.strength = _motion.wave_strength
+		_wave.slump = _motion.wave_slump
 	_motion_root.transform = _motion.transform()
 
 
@@ -454,8 +476,9 @@ func head_points() -> PackedVector3Array:
 	return _posed_points(head) if head >= 0 else PackedVector3Array()
 
 
-## The posed vertices on bone `under` and the bones under it, or every vertex for -1.
-func _posed_points(under: int) -> PackedVector3Array:
+## The posed vertices on bone `under` and the bones under it, or every vertex for -1, with the
+## local `rotations` ({bone: Quaternion}, BodyWave.global_pose) in place of the bones' own.
+func _posed_points(under: int, rotations := {}) -> PackedVector3Array:
 	var points := PackedVector3Array()
 	var skeleton: Skeleton3D = _mesh.get_parent()
 	var skin := _mesh.skin
@@ -464,11 +487,13 @@ func _posed_points(under: int) -> PackedVector3Array:
 	var to_view := _to_view(skeleton)
 	var binds: Array[Transform3D] = []
 	var kept: Array[bool] = []
+	var globals := {}
 	for i in skin.get_bind_count():
 		var bone := skin.get_bind_bone(i)
 		if bone < 0:
 			bone = skeleton.find_bone(skin.get_bind_name(i))
-		binds.append(to_view * skeleton.get_bone_global_pose(maxi(bone, 0)) * skin.get_bind_pose(i))
+		var pose := skeleton.get_bone_global_pose(maxi(bone, 0)) if rotations.is_empty() else BodyWave.global_pose(skeleton, maxi(bone, 0), rotations, globals)
+		binds.append(to_view * pose * skin.get_bind_pose(i))
 		var keep := under < 0
 		while not keep and bone >= 0:
 			keep = bone == under
@@ -504,8 +529,11 @@ func _faint_outline() -> PackedVector2Array:
 
 
 ## How far the faint animation sinks the model below the ground as currently posed (all but
-## ProceduralMotion's FAINT_REST_SHARE of it), measured while it plays and then held.
+## ProceduralMotion's FAINT_REST_SHARE of it), measured while it plays and then held. A
+## slumping serpent instead eases toward its _slump_lift as it slumps.
 func _faint_lift() -> float:
+	if _wave != null and not _animations.has("faint"):
+		return _slump_lift * _motion.wave_slump
 	if not _animations.has("faint") or _player.current_animation != _animations.faint:
 		return _motion.ground_lift
 	var to_model := _motion_root.transform.affine_inverse()
@@ -516,6 +544,21 @@ func _faint_lift() -> float:
 		return 0.0
 	heights.sort()
 	return maxf(0.0, -heights[int(heights.size() * ProceduralMotion.FAINT_REST_SHARE)])
+
+
+## How far to move the model up so all but ProceduralMotion's FAINT_REST_SHARE of it is
+## above the ground once its spine has slumped flat (negative: down onto the ground), settled
+## into it by FAINT_SINK as a tipped-over body is.
+func _measure_slump_lift() -> float:
+	var skeleton: Skeleton3D = _mesh.get_parent()
+	var to_model := _motion_root.transform.affine_inverse()
+	var heights := PackedFloat32Array()
+	for point in _posed_points(-1, BodyWave.lie_down(skeleton, _wave.spine_bones, 1.0)):
+		heights.append((to_model * point).y)
+	if heights.is_empty():
+		return 0.0
+	heights.sort()
+	return -heights[int(heights.size() * ProceduralMotion.FAINT_REST_SHARE)] - height * ProceduralMotion.FAINT_SINK
 
 
 ## The transform from `node`'s space to this view's, without needing the tree.
@@ -574,6 +617,8 @@ func play_role(role: String, windup_seconds := 0.0) -> void:
 		else:
 			_player.pause()
 			_motion.faint(_faint_outline())
+			if _wave != null:
+				_slump_lift = _measure_slump_lift()
 		return
 	_one_off = _play(role, false, windup_seconds)
 	if not _one_off and PROCEDURAL_ROLES.has(role):

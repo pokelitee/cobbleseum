@@ -17,6 +17,13 @@ const ANIM_TIME_NAMES: Array[String] = ["q.anim_time", "query.anim_time"]
 
 ## Empty when the text parsed; otherwise why it didn't (and evaluate() returns 0).
 var error := ""
+## Empty unless text follows a whole expression: what was left out, for the converter's report.
+## Cobblemon's own parser (com.bedrockk.molang, in its jar) reads one expression, then another
+## only after a ';', and has no error for anything left over, so it evaluates what comes before
+## and ignores the rest; so do we. A few of its animation files have such leftovers: Cyndaquil,
+## Typhlosion and Blaziken a stray ')' ("...*1-1)+6*(..."), Wingull a number with no operator
+## before it ("...)1"), Grafaiai a decimal comma ("...*4,46").
+var ignored := ""
 ## Names the expression reads that evaluate to 0 because they're unknown at bake time.
 var unknown_names: PackedStringArray = []
 
@@ -43,7 +50,7 @@ func _parse(text: String) -> void:
 	_position = 0
 	_root = _parse_additive()
 	if error.is_empty() and _position < _tokens.size():
-		error = "unexpected '%s'" % _tokens[_position]
+		ignored = "ignored from '%s' in \"%s\"" % [_tokens[_position], text]
 	if not error.is_empty():
 		error = "%s in \"%s\"" % [error, text]
 		_root = []

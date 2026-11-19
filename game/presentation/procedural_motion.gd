@@ -11,8 +11,9 @@ extends RefCounted
 ## - sleep: slow breathing (no sleep animation)
 ## - idle: subtle breathing and a slight bob when the species' idle holds one pose (about 340
 ##   do in Cobblemon itself) or it has none
-## - serpents (BodyWave): a wave down the body instead of hopping, gentle at rest, stronger
-##   and faster when moving; on a knockout they drop to the ground rather than tipping over
+## - serpents (BodyWave): a wave down a still body instead of hopping, gentle at rest,
+##   stronger and faster when moving; on a knockout every serpent drops to the ground and
+##   slumps flat rather than tipping over
 ## - faint: tipping over onto its side, resting on the ground (no faint animation); with a
 ##   faint animation, only dropping out of a hover and lifting what the animation sinks
 ## Everything advances per video frame, scaled like the animations (0 in hit-stop), so renders
@@ -72,11 +73,15 @@ var moving := false
 var asleep := false
 ## Breathes at rest: the species' idle holds still.
 var breathes := false
-## A serpent with a BodyWave: it slithers rather than hops, and doesn't tip over when it faints.
+## A serpent whose BodyWave waves its still body: it slithers rather than hops.
 var slithers := false
-## The BodyWave's phase and strength.
+## A serpent (BodyWave): on a knockout without a faint animation it slumps flat rather than
+## tipping over, which would stand its coils on end.
+var slumps := false
+## The BodyWave's phase, strength and slump.
 var wave_phase := 0.0
 var wave_strength := 0.0
+var wave_slump := 0.0
 ## Set each frame by the view: facing and the last tick's movement, on the floor.
 var facing := Vector2.UP
 var velocity := Vector2.ZERO
@@ -171,6 +176,9 @@ func next_frame(time_scale := 1.0) -> void:
 		var pace := clampf(velocity.length() / LEAN_SPEED, 0.0, 1.0)
 		wave_strength = lerpf(wave_strength, 0.0 if _fainting else lerpf(WAVE_REST, 1.0, pace), ease)
 		wave_phase += time_scale * lerpf(WAVE_REST_SPEED, WAVE_MOVING_SPEED, pace)
+	if slumps:
+		# A faint animation of its own lays the body down itself.
+		wave_slump = smoothstep(0.0, 1.0, _faint_age / FAINT_FRAMES) if _fainting and _tips else 0.0
 
 
 ## The root offset for the current frame, in the fighter's own space (-Z faces the foe).
@@ -211,8 +219,7 @@ func transform() -> Transform3D:
 				scale *= Vector3(1.0 + squash * 0.5, 1.0 - squash, 1.0 + squash * 0.5)
 	if _fainting:
 		var f := smoothstep(0.0, 1.0, _faint_age / FAINT_FRAMES)
-		# A serpent tipped onto its side would stand its coils on end.
-		if _tips and not slithers:
+		if _tips and not slumps:
 			rotation.z += FAINT_ANGLE * f
 			# Fully lifted at every angle, so the body never passes through the ground on the way down.
 			offset.y = lerpf(offset.y, -height * FAINT_SINK, f) + _ground_lift(FAINT_ANGLE * f) - _standing_lift * (1.0 - f)
