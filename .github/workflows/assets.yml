@@ -1,0 +1,61 @@
+# The full asset pipeline and the tools that need its output, on every platform. Too heavy for
+# each CI run (about 205 MB of downloads and 15-30 minutes per platform), so it runs only when
+# the pipeline changes or by hand, and isn't a required check.
+name: Assets
+
+on:
+  pull_request:
+    paths:
+      - sources.json
+      - tools/assets.gd
+      - tools/convert/**
+      - tools/music/**
+      - tools/pipeline/**
+      - tools/sources/**
+      - tools/sprites/**
+      - .github/actions/setup/**
+      - .github/workflows/assets.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: assets-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assets:
+    name: assets (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15, windows-2025]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      # Downloads are verified by SHA-256 and named by it, so a cached copy is always the pinned file.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: cache/downloads
+          key: downloads-${{ hashFiles('sources.json') }}
+
+      - name: Prepare every asset
+        run: '"$GODOT" --headless --path . --script res://tools/assets.gd'
+
+      - name: Run battles
+        run: '"$GODOT" --headless --path . --script res://tools/battle.gd -- game/data/battles/showcase.json --seeds=5'
+
+      - name: Rank a few species over parallel processes
+        run: |
+          "$GODOT" --headless --path . --script res://tools/rank.gd -- run --limit=12 --opponents=3 --jobs=2
+          "$GODOT" --headless --path . --script res://tools/rank.gd -- report

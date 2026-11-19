@@ -9,5 +9,5 @@ windows.debug.x86_64 = "res://game/native/bin/cobbleseum_native.windows.template
 windows.release.x86_64 = "res://game/native/bin/cobbleseum_native.windows.template_release.x86_64.dll"
 linux.debug.x86_64 = "res://game/native/bin/cobbleseum_native.linux.template_debug.x86_64.so"
 linux.release.x86_64 = "res://game/native/bin/cobbleseum_native.linux.template_release.x86_64.so"
-macos.debug = "res://game/native/bin/cobbleseum_native.macos.template_debug.framework"
-macos.release = "res://game/native/bin/cobbleseum_native.macos.template_release.framework"
+macos.debug = "res://game/native/bin/cobbleseum_native.macos.template_debug.universal.dylib"
+macos.release = "res://game/native/bin/cobbleseum_native.macos.template_release.universal.dylib"

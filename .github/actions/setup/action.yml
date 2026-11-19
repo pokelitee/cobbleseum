@@ -1,0 +1,54 @@
+name: Set up Cobbleseum
+description: Installs Python, Node and Godot for this runner's OS, builds the native move-effect runtime and imports the project. Sets GODOT to the Godot binary.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version: "3.13"
+
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: "20"
+
+    - name: Install Godot
+      shell: bash
+      env:
+        GODOT_VERSION: 4.7.2-stable
+        RUNNER_OS_NAME: ${{ runner.os }}
+      run: |
+        # Archive, SHA-512 (from the release's SHA512-SUMS.txt) and binary inside it, per OS.
+        case "$RUNNER_OS_NAME" in
+          Linux)
+            archive=linux.x86_64.zip
+            sha512=9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
+            binary="Godot_v${GODOT_VERSION}_linux.x86_64" ;;
+          macOS)
+            archive=macos.universal.zip
+            sha512=38aa16e5bba2083941fc5b3e54be0089bd4cc35e32415f5b9fd9a8a6a7b9818255d44532ea8ef94b5aef56c4b407c2d634fa4f657e4ebe681ebbf59b7bac69ca
+            binary=Godot.app/Contents/MacOS/Godot ;;
+          Windows)
+            archive=win64.exe.zip
+            sha512=83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993
+            # The console build, so Godot's output reaches the log.
+            binary="Godot_v${GODOT_VERSION}_win64_console.exe" ;;
+          *)
+            echo "unsupported runner OS $RUNNER_OS_NAME" >&2; exit 1 ;;
+        esac
+        zip="$RUNNER_TEMP/godot.zip"
+        curl -fsSL -o "$zip" "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_${archive}"
+        python -c 'import hashlib, sys; actual = hashlib.sha512(open(sys.argv[1], "rb").read()).hexdigest(); sys.exit(0 if actual == sys.argv[2] else f"SHA-512 mismatch: {actual}")' "$zip" "$sha512"
+        # unzip keeps the executable bits that Python's zipfile drops; Windows needs neither.
+        if command -v unzip >/dev/null; then unzip -q "$zip" -d "$RUNNER_TEMP/godot"; else python -m zipfile -e "$zip" "$RUNNER_TEMP/godot"; fi
+        echo "GODOT=$RUNNER_TEMP/godot/$binary" >> "$GITHUB_ENV"
+
+    - name: Build the native move-effect runtime
+      shell: bash
+      run: |
+        python -m pip install --quiet "scons==4.9.1"
+        tools/native/build.sh
+
+    - name: Import project
+      shell: bash
+      run: '"$GODOT" --headless --path . --import'
