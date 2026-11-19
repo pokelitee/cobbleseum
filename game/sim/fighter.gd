@@ -130,6 +130,14 @@ var split_ticks := 0
 var own_stats := {}
 ## The HP stat its max HP was scaled from (Strength Sap heals by the foe's Attack on that scale).
 var hp_stat := 1
+## Rules version 40: its lingering effects ({name: ticks left}, Volatiles) and what they need
+## (`volatile_data`: "seeder" (an index in Battle.fighters), "encore" and "disable" (move IDs),
+## "types" and "ability" to go back to); the move it last started (Encore, Disable, Torment); and
+## its species' own types.
+var volatiles := {}
+var volatile_data := {}
+var last_move := ""
+var base_types: Array = []
 
 
 static func create(side_index: int, species_id_value: String, species: Dictionary, battle_moves: Array[BattleMove], radius_metres: float) -> Fighter:
@@ -138,6 +146,7 @@ static func create(side_index: int, species_id_value: String, species: Dictionar
 	fighter.species_id = species_id_value
 	fighter.name = species.get("name", species_id_value)
 	fighter.types = species.get("types", ["Normal"])
+	fighter.base_types = fighter.types.duplicate()
 	var base: Dictionary = species.baseStats
 	fighter.stats = {
 		"atk": Rules.stat(base.atk), "def": Rules.stat(base.def),

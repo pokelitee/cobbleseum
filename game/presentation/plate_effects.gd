@@ -8,7 +8,9 @@ extends RefCounted
 
 ## Badge order along the row.
 const TIMED: Array[String] = ["brn", "par", "psn", "tox", "slp", "frz", "confusion",
-	"reflect", "lightscreen", "auroraveil", "tailwind", "safeguard", "mist", "substitute", "ring", "charge"]
+	"reflect", "lightscreen", "auroraveil", "tailwind", "safeguard", "mist", "substitute", "ring", "charge",
+	"perish", "curse", "leechseed", "bound", "saltcure", "yawn", "taunt", "encore", "disable", "torment", "healblock",
+	"throatchop", "trapped", "octolock", "tarshot", "syrupbomb", "smackdown", "magnetrise", "types", "ability"]
 ## Stat stages, in badge order after the timed effects.
 const STAGES: Array[String] = ["atk", "def", "spa", "spd", "spe"]
 
@@ -35,6 +37,9 @@ func read(fighter: Fighter) -> Array[Dictionary]:
 		ticks.ring = fighter.ring_ticks
 	if fighter.charged_ticks > 0:
 		ticks.charge = fighter.charged_ticks
+	for name: String in fighter.volatiles:
+		if name in TIMED:
+			ticks[name] = fighter.volatiles[name]
 	var sides: Dictionary = fighter.arena.sides[fighter.side]
 	for condition: String in sides:
 		ticks[condition] = sides[condition]
@@ -79,4 +84,6 @@ static func standard_ticks(key: String) -> int:
 			return ArenaConditions.field_ticks(key)
 		"substitute", "ring", "charge":
 			return Rules.seconds_to_ticks(Abilities.ABILITY_SECONDS)
+	if Hud.STATUS_BADGES.has(key) and Hud.STATUS_BADGES[key].size() > 2:
+		return Volatiles.ticks_for(key)
 	return Rules.seconds_to_ticks(Rules.STATUS_SECONDS)

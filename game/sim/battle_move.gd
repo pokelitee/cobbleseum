@@ -18,7 +18,8 @@ extends RefCounted
 ##   Dragon Cheer; Howl the user too) or drawing the foes' attacks (Follow Me, Rage Powder).
 ##   Team heals are HEAL moves that heal the ally too.
 ## - CODED (rules version 39): status moves whose effect StatusMoves codes (Belly Drum, Rest,
-##   Substitute, Pain Split...), applied on release with no range.
+##   Substitute, Pain Split...), applied on release with no range; since rules version 40 also the
+##   user's own lingering moves (Volatiles.SELF_MOVES: Curse, Destiny Bond, Perish Song...).
 
 enum Kind { MELEE, PROJECTILE, SELF_BUFF, DEBUFF, HEAL, STATUS, AREA, ARENA, ALLY, REDIRECT, CODED }
 
@@ -138,6 +139,9 @@ var channels := false
 ## Rules version 38: the rule its damage follows (DAMAGE_RULES), whether it lands later, the share
 ## of max HP it costs the user when used, and the share it costs when it misses.
 var damage_rule := ""
+## Rules version 40: the lingering effect (Volatiles) it leaves on the target, or "self:" one on the
+## user, when it lands or hits; "" for none.
+var volatile := ""
 var delayed := false
 var cost_share := 0.0
 var crash_share := 0.0
@@ -227,6 +231,7 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 		move.power = Rules.FIXED_DAMAGE_POWER
 		move.self_destructs = id == "finalgambit"
 	move.delayed = id in DELAYED
+	move.volatile = str(Volatiles.ON_HIT.get(id, ""))
 	move.cost_share = 0.5 * Rules.HP_SHARE_READING if id in COSTS_HP else 0.0
 	move.crash_share = 0.5 * Rules.HP_SHARE_READING if data.get("hasCrashDamage", false) else 0.0
 	var fixed: Variant = data.get("damage")
@@ -303,8 +308,13 @@ static func from_showdown(id: String, data: Dictionary) -> Dictionary:
 static func _classify_status_move(id: String, data: Dictionary, move: BattleMove) -> String:
 	if id in EXCLUDED:
 		return "%s needs move-specific code, not supported yet" % id
-	if id in StatusMoves.CODED:
+	if id in StatusMoves.CODED or id in Volatiles.SELF_MOVES:
 		move.kind = Kind.CODED
+		return ""
+	if Volatiles.FOE_MOVES.has(id):
+		move.kind = Kind.STATUS
+		move.volatile = Volatiles.FOE_MOVES[id]
+		move.boosts = _stat_changes(data.get("boosts", {}))
 		return ""
 	if id in StatusMoves.SELF_BUFFS:
 		move.kind = Kind.SELF_BUFF

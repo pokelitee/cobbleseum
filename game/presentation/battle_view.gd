@@ -119,6 +119,15 @@ const CODED_CALLOUTS := {"bellydrum": "Maxed out its Attack!", "rest": "Slept an
 	"heartswap": "Swapped stat changes!", "powersplit": "Shared power!", "guardsplit": "Shared guard!",
 	"topsyturvy": "Stat changes inverted!", "acupressure": "Acupressure!", "takeheart": "Took heart!"}
 const CODED_COLOUR := Color(0.95, 0.9, 0.6)
+## Lingering effects (rules version 40): what's said over the fighter that takes each.
+const VOLATILE_CALLOUTS := {"taunt": "Fell for the taunt!", "encore": "Got an encore!", "disable": "Its move was disabled!",
+	"torment": "Subjected to torment!", "healblock": "Can't heal!", "trapped": "Can't escape now!", "octolock": "Locked in!",
+	"leechseed": "Seeded!", "yawn": "Grew drowsy!", "tarshot": "Covered in tar!", "types": "Its type changed!",
+	"ability": "Its ability changed!", "bound": "Trapped!", "saltcure": "Being salt cured!", "smackdown": "Fell straight down!",
+	"throatchop": "Can't use sound moves!", "syrupbomb": "Covered in syrup!", "glaiverush": "Left itself open!",
+	"uproar": "Caused an uproar!", "curse": "Laid a curse!", "destinybond": "Destiny Bond!", "perish": "Heard the Perish Song!",
+	"magnetrise": "Levitating!", "imprison": "Sealed the foe's moves!"}
+const VOLATILE_COLOUR := Color(0.85, 0.7, 1.0)
 ## Metres a fighter must move in a tick to play its walk animation.
 const WALK_THRESHOLD := 0.01
 ## Hits taking at least this share of the defender's HP (or big ones) make the crowd cheer;
@@ -1034,6 +1043,11 @@ func _play_events() -> void:
 				_fx.announce(_event_view(event), "-%d" % event.damage, Color(1, 1, 1), 44)
 			"coded":
 				_fx.announce(_event_view(event), CODED_CALLOUTS.get(event.move, ""), CODED_COLOUR, 50)
+			"volatile":
+				_fx.announce(_event_view(event), VOLATILE_CALLOUTS.get(event.volatile, ""), VOLATILE_COLOUR, 46)
+			"volatile_damage", "destiny_bond", "perish":
+				_event_view(event).take_hit()
+				_fx.announce(_event_view(event), "-%d" % event.damage, VOLATILE_COLOUR, 44)
 			"wish":
 				_move_fx.aura(_event_view(event), HEAL_COLOUR, true, true)
 				_fx.announce(_event_view(event), "Its wish came true!", HEAL_COLOUR, 50)

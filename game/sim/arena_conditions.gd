@@ -136,6 +136,8 @@ var sides: Array[Dictionary] = [{}, {}]
 ## since its last fainted (Retaliate), kept by the battle.
 var fainted := PackedInt32Array([0, 0])
 var fainted_ticks := PackedInt32Array([0, 0])
+## Ticks left of an Uproar (rules version 40): nobody falls asleep meanwhile.
+var uproar_ticks := 0
 
 
 ## The weather a Showdown move sets ("" for none).
@@ -188,6 +190,7 @@ func tick() -> Array[Dictionary]:
 			if sides[side][name] <= 0:
 				sides[side].erase(name)
 				ended.append({"side_condition": name, "side": side})
+	uproar_ticks = maxi(0, uproar_ticks - 1)
 	for side in 2:
 		fainted_ticks[side] = maxi(0, fainted_ticks[side] - 1)
 	for name: String in field.keys():
@@ -323,7 +326,9 @@ static func surge_ticks_for(setter: Fighter) -> int:
 ## Whether a surge reaches `fighter`: not a Flying type or a Levitate user, unless Gravity
 ## grounds everyone.
 static func grounded(fighter: Fighter) -> bool:
-	return fighter.arena.field.has("gravity") or _grounded(fighter.types, fighter.ability)
+	if fighter.arena.field.has("gravity") or fighter.volatiles.has("smackdown"):
+		return true
+	return not fighter.volatiles.has("magnetrise") and _grounded(fighter.types, fighter.ability)
 
 
 static func _grounded(types: Array, ability_id: String) -> bool:
@@ -469,7 +474,7 @@ func heal_share(fighter: Fighter, move: BattleMove) -> float:
 ## in sun, grounded fighters don't fall asleep on electric ground or get any status on misty
 ## ground, and Safeguard keeps every status off its side.
 func blocks_status(fighter: Fighter, status: String) -> bool:
-	if (status == "frz" and weather_for(fighter) == "sun") or safeguarded(fighter):
+	if (status == "frz" and weather_for(fighter) == "sun") or safeguarded(fighter) or (status == "slp" and uproar_ticks > 0):
 		return true
 	var ground := surge_for(fighter)
 	return ground == "misty" or (ground == "electric" and status == "slp")

@@ -180,6 +180,8 @@ static func attack_value(move: BattleMove, raw: Dictionary, physical: bool, abil
 static func utility_value(move: BattleMove, physical: bool) -> float:
 	if StatusMoves.MIXED_FOE_VALUES.has(move.id):
 		return StatusMoves.MIXED_FOE_VALUES[move.id]
+	if move.kind == BattleMove.Kind.STATUS and not move.volatile.is_empty():
+		return Volatiles.moveset_value(move, physical)
 	match move.kind:
 		BattleMove.Kind.CODED:
 			return StatusMoves.moveset_value(move, physical)

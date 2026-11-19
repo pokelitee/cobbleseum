@@ -249,6 +249,8 @@ static func _with_conditions(move: BattleMove, weather: String, user_surge: Stri
 ## - Belch only after the user has eaten its berry, Last Resort only once its other moves have
 ##   all been used since it came out.
 static func usable(fighter: Fighter, foe: Fighter, move: BattleMove) -> bool:
+	if not Volatiles.allows(fighter, move) or Volatiles.imprisoned([foe, foe.ally] if foe.ally != null else [foe], move):
+		return false
 	match move.id:
 		"suckerpunch", "thunderclap":
 			return foe.action == Fighter.Action.WINDUP and foe.moves[foe.action_move].is_damaging()
@@ -328,6 +330,15 @@ static func effectiveness(attacker: Fighter, defender: Fighter, move: BattleMove
 		"synchronoise":
 			if not attacker.types.any(func(type: String) -> bool: return type in defender.types):
 				return 0.0
+	# Rules version 40: Magnet Rise keeps Ground moves off (unless Gravity), Smack Down lets them
+	# reach a Flying type, Tar Shot doubles Fire's effectiveness.
+	if move.type == "Ground":
+		if defender.volatiles.has("magnetrise") and not defender.arena.has_field("gravity"):
+			return 0.0
+		if defender.volatiles.has("smackdown") and "Flying" in types:
+			types = types.filter(func(type: String) -> bool: return type != "Flying")
+	if move.type == "Fire" and defender.volatiles.has("tarshot"):
+		return 2.0 * data.effectiveness(move.type, types)
 	return data.effectiveness(move.type, types)
 
 
