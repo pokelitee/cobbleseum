@@ -359,6 +359,32 @@ Re-ranking with a second AI profile, to confirm that the species, not the AI, de
 **Balance batch**:
 A run of simulated battles that reports battle length, draw rate, type-advantage wins and move-kind use, for tuning the rules.
 
+### Tournaments
+
+**Tournament**:
+A single-elimination bracket of entrants, seeded from the ranking and played from its seed. Each of its games is an ordinary battle under the current rules. The cards call it the Cobbleseum Cup.
+_Avoid_: cup (except as that title), league
+
+**Entrant**:
+One place in a tournament's bracket: a species, or a team dealt from the field.
+_Avoid_: player, competitor
+
+**Seeding**:
+Ordering a tournament's entrants by rating, strongest first (by base stat total when there's no ranking). An entrant's number in that order is its seed number, which is not the tournament's seed.
+
+**Match**:
+Two entrants meeting in a tournament: best of 1, 3 or 5 games, the winner going on.
+_Avoid_: matchup (that's two species)
+
+**Game**:
+One battle of a match.
+
+**Bracket card**:
+The card before each match, showing the bracket so far with the coming match lit.
+
+**Champion card**:
+The card that ends a tournament, with the winner, its path through the bracket and the credits.
+
 ### Sources and assets
 
 **Showdown**:

@@ -1,10 +1,12 @@
 class_name BattleView
 extends Node3D
 ## Plays a battle in a 3D arena (concepts_brief.md §12). User arguments (after --):
-## <spec.json> [--clip-seconds=S] [--expect-checksum=HEX] [--ai-debug] [--mesh-fx]. --ai-debug
-## shows the AI debug overlay from the start; F3 toggles it in the window. Moves draw in
-## Cobblemon's style (CobblemonMoveFX) when the native runtime and the cached effects are there;
-## --mesh-fx, or either one missing, draws our mesh styles instead.
+## <spec.json> [--clip-seconds=S] [--expect-checksum=HEX] [--ai-debug] [--mesh-fx] [--no-credits]
+## [--title=<text>]. --ai-debug shows the AI debug overlay from the start; F3 toggles it in the
+## window. Moves draw in Cobblemon's style (CobblemonMoveFX) when the native runtime and the
+## cached effects are there; --mesh-fx, or either one missing, draws our mesh styles instead.
+## --no-credits and --title are for tournaments (TournamentRun, tools/tournament.gd): no credits
+## card after the battle, and the round named on the intro card.
 ##
 ## Instead of a spec file, SpecFlags can describe the battle: --watch=<species> [--vs=<species>]
 ## [--ai=<profile>] [--vs-ai=<profile>] [--seed=N] for AI against AI. --arena=<name> (or a
@@ -36,7 +38,7 @@ extends Node3D
 
 const DEFAULT_SPEC := "res://game/data/battles/showcase.json"
 ## The view's own options, besides the battle flags (SpecFlags).
-const OPTIONS: Array[String] = ["ai-debug", "mesh-fx", "cobblemon-fx", "clip-seconds", "expect-checksum"]
+const OPTIONS: Array[String] = ["ai-debug", "mesh-fx", "cobblemon-fx", "clip-seconds", "expect-checksum", "no-credits", "title"]
 const HELP := """Cobbleseum: real-time battles with Cobblemon's models and Showdown's data.
 
 Usage: godot --path . [-- <spec.json> | <battle flags>] [options]
@@ -45,6 +47,8 @@ With neither, the setup screen opens; with only options, the showcase battle pla
   <spec.json>              a battle spec, or a play-mode battle saved in recordings/specs/
   --ai-debug               starts with the AI debug overlay on (F3 toggles it)
   --mesh-fx                draws our mesh move styles instead of Cobblemon's effects
+  --tournament [options]   plays a tournament in the window, a card before each match
+                           (tools/tournament.gd --help lists the options)
 
 %s
 
@@ -163,6 +167,11 @@ var _segment_frames := 0
 var _frames_shown := 0
 var _clip_mode := false
 var _expected_checksum := ""
+## --no-credits: the clip or battle ends without the credits card (a tournament's games, whose
+## champion card ends with them); its frames still pass, holding the victory as the music fades.
+var _no_credits := false
+## --title=<text>: shown on the intro card before the arena's name (a tournament's round).
+var _title := ""
 var _accumulator := 0.0
 var _arena: Arena
 ## Spectators in the stands (none in the open).
@@ -243,6 +252,8 @@ func _ready() -> void:
 		plan = _plan(spec, loaded.data)
 	_clip_mode = options.clip_seconds > 0.0
 	_expected_checksum = options.expect_checksum
+	_no_credits = options.no_credits
+	_title = options.title + " · " if not options.title.is_empty() else ""
 
 	var size := get_viewport().get_visible_rect().size
 	_portrait = VideoFormat.is_portrait(size)
@@ -359,7 +370,7 @@ func _ready() -> void:
 			_hud.set_hp(index, 1.0, true)
 		if battle.doubles:
 			_target_ring = _make_target_ring()
-		_hud.set_intro_subtitle(arena_name + _weather_subtitle())
+		_hud.set_intro_subtitle(_title + arena_name + _weather_subtitle())
 		_arena.weather.snap(battle.conditions.weather)
 		_arena.surge.snap(battle.conditions.surge)
 		_track_smoothed()
@@ -384,7 +395,7 @@ func _ready() -> void:
 	var overtime := battle.tick >= battle.overtime_tick
 	if overtime:
 		_music.overtime()
-	_hud.set_intro_subtitle(arena_name + _weather_subtitle() + (" · Overtime" if overtime else ""))
+	_hud.set_intro_subtitle(_title + arena_name + _weather_subtitle() + (" · Overtime" if overtime else ""))
 	_arena.weather.snap(battle.conditions.weather)
 	_arena.surge.snap(battle.conditions.surge)
 	while _caption_index < plan.captions.size() and int(plan.captions[_caption_index].tick) < _tick:
@@ -547,7 +558,8 @@ func _next_frame() -> void:
 		return
 	if _tick >= _end_tick:
 		if _credits_frames == 0:
-			_hud.show_credits()
+			if not _no_credits:
+				_hud.show_credits()
 			_music.fade_out(Hud.CREDITS_FRAMES)
 			_arena_sound.set_level(BattleMusic.SILENT_DB, Hud.CREDITS_FRAMES)
 			_fx.visible = false  # callouts stop animating here and draw above the HUD
@@ -1401,10 +1413,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_tree().reload_current_scene()
 		KEY_ESCAPE:
 			if not _clip_mode:
+				TournamentRun.stop()
 				get_tree().change_scene_to_file(SetupScreen.SCENE)
 
 
 func _show_after_battle() -> void:
+	# A tournament in the window goes on to its next card or game instead.
+	if TournamentRun.active():
+		TournamentRun.advance(get_tree())
+		return
 	_after = AfterBattle.new()
 	_after.rematch.connect(get_tree().reload_current_scene)
 	_after.menu.connect(get_tree().change_scene_to_file.bind(SetupScreen.SCENE))
@@ -1420,7 +1437,7 @@ func _is_recording() -> bool:
 static func parse_args(args: PackedStringArray) -> Dictionary:
 	var parsed := SpecFlags.parse(args)
 	var options := {"spec": DEFAULT_SPEC, "clip_seconds": 0.0, "expect_checksum": "", "ai_debug": false,
-		"cobblemon_fx": true, "flag_spec": SpecFlags.to_spec(parsed.flags)}
+		"cobblemon_fx": true, "no_credits": false, "title": "", "flag_spec": SpecFlags.to_spec(parsed.flags)}
 	var unknown := Cli.unknown_option(parsed.rest, OPTIONS)
 	if not unknown.is_empty():
 		options.error = unknown
@@ -1435,6 +1452,10 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 			options.clip_seconds = arg.get_slice("=", 1).to_float()
 		elif arg.begins_with("--expect-checksum="):
 			options.expect_checksum = arg.get_slice("=", 1)
+		elif arg == "--no-credits":
+			options.no_credits = true
+		elif arg.begins_with("--title="):
+			options.title = arg.get_slice("=", 1)
 		else:
 			options.spec = arg
 	return options
