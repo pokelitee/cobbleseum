@@ -113,7 +113,7 @@ const TYPICAL_POWER := {"reversal": 60, "flail": 60, "grassknot": 60, "lowkick":
 ## this share of their power in a standard moveset.
 const MOVESET_SHARE := {"suckerpunch": 0.5, "thunderclap": 0.5, "upperhand": 0.1, "fakeout": 0.1, "firstimpression": 0.2,
 	"dreameater": 0.1, "belch": 0.2, "lastresort": 0.3, "synchronoise": 0.3, "focuspunch": 0.6, "poltergeist": 0.9,
-	"futuresight": 0.85, "doomdesire": 0.85, "endeavor": 0.4, "counter": 0.4, "mirrorcoat": 0.4, "metalburst": 0.4, "comeuppance": 0.4}
+	"futuresight": 0.85, "doomdesire": 0.85, "spitup": 0.0, "endeavor": 0.4, "counter": 0.4, "mirrorcoat": 0.4, "metalburst": 0.4, "comeuppance": 0.4}
 
 
 ## `move` as `attacker` would use it on `defender` now.
