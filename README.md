@@ -81,7 +81,15 @@ godot --headless --path . --script res://tools/record.gd -- --watch=garchomp --v
 
 `--moves=a,b,c,d`, `--ability=<ability>` and `--item=<item>` (`none` for no ability or item) set what the first fighter brings instead of its standard moveset, ability and item; `--vs-moves`, `--vs-ability` and `--vs-item` set the foe's. Names can be IDs or written out (`--item="Life Orb"`). `tools/battle.gd` takes the same flags instead of a spec file.
 
-Every run prints the battle it resolved to first (seed, arena, weather, each fighter's ability, item, moves and look), and for a battle from flags the flags that repeat it exactly. `--help` explains the options of the game and of `tools/record.gd`, `tools/battle.gd` and `tools/rank.gd`; `--list=species|arenas|moves|abilities|items|profiles` prints what can be named. An unknown option or a misspelt species, arena, move, ability, item or AI profile stops with the nearest matches:
+Run a tournament: a single-elimination bracket of 8 (4, 16 or 32 with `--size`), seeded from the newest ranking (by base stat total until `tools/rank.gd` has made one) and played from its `--seed`. The field is drawn from the top species, one-on-one and best of 1 by default; `--best-of=3`, `--team-size=3` and `--doubles` make series, team and doubles brackets, and `--entrants=a,b,...` names the field. It plays headless in seconds and writes `results/tournaments/`; `--record` renders the whole tournament as one video per format in `recordings/`, with a bracket card before each match and a champion card at the end. `godot --path . -- --tournament [options]` watches one in the window:
+
+```bash
+godot --headless --path . --script res://tools/tournament.gd -- --seed=7
+godot --headless --path . --script res://tools/tournament.gd -- --seed=7 --record --format=both
+godot --path . -- --tournament --size=4 --best-of=3
+```
+
+Every run prints the battle it resolved to first (seed, arena, weather, each fighter's ability, item, moves and look), and for a battle from flags the flags that repeat it exactly. `--help` explains the options of the game and of `tools/record.gd`, `tools/battle.gd`, `tools/rank.gd` and `tools/tournament.gd`; `--list=species|arenas|moves|abilities|items|profiles` prints what can be named. An unknown option or a misspelt species, arena, move, ability, item or AI profile stops with the nearest matches:
 
 ```bash
 godot --headless --path . --script res://tools/battle.gd -- --help
@@ -94,7 +102,7 @@ Start the game without arguments to open the setup screen:
 godot --path .
 ```
 
-It sets up a battle without the command line: the mode (watch, play or record), each side's species (search the list; the model turns beside it), form and shiny, ability, item and moves (standard when left alone), each side's AI, the arena, the weather and the seed, and for a recording the format and length. It builds the battle through the same flags as below and shows the command line that repeats it. Watch and play open the battle in the window; record runs `tools/record.gd` in the background and offers the folder when it's done. After a battle, Rematch (R) plays it again (with a new seed if none was set) and Menu (Esc) goes back to the setup screen; Esc also leaves a battle early. With the keyboard, Tab moves between controls, Enter in a species search picks the first match, and F5 or Ctrl+Enter starts. Starting the game with arguments skips the setup screen, as below.
+It sets up a battle without the command line: the mode (watch, play, record or tournament), each side's species (search the list; the model turns beside it), form and shiny, ability, item and moves (standard when left alone), each side's AI, the arena, the weather and the seed, and for a recording the format and length. It builds the battle through the same flags as below and shows the command line that repeats it. Watch and play open the battle in the window; record runs `tools/record.gd` in the background and offers the folder when it's done. Tournament swaps the two sides for the bracket's options and watches it in the window or records it. After a battle, Rematch (R) plays it again (with a new seed if none was set) and Menu (Esc) goes back to the setup screen; Esc also leaves a battle early. With the keyboard, Tab moves between controls, Enter in a species search picks the first match, and F5 or Ctrl+Enter starts. Starting the game with arguments skips the setup screen, as below.
 
 Play against the AI (keyboard: WASD or arrows to move, Space to dodge, J K L I or 1–4 for moves, G to guard, hold Shift to feint; gamepad: left stick, A to dodge, X Y B RB for moves). Each battle's spec, with every tick's intents and the rules and data versions it ran under, is saved to `recordings/specs/`, and `tools/record.gd` can render one like any spec (after a rules or data change it stops with an error instead of rendering a different battle):
 
@@ -185,6 +193,7 @@ The design is described in the [concept brief](concepts_brief.md). In short:
 - A utility AI controls fighters through the same intents a player uses.
 - Move visuals in Cobblemon's style: each move's sequence (`MoveSequence`, its own or its style's `StyleSequence`) plays pieces, Cobblemon's own Bedrock particle effects kept in `cache/`, at our real-time phases. A native GDExtension (`native/`, C++) compiles their Molang and runs the particles; `SnowstormEmitter` draws them.
 - The battle view (`game/presentation/`) replays the simulation with the converted models, a portrait camera and HP bars. `tools/record.gd` runs a battle headless, picks the clip window from its events, renders it with Godot's Movie Maker mode in a second Godot process, checks that the rendered battle's checksum matches, and encodes an MP4 with ffmpeg.
+- Tournament mode (`game/tournament/`, `tools/tournament.gd`) seeds a single-elimination bracket from the ranking, plays every game as an ordinary battle spec from the tournament's seed, and shows or records it with a bracket card before each match and a champion card at the end.
 
 ## Documentation
 

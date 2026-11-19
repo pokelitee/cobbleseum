@@ -172,38 +172,70 @@ func _render(source: PackedStringArray, format: String, out_dir: String, seconds
 	var movie := out_dir.path_join("clip_%s.ogv" % format)
 	var clip := out_dir.path_join("clip_%s.mp4" % format)
 	print("rendering %s..." % format)
-	_write(OVERRIDE_FILE, VideoFormat.override_config(format))
-	var output: Array = []
+	var rendered := render_battle(source, format, movie, seconds, checksum, _view_args)
+	if rendered.has("error"):
+		return rendered.error
+	_window = rendered.window
+	print("encoding %s..." % clip)
+	return encode([movie], clip)
+
+
+## Renders the battle view for `source` (a spec file or battle flags) under Movie Maker to
+## `movie`, playing the clip window of about `seconds` and checking `checksum`; `view_args` go to
+## the view too. Returns {"window": {"start", "end"}} or {"error"}, deleting a failed movie.
+static func render_battle(source: PackedStringArray, format: String, movie: String, seconds: float, checksum: String,
+		view_args: PackedStringArray) -> Dictionary:
 	# --quit-after is a safety net: if the view fails to load it would otherwise never exit.
-	var status := OS.execute(OS.get_executable_path(), [
-		"--path", ProjectSettings.globalize_path("res://"),
-		"--write-movie", movie, "--fixed-fps", str(Rules.TICK_RATE),
-		"--quit-after", str(roundi(seconds * Rules.TICK_RATE) + ENDING_FRAMES + SAFETY_FRAMES),
-		VIEW_SCENE, "--",
-	] + Array(source) + [
+	var rendered := render_movie(VIEW_SCENE, Array(source) + [
 		"--clip-seconds=%s" % seconds,
 		"--expect-checksum=%s" % checksum,
-	] + Array(_view_args), output, true)
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(OVERRIDE_FILE))
-	var log := "".join(output)
-	var problem := render_problem(log, status, checksum)
+	] + Array(view_args), format, movie, roundi(seconds * Rules.TICK_RATE) + ENDING_FRAMES + SAFETY_FRAMES)
+	var log: String = rendered.log
+	var problem := render_problem(log, rendered.status, checksum)
 	if not problem.is_empty():
 		DirAccess.remove_absolute(movie)
-		return "rendering %s %s (exit %d):
-%s" % [format, problem, status, log.strip_edges().right(2000)]
-	for line in log.split("
-"):
+		return {"error": "rendering %s %s (exit %d):\n%s" % [format, problem, rendered.status, log.strip_edges().right(2000)]}
+	var window := {}
+	for line in log.split("\n"):
 		if line.begins_with(BattleView.CLIP_WINDOW + " "):
-			_window = {"start": line.get_slice(" ", 1).to_int(), "end": line.get_slice(" ", 2).to_int()}
-	print("encoding %s..." % clip)
-	output.clear()
-	status = OS.execute("ffmpeg", ["-y", "-loglevel", "error", "-i", movie,
+			window = {"start": line.get_slice(" ", 1).to_int(), "end": line.get_slice(" ", 2).to_int()}
+	return {"window": window}
+
+
+## Runs `scene` with user arguments `args` in a second Godot under Movie Maker, sized for
+## `format` (through a temporary override.cfg), writing `movie` and quitting after at most
+## `frames` frames: {"status": its exit code, "log": its output}.
+static func render_movie(scene: String, args: Array, format: String, movie: String, frames: int) -> Dictionary:
+	_write(OVERRIDE_FILE, VideoFormat.override_config(format))
+	var output: Array = []
+	var status := OS.execute(OS.get_executable_path(), [
+		"--path", ProjectSettings.globalize_path("res://"),
+		"--write-movie", movie, "--fixed-fps", str(Rules.TICK_RATE), "--quit-after", str(frames),
+		scene, "--",
+	] + args, output, true)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(OVERRIDE_FILE))
+	return {"status": status, "log": "".join(output)}
+
+
+## Encodes `movies` (Movie Maker OGVs, joined in order when there are several) as one H.264
+## MP4 (yuv420p) with AAC audio at `clip`, then deletes them. Returns an error message or "".
+static func encode(movies: Array, clip: String) -> String:
+	var inputs: Array = []
+	var streams := ""
+	for i in movies.size():
+		inputs.append_array(["-i", movies[i]])
+		streams += "[%d:v][%d:a]" % [i, i]
+	# The concat filter rather than the demuxer, so each part's audio stays with its pictures.
+	var join: Array = [] if movies.size() == 1 else ["-filter_complex",
+		"%sconcat=n=%d:v=1:a=1[v][a]" % [streams, movies.size()], "-map", "[v]", "-map", "[a]"]
+	var output: Array = []
+	var status := OS.execute("ffmpeg", ["-y", "-loglevel", "error"] + inputs + join + [
 		"-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
 		"-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", clip], output, true)
-	DirAccess.remove_absolute(movie)
+	for movie: String in movies:
+		DirAccess.remove_absolute(movie)
 	if status != 0:
-		return "ffmpeg failed:
-%s" % "".join(output).strip_edges()
+		return "ffmpeg failed:\n%s" % "".join(output).strip_edges()
 	return ""
 
 
