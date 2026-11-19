@@ -4,7 +4,7 @@ extends RefCounted
 ## Bump RULES_VERSION whenever a change alters battle outcomes; saved battle specs record it
 ## and won't replay under another.
 
-const RULES_VERSION := 40
+const RULES_VERSION := 41
 const TICK_RATE := 30
 const LEVEL := 50
 const IV := 31
@@ -31,6 +31,9 @@ const TEAM_HP_EXPONENT := 0.5
 ## send-out (a switch or the pick after a knockout) starts a side-wide SWITCH_COOLDOWN_SECONDS.
 const SWITCH_SECONDS := 1.0
 const SWITCH_COOLDOWN_SECONDS := 5.0
+## A pivot (U-turn, Teleport, rules version 41) waits this long for the side's pick before sending
+## out the first on the bench.
+const PIVOT_SECONDS := 0.5
 ## Doubles (M17): two of each side's team of MIN_DOUBLES_TEAM-MAX_TEAM out at once, standing
 ## DOUBLES_SPREAD either side of their side's start spot. A spread move (an area move) that hits
 ## more than one fighter deals SPREAD_FACTOR to each, as in the main series.

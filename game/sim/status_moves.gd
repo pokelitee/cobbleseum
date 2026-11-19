@@ -89,6 +89,9 @@ static func usable(fighter: Fighter, foe: Fighter, move: BattleMove) -> bool:
 static func score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 	if move.id in Volatiles.SELF_MOVES:
 		return Volatiles.score(me, foe, move)
+	# Switching moves need the bench's trades (UtilityAI); the stand-in AI never uses them.
+	if SwitchMoves.CODED.has(move.id):
+		return 0.0
 	if not usable(me, foe, move):
 		return 0.0
 	var share := float(me.hp) / me.max_hp

@@ -1048,6 +1048,13 @@ func _play_events() -> void:
 			"volatile_damage", "destiny_bond", "perish":
 				_event_view(event).take_hit()
 				_fx.announce(_event_view(event), "-%d" % event.damage, VOLATILE_COLOUR, 44)
+			"pivot":
+				_fx.announce(_event_view(event), "Went back!", Hud.SIDE_COLOURS[event.side].lightened(0.35), 46)
+			"dragged":
+				_fx.announce(_event_view(event), "Dragged out!", Color(1.0, 0.75, 0.5), 52)
+			"healing_wish":
+				_move_fx.aura(_event_view(event), HEAL_COLOUR, true, true)
+				_fx.announce(_event_view(event), "The healing wish came true!", HEAL_COLOUR, 50)
 			"wish":
 				_move_fx.aura(_event_view(event), HEAL_COLOUR, true, true)
 				_fx.announce(_event_view(event), "Its wish came true!", HEAL_COLOUR, 50)

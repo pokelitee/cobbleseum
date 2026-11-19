@@ -138,6 +138,10 @@ var volatiles := {}
 var volatile_data := {}
 var last_move := ""
 var base_types: Array = []
+## Rules version 41: ticks left to pick who comes in after a pivot (0 for none), and the move
+## (Baton Pass and Shed Tail hand things on).
+var pivot_ticks := 0
+var pivot_move := ""
 
 
 static func create(side_index: int, species_id_value: String, species: Dictionary, battle_moves: Array[BattleMove], radius_metres: float) -> Fighter:

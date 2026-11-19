@@ -56,7 +56,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 52
+const FIGHTER_STATE_SIZE := 53
 ## Values hashed per side for team battles: the slot out, the send-out countdown, the shield,
 ## the switch cooldown and the layers of each entry hazard.
 const TEAM_STATE_SIZE := 8
@@ -83,6 +83,9 @@ var _dropped_targets: Array[int] = []
 ## "powder"}, {} for none) and ticks left of Wide Guard.
 var _redirects: Array[Dictionary] = [{}, {}]
 var _wide_guard := PackedInt32Array([0, 0])
+## Per place (index_of), whether a Healing Wish waits for the next to come out there (rules
+## version 41).
+var _healing_wishes := PackedByteArray([0, 0])
 ## Whether the state hashed includes the teams' (only when a side has more than one member,
 ## so one-on-one battles hash exactly as before).
 var _hash_teams := false
@@ -168,6 +171,8 @@ static func create(battle_spec: Dictionary, data: BattleData, controllers: Array
 	battle._send_out_ticks.fill(0)
 	battle._picks.resize(out)
 	battle._picks.fill(-1)
+	battle._healing_wishes.resize(out)
+	battle._healing_wishes.fill(0)
 	battle.intent_log.resize(out)
 	for index in out:
 		battle.intent_log[index] = []
@@ -518,6 +523,8 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 			fighter.shielded = false
 			_fevent("landed_out", fighter, {})
 		return
+	if fighter.pivot_ticks > 0 and _pivot_now(fighter, int(intent.get("switch", -1))):
+		return
 	if frozen(fighter):
 		intent = {"move": intent.get("move", Vector2.ZERO)}
 	if fighter.is_knocked_out() or fighter.is_incapacitated():
@@ -743,6 +750,8 @@ func _release(fighter: Fighter, foe: Fighter) -> void:
 			_set_surge(fighter, move.surge, {"move": move.id})
 		elif move.kind == BattleMove.Kind.ARENA:
 			_set_weather(fighter, move.weather, {"move": move.id})
+			if move.switches == "pivot":
+				_start_pivot(fighter, move)
 		else:
 			var cost := float(StatusMoves.HP_COSTS.get(move.id, 0.0))
 			if cost > 0.0:
@@ -925,6 +934,9 @@ func _coded(fighter: Fighter, foe: Fighter, move: BattleMove) -> void:
 	var cost := float(StatusMoves.HP_COSTS.get(move.id, 0.0))
 	if cost > 0.0:
 		_hurt(fighter, roundi(fighter.max_hp * cost), "self_cost", {"move": move.id})
+	if not move.switches.is_empty():
+		_switch_move(fighter, foe, move)
+		return
 	match move.id:
 		"bellydrum":
 			_boost(fighter, {"atk": Rules.MAX_STAGE * 2}, move.id)
@@ -1133,6 +1145,83 @@ func _end_volatile(fighter: Fighter, name: String, quiet := false) -> void:
 		fighter.volatile_data.erase("ability")
 	if not quiet:
 		_fevent("volatile_end", fighter, {"volatile": name})
+
+
+## A switching status move (SwitchMoves, rules version 41): Parting Shot's drops, Shed Tail's cost,
+## then the pivot; Roar's and Whirlwind's phaze; Healing Wish's faint. Without a bench to switch
+## in they fail.
+func _switch_move(fighter: Fighter, foe: Fighter, move: BattleMove) -> void:
+	var bench_side := foe.side if move.switches == "phaze" else fighter.side
+	if conditions.bench[bench_side] == 0 or (move.switches == "phaze" and (foe.is_knocked_out() or is_waiting(index_of(foe)))):
+		_fevent("failed", fighter, {"move": move.id})
+		return
+	match move.switches:
+		"phaze":
+			_phaze(fighter, foe)
+		"wish":
+			_healing_wishes[index_of(fighter)] = 1
+			_hurt(fighter, fighter.hp, "self_destruct", {"move": move.id})
+		_:
+			if move.id == "partingshot":
+				_boost(foe, SwitchMoves.PARTING_SHOT, move.id, fighter)
+			elif move.id == "shedtail":
+				_hurt(fighter, roundi(fighter.max_hp * SwitchMoves.SHED_TAIL_COST), "self_cost", {"move": move.id})
+			_start_pivot(fighter, move)
+
+
+## A pivot: the user will be recalled for its side's pick (or the first on the bench) within
+## Rules.PIVOT_SECONDS, if there's anyone to send in.
+func _start_pivot(fighter: Fighter, move: BattleMove) -> void:
+	if conditions.bench[fighter.side] == 0 or fighter.is_knocked_out() or _benched(fighter):
+		return
+	fighter.pivot_ticks = Rules.seconds_to_ticks(Rules.PIVOT_SECONDS)
+	fighter.pivot_move = move.id
+	_fevent("pivot", fighter, {"move": move.id})
+
+
+## Counts a pivot down and makes it when the side picks a member (`pick`, a team slot) or the
+## time is up. Returns whether the fighter was switched out. Baton Pass hands on stat stages,
+## confusion and a Substitute; Shed Tail a Substitute of a quarter of the user's max HP.
+func _pivot_now(fighter: Fighter, pick: int) -> bool:
+	fighter.pivot_ticks -= 1
+	var team: Array = teams[fighter.side]
+	if pick < 0 or pick >= team.size() or not _on_bench(team[pick]):
+		if fighter.pivot_ticks > 0:
+			return false
+		pick = next_up(fighter.side)
+		if pick < 0:
+			fighter.pivot_ticks = 0
+			return false
+	fighter.pivot_ticks = 0
+	var incoming: Fighter = team[pick]
+	var move_id := fighter.pivot_move
+	var passed := {"boosts": fighter.boosts.duplicate(), "confusion": fighter.confusion_ticks,
+		"substitute": [fighter.substitute_hp, fighter.substitute_ticks]}
+	_switch(fighter, incoming)
+	match move_id:
+		"batonpass":
+			incoming.boosts = passed.boosts
+			incoming.confusion_ticks = passed.confusion
+			incoming.substitute_hp = passed.substitute[0]
+			incoming.substitute_ticks = passed.substitute[1]
+		"shedtail":
+			incoming.substitute_hp = roundi(fighter.max_hp * SwitchMoves.SHED_TAIL_SUBSTITUTE)
+			incoming.substitute_ticks = Rules.seconds_to_ticks(Abilities.ABILITY_SECONDS)
+	return true
+
+
+## Roar, Whirlwind, Dragon Tail: `target` is recalled for a random member of its bench.
+func _phaze(user: Fighter, target: Fighter) -> void:
+	var bench: Array[Fighter] = []
+	for member: Fighter in teams[target.side]:
+		if _on_bench(member):
+			bench.append(member)
+	if bench.is_empty() or target.is_knocked_out():
+		return
+	var incoming := bench[_random.next_u32() % bench.size()]
+	_fevent("dragged", target, {"by_side": user.side})
+	target.pivot_ticks = 0
+	_switch(target, incoming)
 
 
 ## Swallow and Spit Up use up the stockpile, and with it the stages Stockpile raised.
@@ -1424,6 +1513,11 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0)
 					_apply_effect(attacker, defender, effect, move.id)
 			_coded_secondaries(attacker, defender, move)
 		_take_berry(attacker, defender, move)
+		# U-turn pivots once it hits; Dragon Tail drags the target out.
+		if move.switches == "pivot":
+			_start_pivot(attacker, move)
+		elif move.switches == "phaze" and dealt > 0 and not immune:
+			_phaze(attacker, defender)
 		if not move.volatile.is_empty() and not immune:
 			if move.volatile.begins_with("self:"):
 				_give(attacker, attacker, move.volatile.trim_prefix("self:"), move)
@@ -1756,6 +1850,8 @@ static func _leave(fighter: Fighter) -> void:
 	fighter.volatiles = {}
 	fighter.volatile_data = {}
 	fighter.last_move = ""
+	fighter.pivot_ticks = 0
+	fighter.pivot_move = ""
 
 
 ## The team slot `side` sends out next: its first member healthy and on the bench, or -1.
@@ -1794,6 +1890,12 @@ func _send_out(fighter: Fighter, after_knockout := true, place := 0) -> void:
 	_link_allies()
 	_switch_cooldown[fighter.side] = Rules.seconds_to_ticks(Rules.SWITCH_COOLDOWN_SECONDS)
 	_fevent("send_out", fighter, {"species": fighter.species_id, "switch": not after_knockout})
+	if _healing_wishes[index_of(fighter)] == 1:
+		_healing_wishes[index_of(fighter)] = 0
+		_fevent("healing_wish", fighter, {})
+		_heal(fighter, roundi(fighter.max_hp * Rules.HEAL_FACTOR), "healingwish")
+		if not fighter.status.is_empty():
+			_end_status(fighter)
 	_count_benches()
 	_entry_hazards(fighter)
 	var weather := Abilities.sets_weather(fighter)
@@ -2326,6 +2428,7 @@ func _record_state() -> void:
 		_state[i + 49] = fighter.volatiles.size()
 		_state[i + 50] = lingering
 		_state[i + 51] = conditions.uproar_ticks
+		_state[i + 52] = fighter.pivot_ticks + 1000 * _healing_wishes[index_of(fighter)]
 		i += FIGHTER_STATE_SIZE
 	_state[i] = ArenaConditions.WEATHERS.find(conditions.weather)
 	_state[i + 1] = conditions.weather_ticks
