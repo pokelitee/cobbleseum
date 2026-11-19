@@ -72,6 +72,10 @@ static func generate(species_id: String, data: BattleData) -> Dictionary:
 		if move.kind == BattleMove.Kind.ARENA:
 			arena_moves.append(move)
 		elif move.is_damaging():
+			# Weather Ball and the like as they play under the weather or surge the species' own
+			# ability brings.
+			var entry := Abilities.effect(ability)
+			move = MoveEffects.in_conditions(move, str(entry.get("sets_weather", "")), str(entry.get("sets_surge", "")))
 			attacks.append({"id": move_id, "type": move.type, "value": attack_value(move, data.moves[move_id], physical, ability)})
 		else:
 			var accuracy: Variant = data.moves[move_id].get("accuracy", 100)

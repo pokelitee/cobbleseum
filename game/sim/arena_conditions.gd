@@ -22,9 +22,18 @@ const SAND_PROOF_TYPES: Array[String] = ["Rock", "Ground", "Steel"]
 ## Sand and snow raise one type's defence.
 const DEFENSE_BOOSTS := {"sand": {"type": "Rock", "stat": "spd"}, "snow": {"type": "Ice", "stat": "def"}}
 const DEFENSE_BOOST := 1.5
-## Moves that skip their charge in sun, and moves that fly at full accuracy's speed in a weather.
-const SUN_SKIPS_CHARGE: Array[String] = ["solarbeam", "solarblade"]
-const SURE_IN := {"thunder": "rain", "hurricane": "rain", "blizzard": "snow"}
+## Moves that skip their charge in a weather (Solar Beam in sun, Electro Shot in rain), and moves
+## that fly at full accuracy's speed in one.
+const CHARGE_SKIPS := {"solarbeam": "sun", "solarblade": "sun", "electroshot": "rain"}
+const SURE_IN := {"thunder": "rain", "hurricane": "rain", "blizzard": "snow", "wildboltstorm": "rain",
+	"bleakwindstorm": "rain", "sandsearstorm": "rain"}
+## Hydro Steam is powered up in sun rather than weakened (rules version 36).
+const SUN_STEAM := "hydrosteam"
+## Grassy Glide winds up like a priority move from a grounded user on grassy ground; Steel Roller
+## needs a surge; these end the surge when they hit (rules version 36).
+const GRASSY_GLIDE := "grassyglide"
+const NEEDS_SURGE := "steelroller"
+const SURGE_BREAKERS: Array[String] = ["steelroller", "icespinner"]
 ## Heals whose amount follows the weather, as main-series shares of max HP: more in their
 ## favoured weather, less in any other (Shore Up only gains).
 const WEATHER_HEALS := {"morningsun": "sun", "synthesis": "sun", "moonlight": "sun", "shoreup": "sand"}
@@ -261,7 +270,7 @@ static func covers(up: Dictionary, move: BattleMove) -> bool:
 ## Whether `fighter` can use `move` under the conditions: Aurora Veil only in snow, nothing
 ## airborne under Gravity.
 func usable(fighter: Fighter, move: BattleMove) -> bool:
-	if move.flags.has("gravity") and field.has("gravity"):
+	if (move.flags.has("gravity") and field.has("gravity")) or (move.id == NEEDS_SURGE and surge.is_empty()):
 		return false
 	return move.screen != "auroraveil" or weather == "snow"
 
@@ -376,7 +385,7 @@ func damage_factor(attacker: Fighter, defender: Fighter, move: BattleMove) -> fl
 	var factor := 1.0
 	var name := weather_for(attacker)
 	if not name.is_empty() and not weather_for(defender).is_empty():
-		factor *= type_factor(name, move.type)
+		factor *= move_weather_factor(name, move)
 	if not surge.is_empty():
 		factor *= surge_factor(surge, move, grounded(attacker), grounded(defender))
 	return factor
@@ -391,6 +400,13 @@ static func surge_factor(name: String, move: BattleMove, attacker_grounded: bool
 	if defender_grounded and ((name == "grassy" and move.id in GRASSY_SOFTENS) or (name == "misty" and move.type == "Dragon")):
 		factor *= SOFTENED
 	return factor
+
+
+## Weather `name`'s multiplier on `move`: its type's, or Hydro Steam's boost in sun.
+static func move_weather_factor(name: String, move: BattleMove) -> float:
+	if move.id == SUN_STEAM and name == "sun":
+		return BOOST
+	return type_factor(name, move.type)
 
 
 static func type_factor(name: String, move_type: String) -> float:
@@ -412,10 +428,13 @@ func stat_factor(fighter: Fighter, stat: String) -> float:
 	return 1.0
 
 
-## Ticks `fighter` winds `move` up for, from its usual wind-up: Solar Beam skips its charge in sun.
+## Ticks `fighter` winds `move` up for, from its usual wind-up: Solar Beam skips its charge in sun
+## and Electro Shot in rain; Grassy Glide winds up fast on grassy ground.
 func windup_ticks(fighter: Fighter, move: BattleMove, ticks: int) -> int:
-	if move.charges and move.id in SUN_SKIPS_CHARGE and weather_for(fighter) == "sun":
+	if move.charges and CHARGE_SKIPS.has(move.id) and weather_for(fighter) == CHARGE_SKIPS[move.id]:
 		return maxi(1, ticks - Rules.seconds_to_ticks(Rules.CHARGE_EXTRA))
+	if move.id == GRASSY_GLIDE and surge_for(fighter) == "grassy":
+		return maxi(1, roundi(ticks * Rules.PRIORITY_WINDUP_FACTOR))
 	return ticks
 
 
@@ -473,7 +492,7 @@ static func hp_per_second(types: Array, ability: Dictionary, name: String) -> fl
 ## The power multiplier a weather gives an attacker's `move` from its own side: the weather on
 ## the move's type, Sand Force, and Solar Power's Sp. Atk.
 static func attack_factor(ability: Dictionary, move: BattleMove, name: String) -> float:
-	var factor := type_factor(name, move.type)
+	var factor := move_weather_factor(name, move)
 	var power: Dictionary = ability.get("weather_power", {}).get(name, {})
 	if not power.is_empty() and move.type in power.types:
 		factor *= float(power.factor)
@@ -496,7 +515,9 @@ static func weather_gain(types: Array, ability: Dictionary, item: Dictionary, at
 			continue
 		var weight := (move.power if move.fixed_damage == 0 else Rules.FIXED_DAMAGE_POWER) * move.expected_hits()
 		total += weight
-		boosted += weight * (attack_factor(ability, move, name) if move.fixed_damage == 0 else 1.0)
+		# Weather Ball and the like change with the weather too.
+		var shown := MoveEffects.in_conditions(move, name, "")
+		boosted += weight * (attack_factor(ability, shown, name) * shown.power / maxf(move.power, 1.0) if move.fixed_damage == 0 else 1.0)
 	if total > 0.0:
 		gain += (boosted / total - 1.0) * seconds / DAMAGE_SECONDS
 	var boost: Dictionary = DEFENSE_BOOSTS.get(name, {})
@@ -527,7 +548,8 @@ static func surge_gain(types: Array, ability_id: String, attacks: Array, name: S
 			continue
 		var weight := (move.power if move.fixed_damage == 0 else Rules.FIXED_DAMAGE_POWER) * move.expected_hits()
 		total += weight
-		boosted += weight * (surge_factor(name, move, on_ground, foe_grounded) if move.fixed_damage == 0 else 1.0)
+		var shown := MoveEffects.in_conditions(move, "", name, on_ground, foe_grounded)
+		boosted += weight * (surge_factor(name, shown, on_ground, foe_grounded) * shown.power / maxf(move.power, 1.0) if move.fixed_damage == 0 else 1.0)
 	if total > 0.0:
 		gain += (boosted / total - 1.0) * seconds / DAMAGE_SECONDS
 	if on_ground:

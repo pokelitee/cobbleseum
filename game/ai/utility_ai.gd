@@ -397,7 +397,10 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			# A Lightning Rod or Storm Drain foe draws the move to itself (doubles).
 			var aim := battle.drawn_to(me, foe, move)
 			var expected := expected_damage(me, aim, move, battle.data())
-			var adjusted := StandInAI.move_score(me, aim, move) / maxf(move.power * move.expected_hits(), 1.0) if move.fixed_damage == 0 else 1.0
+			# The stand-in's value already counts power the battle's state adds (MoveEffects), which
+			# the expected damage counts too, so it's taken against that power.
+			var adapted := MoveEffects.adapt(me, aim, move)
+			var adjusted := StandInAI.move_score(me, aim, move) / maxf(adapted.power * move.expected_hits(), 1.0) if move.fixed_damage == 0 else 1.0
 			var share := expected / maxf(aim.max_hp, 1.0)
 			if _doubles and move.kind == BattleMove.Kind.AREA:
 				var spread := spread_value(battle, me, move)

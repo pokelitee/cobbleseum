@@ -1247,7 +1247,8 @@ func _move(event: Dictionary) -> BattleMove:
 	var fighter: Fighter = battle.teams[event.side][int(event.get("slot", battle.fighters[event.side].slot))]
 	for move in fighter.moves:
 		if move.id == event.move:
-			return move
+			# A move whose type the battle's state changed (Weather Ball in rain) looks like that type.
+			return move.variant(event.move_type, move.power) if event.has("move_type") and event.move_type != move.type else move
 	return fighter.moves[0]
 
 

@@ -530,7 +530,15 @@ For the 850 standard moves, 638 are playable under rules version 35: 240 melee, 
 - **Priority:** shortens the wind-up.
 - **Secondary effects** roll on hit using the battle's random stream.
 - **Data effects:** drain, recoil and stat changes come straight from the data.
-- **Moves with extra code:** Showdown implements extra effects in code for 91 damaging moves. Most play as plain hits. Those whose condition or cost would otherwise make them free strong hits are left out: Focus Punch, Last Resort, Future Sight, Doom Desire, Dream Eater, Synchronoise, Belch, Steel Beam, Mind Blown, Shell Trap, Beak Blast, Water Spout, Eruption, Dragon Energy, Steel Roller and Poltergeist.
+- **Moves with extra code:** Showdown implements extra effects in code for 91 damaging moves. Most play as plain hits. Those whose condition or cost would otherwise make them free strong hits are left out: Focus Punch, Last Resort, Future Sight, Doom Desire, Dream Eater, Synchronoise, Belch, Steel Beam, Mind Blown, Shell Trap, Beak Blast, Water Spout, Eruption, Dragon Energy and Poltergeist. M18 (§17) gives the rest their real effects, version by version.
+- **Weather and surge** (M18, rules version 36; `MoveEffects`): a hit, and every AI estimate of one, asks for the move as it plays now, a variant with another type or power that STAB, effectiveness, abilities, items and the weather all read.
+  - Weather Ball takes the weather's type (Water, Fire, Rock, Ice) at 100 power; Terrain Pulse the surge's (Electric, Grass, Fairy, Psychic) at 100 from a grounded user.
+  - Rising Voltage doubles against a grounded foe on electric ground; Expanding Force, Psyblade and Misty Explosion are ×1.5 from a grounded user on psychic, electric and misty ground. Expanding Force doesn't spread in doubles.
+  - Solar Beam and Solar Blade are halved in rain, sand and snow; Electro Shot skips its charge in rain as they do in sun; Hydro Steam is ×1.5 in sun instead of ×0.5; Wildbolt Storm, Bleakwind Storm and Sandsear Storm fly at full accuracy's speed in rain.
+  - Grassy Glide winds up like a priority move from a grounded user on grassy ground.
+  - Steel Roller can only be used on a surge; it and Ice Spinner end the surge when they hit.
+  - Standard movesets see Weather Ball and Terrain Pulse as they play under the weather or surge the species' own ability brings (a Drizzle species' Weather Ball is a 100-power Water attack), and a weather's or surge's value counts these moves' change. The AIs aim with the adapted move.
+  - In the view a move that changed type looks like its new type (its events carry `move_type`).
 
 ### 9.4 Damage
 
@@ -809,7 +817,7 @@ Arena moves set a condition on the whole arena or on one side for a while instea
 - **Determinism:** every field and side condition's ticks left are hashed.
 - **Not done:** fliers' hovering doesn't drop in the view under Gravity (the simulation already grounds them).
 
-- **Left out:** Quick Guard and the Protect family (the guard, §9.2, is their real-time reading); Fairy Lock (one roster species learns it, and a short ban on switching has no clear effect when switching isn't turn-locked); the seeds, Protosynthesis, Quark Drive and other abilities of species missing from the roster; Sand Veil and Snow Cloak (accuracy). Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide and Steel Roller's surge readings come in M18 (§17).
+- **Left out:** Quick Guard and the Protect family (the guard, §9.2, is their real-time reading); Fairy Lock (one roster species learns it, and a short ban on switching has no clear effect when switching isn't turn-locked); the seeds, Protosynthesis, Quark Drive and other abilities of species missing from the roster; Sand Veil and Snow Cloak (accuracy). Weather Ball, Terrain Pulse, Rising Voltage, Expanding Force, Grassy Glide and Steel Roller follow the weather and surge since rules version 36 (§9.3).
 
 ## 10. Simulation and determinism
 
@@ -1393,7 +1401,7 @@ M2 and M3 don't depend on each other, so their order can swap if watchable clips
 - **Pivots and phazers** (team battles): on a hit, or on release for status ones, the user is recalled for the side's chosen bench member, ignoring the switch cooldown but restarting it; phazers drag in a random member of the foe's bench. In one-on-one they're plain hits (a phazing status move fails).
 - **Fly, Dig and the like** keep their plain charge: an untouchable charge would be a free extra dodge each cooldown.
 - **Movesets:** moves a species uses on itself or a foe (Shell Smash, Belly Drum, Curse, Taunt, Leech Seed, Rest…) join the utility slot like any buff, status or heal; field and side moves stay out, like hazards and ally moves; damaging moves with real effects stay eligible as before.
-- **Pull requests:** (1) field and side conditions (rules version 35) done: Tailwind, Trick Room, Gravity, Magic Room, Wonder Room, Safeguard, Mist, Haze, Court Change (§9.11); (2) power and type from the weather and surge; (3) power from HP and state, and proportional damage; (4) odd self-buffs and HP-trading status moves; (5) lingering effects (Taunt, Leech Seed, Yawn…); (6) pivots and phazers.
+- **Pull requests:** (1) field and side conditions (rules version 35) done: Tailwind, Trick Room, Gravity, Magic Room, Wonder Room, Safeguard, Mist, Haze, Court Change (§9.11); (2) power and type from the weather and surge (36) done (§9.3); (3) power from HP and state, and proportional damage; (4) odd self-buffs and HP-trading status moves; (5) lingering effects (Taunt, Leech Seed, Yawn…); (6) pivots and phazers.
 
 **Later:**
 
