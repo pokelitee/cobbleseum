@@ -40,12 +40,14 @@ const CHARGE_FACTOR := 2.0
 ## Acupressure raises a random stat by 2.
 const ACUPRESSURE_STAGES := 2
 
-## The AIs' scores (move-power units, StandInAI) and the moveset values (Movesets' scale).
+## The AIs' scores (move-power units, StandInAI) and the moveset values (Movesets' scale). Rest
+## sits below the utility threshold: valued like a big heal it filled 320 standard movesets, and
+## 3 s asleep in real time costs more than the turn it costs in the main series.
 const SUBSTITUTE_SCORE := 60.0
 const RING_SCORE := 50.0
 const FOCUS_SCORE := 50.0
 const STAGE_SWING_SCORE := 30.0
-const MOVESET_VALUES := {"bellydrum": 100.0, "rest": 90.0, "strengthsap": 95.0, "wish": 80.0, "painsplit": 60.0,
+const MOVESET_VALUES := {"bellydrum": 100.0, "rest": 75.0, "strengthsap": 95.0, "wish": 80.0, "painsplit": 60.0,
 	"substitute": 70.0, "aquaring": 55.0, "ingrain": 55.0, "focusenergy": 60.0, "healbell": 50.0, "aromatherapy": 50.0,
 	"takeheart": 85.0}
 ## Foe moves that mix a status with stat changes, valued below their plain kin: Swagger and Flatter
