@@ -87,6 +87,8 @@ static func usable(fighter: Fighter, foe: Fighter, move: BattleMove) -> bool:
 
 ## What a coded move is worth to the AIs now (StandInAI.move_score's units); 0 for nothing.
 static func score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
+	if move.id in Volatiles.SELF_MOVES:
+		return Volatiles.score(me, foe, move)
 	if not usable(me, foe, move):
 		return 0.0
 	var share := float(me.hp) / me.max_hp
@@ -142,6 +144,8 @@ static func score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 ## What a coded move is worth in a standard moveset (Movesets' scale), for a species attacking
 ## with `physical` stats.
 static func moveset_value(move: BattleMove, physical: bool) -> float:
+	if move.id in Volatiles.SELF_MOVES:
+		return Volatiles.moveset_value(move, physical)
 	if move.id == "bellydrum" and not physical:
 		return 0.0
 	return float(MOVESET_VALUES.get(move.id, 0.0))

@@ -253,7 +253,11 @@ func test_the_right_hand_landscape_row_lines_up_with_its_portrait_end() -> void:
 func test_every_badge_has_an_icon_and_a_code() -> void:
 	for key: String in PlateEffects.TIMED:
 		assert_true(Hud.STATUS_BADGES.has(key), "%s has a code" % key)
-		var rows: Array = HudBadge.ICONS[key]
+		# A badge may share another's icon (its third entry).
+		var badge: Array = Hud.STATUS_BADGES[key]
+		var icon: String = badge[2] if badge.size() > 2 else key
+		assert_true(HudBadge.ICONS.has(icon), "%s has an icon" % key)
+		var rows: Array = HudBadge.ICONS[icon]
 		for row: String in rows:
 			assert_eq(row.length(), (rows[0] as String).length(), "%s's rows are even" % key)
 

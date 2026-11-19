@@ -62,6 +62,17 @@ const STATUS_BADGES := {
 	"tailwind": ["WIND", Color("9fe8c0")], "safeguard": ["SAFE", Color("c88cf0")], "mist": ["MIST", Color("a8d8f0")],
 	"substitute": ["SUB", Color("e8d29a")], "ring": ["RING", Color("6fc6e8")], "charge": ["CHG", Color("f2d64b")],
 	"stockpile": ["STK", Color("d89a6a")],
+	# Lingering effects (rules version 40) share a few icons (the third entry).
+	"perish": ["PRSH", Color("c0c0d0"), "perish"], "curse": ["CRS", Color("9a6ad8"), "drain"],
+	"leechseed": ["SEED", Color("6fd06a"), "drain"], "bound": ["BIND", Color("d8a05a"), "trap"],
+	"saltcure": ["SALT", Color("e0d8c8"), "drain"], "yawn": ["YAWN", Color("8a8a9a"), "slp"],
+	"taunt": ["TNT", Color("e86a5a"), "lock"], "encore": ["ENC", Color("e8b05a"), "lock"],
+	"disable": ["DIS", Color("b0b0b0"), "lock"], "torment": ["TRM", Color("c05a8a"), "lock"],
+	"healblock": ["HBLK", Color("d86ad8"), "lock"], "throatchop": ["MUTE", Color("8a6a5a"), "lock"],
+	"trapped": ["TRAP", Color("a0a0a0"), "trap"], "octolock": ["OCTO", Color("c86a6a"), "trap"],
+	"tarshot": ["TAR", Color("6a6a6a"), "down"], "syrupbomb": ["SYRP", Color("d88a3a"), "down"],
+	"smackdown": ["DOWN", Color("b89a6a"), "down"], "magnetrise": ["RISE", Color("f2d64b"), "up"],
+	"types": ["TYPE", Color("9adfe0"), "confusion"], "ability": ["ABIL", Color("e0c09a"), "confusion"],
 	"stealthrock": ["ROCK", Color("b89a6a")], "spikes": ["SPK", Color("9a8f80")],
 	"toxicspikes": ["TSPK", Color("b45ad6")], "stickyweb": ["WEB", Color("c8c8a0")],
 }
@@ -414,7 +425,8 @@ func _effect_badge(entry: Dictionary) -> HudBadge:
 			colour, false, _scale)
 		hazard_badge.set_meta("stages", layers)
 		return hazard_badge
-	return HudBadge.new([[entry.key, colour], [badge[0], colour.lightened(0.35)]], colour, entry.has("left"), _scale)
+	var icon: String = badge[2] if badge.size() > 2 else entry.key
+	return HudBadge.new([[icon, colour], [badge[0], colour.lightened(0.35)]], colour, entry.has("left"), _scale)
 
 
 ## Shows the arena's conditions (§9.11) as pills at the top centre, between the landscape

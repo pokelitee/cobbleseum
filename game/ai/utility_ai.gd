@@ -326,6 +326,42 @@ static func ally_move_value(battle: Battle, me: Fighter, move: BattleMove) -> fl
 	return 0.0
 
 
+## What a type- or ability-changing move (Volatiles.CHANGERS) is worth now, in move-value units:
+## a type change by how much it raises this fighter's best expected damage on the foe against how
+## much it raises the foe's on it; an ability change by the abilities' values in their table (taking
+## away or trading for a much better one, or Insomnia against a foe that Rests).
+static func change_value(battle: Battle, me: Fighter, foe: Fighter, move: BattleMove) -> float:
+	var changed := me if move.id in ["conversion", "reflecttype", "roleplay"] else foe
+	if changed.volatiles.has(Volatiles.CHANGERS[move.id]) or not MoveEffects.usable(me, foe, move):
+		return 0.0
+	var mine := Abilities.effect(me.ability)
+	var theirs := Abilities.effect(foe.ability)
+	match move.id:
+		"gastroacid":
+			return Volatiles.ABILITY_SCORE if float(theirs.get("value", 0)) >= Volatiles.STRONG_ABILITY else 0.0
+		"skillswap", "roleplay":
+			return Volatiles.ABILITY_SCORE if float(theirs.get("value", 0)) >= float(mine.get("value", 0)) + 3.0 else 0.0
+		"worryseed":
+			return Volatiles.ABILITY_SCORE if foe.moves.any(func(m: BattleMove) -> bool: return m.id == "rest") else 0.0
+		"entrainment":
+			return 0.0
+	var before := [_best_damage(battle, me, foe), _best_damage(battle, foe, me)]
+	var types := changed.types
+	changed.types = Battle._new_types(changed, move, foe)
+	var after := [_best_damage(battle, me, foe), _best_damage(battle, foe, me)]
+	changed.types = types
+	var gain: float = after[0] / maxf(before[0], 1.0) - after[1] / maxf(before[1], 1.0)
+	return StandInAI.STATUS_SCORE * clampf(gain, 0.0, 1.5)
+
+
+static func _best_damage(battle: Battle, attacker: Fighter, defender: Fighter) -> float:
+	var best := 0.0
+	for move in attacker.moves:
+		if move.is_damaging():
+			best = maxf(best, expected_damage(attacker, defender, move, battle.data()))
+	return best
+
+
 ## What a spread (area) move would do now in doubles: {"foes": how many foes it would hit,
 ## "share": the shares of their max HP it would take (×0.75 when it hits several) less
 ## ALLY_HARM_WEIGHT times the share of the ally's it would take}.
@@ -424,7 +460,8 @@ func _candidates(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary, th
 			if move.channels:
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		else:
-			considerations.value = _sample("value", StandInAI.move_score(me, foe, move) / VALUE_SCALE)
+			var worth := change_value(battle, me, foe, move) if Volatiles.CHANGERS.has(move.id) else StandInAI.move_score(me, foe, move)
+			considerations.value = _sample("value", worth / VALUE_SCALE)
 			if move.channels:
 				considerations.cover = heal_cover(me, foe, seen, threat, move.windup_ticks)
 		if not move.is_self() and _guarded_when_landing(me, seen, gap, move):

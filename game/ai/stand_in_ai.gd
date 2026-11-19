@@ -152,6 +152,8 @@ static func move_score(me: Fighter, foe: Fighter, move: BattleMove) -> float:
 					return DEBUFF_SCORE
 			return 0.0
 		BattleMove.Kind.STATUS:
+			if not move.volatile.is_empty():
+				return Volatiles.score(me, foe, move)
 			# Swagger and Flatter hand the foe a boost: only to the stat it doesn't attack with.
 			for stat: String in move.boosts:
 				if int(move.boosts[stat]) > 0 and foe.stats[stat] >= foe.stats["spa" if stat == "atk" else "atk"]:

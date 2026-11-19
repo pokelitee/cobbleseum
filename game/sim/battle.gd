@@ -56,7 +56,7 @@ var _hash := HashingContext.new()
 var _checksum := ""
 var _time_cap_ticks := 0
 ## Values hashed per fighter each tick, and the reused buffer they go in.
-const FIGHTER_STATE_SIZE := 49
+const FIGHTER_STATE_SIZE := 52
 ## Values hashed per side for team battles: the slot out, the send-out countdown, the shield,
 ## the switch cooldown and the layers of each entry hazard.
 const TEAM_STATE_SIZE := 8
@@ -487,6 +487,10 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 		fighter.split_ticks -= 1
 		if fighter.split_ticks == 0:
 			_unsplit(fighter)
+	if not fighter.volatiles.is_empty():
+		_tick_volatiles(fighter)
+		if fighter.is_knocked_out():
+			return
 	for taken in fighter.taken:
 		taken.ticks -= 1
 	while not fighter.taken.is_empty() and int(fighter.taken[0].ticks) <= 0:
@@ -601,6 +605,7 @@ func _act(fighter: Fighter, intent: Dictionary) -> void:
 					and MoveEffects.usable(fighter, foe, fighter.moves[use]):
 				var move := fighter.moves[use]
 				fighter.used_moves[move.id] = true
+				fighter.last_move = move.id
 				if fighter.confusion_ticks > 0 and _random.chance(Rules.CONFUSION_CHANCE):
 					_hurt_in_confusion(fighter)
 					return
@@ -1004,6 +1009,20 @@ func _coded(fighter: Fighter, foe: Fighter, move: BattleMove) -> void:
 			for stat: String in foe.boosts:
 				foe.boosts[stat] = -int(foe.boosts[stat])
 			foe.stage_ticks = 0
+		"curse":
+			if "Ghost" in fighter.types:
+				_hurt(fighter, roundi(fighter.max_hp * 0.5), "self_cost", {"move": move.id})
+				_give(fighter, foe, "curse", move)
+			else:
+				_boost(fighter, {"atk": 1, "def": 1, "spe": -1}, move.id)
+		"destinybond", "magnetrise", "imprison":
+			_give(fighter, fighter, move.id, move)
+		"perishsong":
+			for other in fighters:
+				if not other.is_knocked_out() and not is_waiting(index_of(other)):
+					_give(fighter, other, "perish", move)
+		"conversion", "reflecttype", "roleplay":
+			_give(fighter, fighter, "ability" if move.id == "roleplay" else "types", move, foe)
 		"acupressure":
 			var open: Array[String] = []
 			for stat: String in BattleMove.STATS:
@@ -1011,6 +1030,109 @@ func _coded(fighter: Fighter, foe: Fighter, move: BattleMove) -> void:
 					open.append(stat)
 			if not open.is_empty():
 				_boost(fighter, {open[_random.next_u32() % open.size()]: StatusMoves.ACUPRESSURE_STAGES}, move.id)
+
+
+## Gives `target` lingering effect `name` (Volatiles) from `user`'s `move`, if it can take it.
+## `other` is the foe a user's own type or ability move copies (Reflect Type, Role Play).
+func _give(user: Fighter, target: Fighter, name: String, move: BattleMove, other: Fighter = null) -> void:
+	if target.is_knocked_out() or _benched(target) or not Volatiles.can_give(target, name, move.id, user):
+		if target != user:
+			_fevent("failed", user, {"move": move.id})
+		return
+	match name:
+		"leechseed":
+			target.volatile_data.seeder = index_of(user)
+		"encore":
+			target.volatile_data.encore = target.last_move
+		"disable":
+			target.volatile_data.disable = target.last_move
+		"uproar":
+			conditions.uproar_ticks = Volatiles.ticks_for(name)
+		"types":
+			if not target.volatile_data.has("types"):
+				target.volatile_data.types = target.types.duplicate()
+			target.types = _new_types(target, move, other)
+		"ability":
+			_change_ability(user, target, move, other)
+	if move.id == "jawlock" and not user.is_knocked_out():
+		user.volatiles.trapped = Volatiles.ticks_for("trapped")
+	target.volatiles[name] = Volatiles.ticks_for(name)
+	_fevent("volatile", target, {"volatile": name, "move": move.id})
+
+
+## The types a type-changing move gives: Soak's or Magic Powder's, one added (Forest's Curse),
+## the user's first move's (Conversion) or the foe's (Reflect Type).
+static func _new_types(target: Fighter, move: BattleMove, other: Fighter) -> Array:
+	match move.id:
+		"conversion":
+			return [target.moves[0].type]
+		"reflecttype":
+			return other.types.duplicate()
+	var given: Array = Volatiles.NEW_TYPES.get(move.id, target.types)
+	if str(given[0]).begins_with("+"):
+		var added := str(given[0]).trim_prefix("+")
+		return target.types + [added] if not added in target.types else target.types.duplicate()
+	return given.duplicate()
+
+
+## The ability moves: Worry Seed and Gastro Acid set the target's, Entrainment gives it the user's,
+## Skill Swap swaps them (the user's changes too), Role Play copies the foe's onto the user.
+func _change_ability(user: Fighter, target: Fighter, move: BattleMove, other: Fighter) -> void:
+	for changed: Fighter in ([user, target] if move.id == "skillswap" else [target]):
+		if not changed.volatile_data.has("ability"):
+			changed.volatile_data.ability = changed.ability
+	match move.id:
+		"entrainment":
+			target.set_ability(user.ability)
+		"skillswap":
+			var mine := user.ability
+			user.set_ability(target.ability)
+			target.set_ability(mine)
+			user.volatiles.ability = Volatiles.ticks_for("ability")
+		"roleplay":
+			target.set_ability(other.ability)
+		_:
+			target.set_ability(str(Volatiles.NEW_ABILITIES.get(move.id, "")))
+
+
+## Lingering effects counting down, once a tick: drains and a turn's stat drops once a second
+## (Magic Guard spares the drains), Yawn's sleep and Perish Song's knockout when they run out.
+func _tick_volatiles(fighter: Fighter) -> void:
+	var second := tick % Rules.TICK_RATE == 0
+	var turn := tick % Rules.seconds_to_ticks(Volatiles.TURN_SECONDS) == 0
+	for name: String in fighter.volatiles.keys():
+		if fighter.is_knocked_out():
+			return
+		var share := Volatiles.drain(fighter, name)
+		if second and share > 0.0 and not Abilities.magic_guard(fighter):
+			var amount := maxi(1, roundi(fighter.max_hp * share))
+			_hurt(fighter, amount, "volatile_damage", {"volatile": name})
+			var seeder := int(fighter.volatile_data.get("seeder", -1))
+			if name == "leechseed" and seeder >= 0 and seeder < fighters.size() and fighters[seeder].side != fighter.side:
+				_heal(fighters[seeder], amount, "leechseed")
+		if turn and (name == "octolock" or name == "syrupbomb"):
+			_boost(fighter, {"def": -1, "spd": -1} if name == "octolock" else {"spe": -1}, name, target_of(fighter))
+		fighter.volatiles[name] -= 1
+		if fighter.volatiles[name] > 0:
+			continue
+		_end_volatile(fighter, name)
+		if name == "yawn" and fighter.status.is_empty():
+			_inflict(fighter, "slp")
+		elif name == "perish":
+			_hurt(fighter, fighter.hp, "perish", {})
+
+
+## Ends lingering effect `name` on `fighter`, putting back any types or ability it changed.
+func _end_volatile(fighter: Fighter, name: String, quiet := false) -> void:
+	fighter.volatiles.erase(name)
+	if name == "types" and fighter.volatile_data.has("types"):
+		fighter.types = fighter.volatile_data.types
+		fighter.volatile_data.erase("types")
+	if name == "ability" and fighter.volatile_data.has("ability"):
+		fighter.set_ability(fighter.volatile_data.ability)
+		fighter.volatile_data.erase("ability")
+	if not quiet:
+		_fevent("volatile_end", fighter, {"volatile": name})
 
 
 ## Swallow and Spit Up use up the stockpile, and with it the stages Stockpile raised.
@@ -1302,6 +1424,15 @@ func _hit(attacker: Fighter, defender: Fighter, move: BattleMove, spread := 1.0)
 					_apply_effect(attacker, defender, effect, move.id)
 			_coded_secondaries(attacker, defender, move)
 		_take_berry(attacker, defender, move)
+		if not move.volatile.is_empty() and not immune:
+			if move.volatile.begins_with("self:"):
+				_give(attacker, attacker, move.volatile.trim_prefix("self:"), move)
+			else:
+				_give(attacker, defender, move.volatile, move)
+	# Destiny Bond: the foe that knocks it out goes down with it.
+	if defender.is_knocked_out() and defender.volatiles.has("destinybond") and not attacker.is_knocked_out():
+		_fevent("destiny_bond", defender, {})
+		_hurt(attacker, attacker.hp, "destiny_bond", {})
 	if move.drain_share > 0.0 and not attacker.is_knocked_out():
 		_heal(attacker, maxi(1, roundi(dealt * move.drain_share)), move.id)
 	if move.recoil_share > 0.0 and not Abilities.no_recoil(attacker):
@@ -1551,7 +1682,7 @@ func can_switch(index: int, slot: int) -> bool:
 	var fighter := fighters[index]
 	var team: Array = teams[fighter.side]
 	return slot >= 0 and slot < team.size() and _switch_cooldown[fighter.side] == 0 and _on_bench(team[slot]) \
-		and fighter.can_act() and not frozen(fighter)
+		and fighter.can_act() and not frozen(fighter) and not Volatiles.trapped(fighter)
 
 
 ## Ticks until `side` can switch again.
@@ -1618,6 +1749,13 @@ static func _leave(fighter: Fighter) -> void:
 	fighter.charged_ticks = 0
 	fighter.stockpile = 0
 	_unsplit(fighter)
+	if fighter.volatile_data.has("types"):
+		fighter.types = fighter.volatile_data.types
+	if fighter.volatile_data.has("ability"):
+		fighter.set_ability(fighter.volatile_data.ability)
+	fighter.volatiles = {}
+	fighter.volatile_data = {}
+	fighter.last_move = ""
 
 
 ## The team slot `side` sends out next: its first member healthy and on the bench, or -1.
@@ -1846,6 +1984,8 @@ func _land(attacker: Fighter, defender: Fighter, move: BattleMove) -> void:
 	if _behind_substitute(attacker, defender, move):
 		_fevent("substitute_hit", defender, {"move": move.id, "damage": 0})
 		return
+	if not move.volatile.is_empty():
+		_give(attacker, defender, move.volatile, move)
 	_fevent("landed", attacker, _aimed(defender, {"move": move.id}))
 	_apply_effect(attacker, defender, {"boosts": move.boosts, "status": move.status, "confuses": move.confuses}, move.id)
 
@@ -2080,6 +2220,9 @@ static func damage_parts(attacker: Fighter, defender: Fighter, move: BattleMove,
 	var factor := stab * effectiveness * Abilities.taken_factor(defender, move, main_series) * Items.power_factor(attacker, move, main_series) 		* attacker.arena.damage_factor(attacker, defender, move)
 	if attacker.helped:
 		factor *= Rules.HELPING_HAND_FACTOR
+	# Glaive Rush leaves its user open.
+	if defender.volatiles.has("glaiverush"):
+		factor *= Volatiles.GLAIVE_FACTOR
 	# Friend Guard: the defender's ally (doubles) softens hits on it.
 	if defender.ally != null and not defender.ally.is_knocked_out() and defender.ally.ability_effect.has("ally_taken"):
 		factor *= float(defender.ally.ability_effect.ally_taken)
@@ -2177,6 +2320,12 @@ func _record_state() -> void:
 		_state[i + 46] = fighter.stockpile
 		_state[i + 47] = int(fighter.wish.get("ticks", 0))
 		_state[i + 48] = fighter.split_ticks
+		var lingering := 0
+		for name: String in fighter.volatiles:
+			lingering += int(fighter.volatiles[name])
+		_state[i + 49] = fighter.volatiles.size()
+		_state[i + 50] = lingering
+		_state[i + 51] = conditions.uproar_ticks
 		i += FIGHTER_STATE_SIZE
 	_state[i] = ArenaConditions.WEATHERS.find(conditions.weather)
 	_state[i + 1] = conditions.weather_ticks
