@@ -69,7 +69,9 @@ static func standard(species: Dictionary) -> String:
 ## Whether `defender`'s ability makes it immune to `move` (a type or a kind of move).
 static func immune(defender: Fighter, move: BattleMove) -> bool:
 	var entry := defender.ability_effect
-	if move.type in entry.get("immune", []):
+	# Gravity grounds a Levitate user (§9.11).
+	if move.type in entry.get("immune", []) and not (move.type == "Ground" and defender.ability == "levitate"
+			and defender.arena.has_field("gravity")):
 		return true
 	for flag: String in entry.get("immune_flags", []):
 		if move.flags.has(flag):

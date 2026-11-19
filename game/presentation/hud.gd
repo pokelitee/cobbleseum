@@ -59,6 +59,7 @@ const STATUS_BADGES := {
 	"confusion": ["CNF", Color("ff5f9e")],
 	"reflect": ["REFL", Color("e0559a")], "lightscreen": ["LSCR", Color("d4a51c")],
 	"auroraveil": ["VEIL", Color("3ab8d8")],
+	"tailwind": ["WIND", Color("9fe8c0")], "safeguard": ["SAFE", Color("c88cf0")], "mist": ["MIST", Color("a8d8f0")],
 	"stealthrock": ["ROCK", Color("b89a6a")], "spikes": ["SPK", Color("9a8f80")],
 	"toxicspikes": ["TSPK", Color("b45ad6")], "stickyweb": ["WEB", Color("c8c8a0")],
 }
