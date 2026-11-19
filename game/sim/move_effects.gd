@@ -109,11 +109,11 @@ const LAYS_HAZARD := {"ceaselessedge": "spikes", "stoneaxe": "stealthrock"}
 const TYPICAL_HP_SHARE := 0.6
 const TYPICAL_POWER := {"reversal": 60, "flail": 60, "grassknot": 60, "lowkick": 60, "heavyslam": 60, "heatcrash": 60,
 	"gyroball": 60, "electroball": 60, "storedpower": 40, "powertrip": 40, "ragefist": 100, "present": 60}
-## Moves that only work some of the time (usable()) count for about this share of their power in
-## a standard moveset.
+## Moves that only work some of the time (usable()), or land late (Future Sight), count for about
+## this share of their power in a standard moveset.
 const MOVESET_SHARE := {"suckerpunch": 0.5, "thunderclap": 0.5, "upperhand": 0.1, "fakeout": 0.1, "firstimpression": 0.2,
 	"dreameater": 0.1, "belch": 0.2, "lastresort": 0.3, "synchronoise": 0.3, "focuspunch": 0.6, "poltergeist": 0.9,
-	"endeavor": 0.4, "counter": 0.4, "mirrorcoat": 0.4, "metalburst": 0.4, "comeuppance": 0.4}
+	"futuresight": 0.85, "doomdesire": 0.85, "endeavor": 0.4, "counter": 0.4, "mirrorcoat": 0.4, "metalburst": 0.4, "comeuppance": 0.4}
 
 
 ## `move` as `attacker` would use it on `defender` now.

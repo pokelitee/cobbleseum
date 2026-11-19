@@ -765,6 +765,19 @@ func _threat(battle: Battle, me: Fighter, foe: Fighter, seen: Dictionary) -> Dic
 			"danger": expected_damage(shooter, me, move, data) / maxf(me.hp, 1.0) if move.is_damaging() else 0.1}
 		if best.is_empty() or threat.ticks < best.ticks:
 			best = threat
+	# A Future Sight about to land on this fighter's place is dodged like any other hit.
+	for member: Fighter in battle.teams[1 - me.side]:
+		if member.foresight.is_empty() or int(member.foresight.target) != Battle.index_of(me):
+			continue
+		var ticks := float(int(member.foresight.ticks))
+		if ticks > THREAT_HORIZON:
+			continue
+		var move := member.moves[int(member.foresight.move)]
+		var threat := {"key": "f%d.%d" % [member.slot, battle.tick + int(member.foresight.ticks)],
+			"direction": (me.position - member.position).normalized(), "ticks": ticks, "melee": false,
+			"danger": expected_damage(member, me, move, data) / maxf(me.hp, 1.0)}
+		if best.is_empty() or threat.ticks < best.ticks:
+			best = threat
 	var attackers: Array[Fighter] = [foe]
 	if _doubles:
 		attackers = []

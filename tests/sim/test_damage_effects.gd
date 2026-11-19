@@ -115,3 +115,12 @@ func test_on_hit_effects() -> void:
 	assert_eq(b.boosts.atk, 0)
 	battle._hit(a, b, a.moves[2])
 	assert_eq(battle.conditions.hazards[1].get("stealthrock", 0), 1)
+
+
+func test_ais_see_a_future_sight_coming() -> void:
+	var battle := _battle([["futuresight"], ["tackle"]])
+	var a := battle.fighters[0]
+	a.foresight = {"ticks": 20, "move": 0, "target": 1}
+	assert_true(StandInAI.incoming_threat(battle, 1).is_empty(), "not yet")
+	a.foresight.ticks = 2
+	assert_false(StandInAI.incoming_threat(battle, 1).is_empty())

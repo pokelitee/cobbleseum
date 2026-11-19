@@ -224,6 +224,11 @@ static func incoming_threat(battle: Battle, index: int) -> Dictionary:
 		var closest := Geometry2D.get_closest_point_to_segment(me.position, start, end)
 		if closest.distance_to(me.position) <= me.radius + Rules.PROJECTILE_RADIUS:
 			return {"direction": velocity.normalized(), "projectile": projectile}
+	# A Future Sight about to land on this place, judged once like a wind-up (by the tick it lands).
+	for member: Fighter in battle.teams[1 - me.side]:
+		if not member.foresight.is_empty() and int(member.foresight.target) == index 				and int(member.foresight.ticks) <= MELEE_THREAT_TICKS:
+			return {"direction": (me.position - member.position).normalized(),
+				"windup_tick": -(battle.tick + int(member.foresight.ticks))}
 	if foe.action == Fighter.Action.WINDUP and foe.action_ticks <= MELEE_THREAT_TICKS:
 		var move := foe.moves[foe.action_move]
 		var reach := Rules.MELEE_DASH_RANGE if move.kind == BattleMove.Kind.MELEE else Rules.AREA_RADIUS
