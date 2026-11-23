@@ -67,7 +67,13 @@ func test_counter_pays_back_recent_hits_of_its_kind() -> void:
 	var hp := a.hp
 	battle._hit(b, a, b.moves[0])
 	var took := hp - a.hp
-	assert_eq(MoveEffects.rule_damage(a, b, a.moves[0]), took * 2)
+	assert_eq(MoveEffects.rule_damage(a, b, a.moves[0]), took, "half the main series' doubling")
+	a.hp = a.max_hp
+	b.boosts.atk = 2
+	battle._hit(b, a, b.moves[0])
+	var newest := a.max_hp - a.hp
+	assert_true(newest != took)
+	assert_eq(MoveEffects.rule_damage(a, b, a.moves[0]), newest, "only the newest hit, not the window's sum")
 	assert_false(MoveEffects.usable(a, b, a.moves[1]), "a physical hit isn't Mirror Coat's")
 	for i in Rules.seconds_to_ticks(Rules.RETURN_SECONDS) + 1:
 		battle.step()
@@ -82,6 +88,9 @@ func test_hp_costs_and_crashes() -> void:
 	a.position = Vector2(0, -10)
 	battle._strike(a, battle.fighters[1], 1)
 	assert_eq(hp - a.hp, roundi(a.max_hp * 0.5 / 6.0), "a whiffed High Jump Kick crashes")
+	var raw: Dictionary = MOVES.steelbeam
+	assert_almost_eq(Movesets.attack_value(a.moves[0], raw, false), 140.0 * 0.95 * Movesets.HP_COST_FACTOR, 1e-4,
+		"a cost on every use counts more than recoil")
 
 
 func test_future_sight_lands_later() -> void:

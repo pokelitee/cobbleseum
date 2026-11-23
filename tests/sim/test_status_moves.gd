@@ -156,3 +156,4 @@ func test_ais_and_movesets() -> void:
 	assert_eq(StandInAI.move_score(a, b, a.moves[2]), 0.0, "no Memento at full HP")
 	assert_true(Movesets.utility_value(_move("shellsmash"), true) > Movesets.utility_value(_move("filletaway"), true))
 	assert_eq(Movesets.utility_value(_move("memento"), true), 0.0)
+	assert_true(Movesets.utility_value(_move("bellydrum"), true) < Movesets.UTILITY_THRESHOLD, "half its HP for a boost that wears off")

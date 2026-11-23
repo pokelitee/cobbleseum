@@ -20,6 +20,11 @@ const OFF_STAT_FACTOR := 0.6
 const CHARGE_FACTOR := 0.75
 const RECHARGE_FACTOR := 0.8
 const RECOIL_FACTOR := 0.9
+## A move that costs HP on every use (Steel Beam, Mind Blown) pays about half the user's HP over
+## a battle when used on cooldown. Valued like recoil, Steel Beam took 22 standard movesets and
+## lost most of their battles (v41 probes: Gholdengo 55% to 90%, Archaludon 42% to 79%, with
+## Flash Cannon instead).
+const HP_COST_FACTOR := 0.5
 const SELF_DESTRUCT_FACTOR := 0.2
 ## Fixed-damage moves are valued like an attack of this power.
 const FIXED_DAMAGE_VALUE := 80.0
@@ -164,7 +169,9 @@ static func attack_value(move: BattleMove, raw: Dictionary, physical: bool, abil
 		value *= CHARGE_FACTOR
 	if move.recharges:
 		value *= RECHARGE_FACTOR
-	if (move.recoil_share > 0.0 or move.cost_share > 0.0 or move.crash_share > 0.0) and not entry.get("no_recoil", false) \
+	if move.cost_share > 0.0 and not entry.get("magic_guard", false):
+		value *= HP_COST_FACTOR
+	elif (move.recoil_share > 0.0 or move.crash_share > 0.0) and not entry.get("no_recoil", false) \
 			and not entry.get("magic_guard", false):
 		value *= RECOIL_FACTOR
 	if move.self_destructs:
