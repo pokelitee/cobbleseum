@@ -151,7 +151,9 @@ static func moveset_value(move: BattleMove, physical: bool) -> float:
 		return Volatiles.moveset_value(move, physical)
 	if move.id == "bellydrum" and not physical:
 		return 0.0
-	return float(MOVESET_VALUES.get(move.id, 0.0))
+	# An HP cost is worth that much less, as for Fillet Away (Movesets.utility_value): at full
+	# value Belly Drum took 25 standard movesets whose species won 34% (rules version 42).
+	return float(MOVESET_VALUES.get(move.id, 0.0)) * (1.0 - HP_COST_VALUE * float(HP_COSTS.get(move.id, 0.0)))
 
 
 ## Stat stages summed (over `stats`, all by default).

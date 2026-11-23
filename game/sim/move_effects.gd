@@ -93,10 +93,14 @@ const RISING_HITS: Array[String] = ["tripleaxel", "triplekick"]
 const FICKLE_CHANCE := 0.3
 const PRESENT_HEAL_CHANCE := 0.2
 const PRESENT_HEAL := 0.25 / 6.0
-## Rules version 38: Counter and Mirror Coat pay back twice the physical or special damage taken
-## from the target in the last Rules.RETURN_SECONDS, Metal Burst and Comeuppance 1.5 times any.
-const RETURNS := {"counter": ["physical", 2.0], "mirrorcoat": ["special", 2.0], "metalburst": ["any", 1.5],
-	"comeuppance": ["any", 1.5]}
+## Counter and Mirror Coat pay back the newest physical or special hit taken from the target in
+## the last Rules.RETURN_SECONDS, Metal Burst and Comeuppance 0.75 times the newest hit of any
+## kind: half the main series' factors (rules version 42). The main series' doubling pays for
+## moving last and losing the turn; in real time the user keeps attacking on its other cooldowns.
+## Under version 41 (twice every hit of the window) Pyukumuku, with 410 base stats, won all 82 of
+## its ranking battles.
+const RETURNS := {"counter": ["physical", 1.0], "mirrorcoat": ["special", 1.0], "metalburst": ["any", 0.75],
+	"comeuppance": ["any", 0.75]}
 ## Moves that hit a random status: [chance in %, statuses].
 const RANDOM_STATUS := {"triattack": [20, ["brn", "par", "frz"]], "direclaw": [50, ["psn", "par", "slp"]]}
 ## Moves that punish a foe whose stats rose in the last Rules.RECENT_SECONDS: Alluring Voice
@@ -294,17 +298,17 @@ static func rule_damage(attacker: Fighter, defender: Fighter, move: BattleMove) 
 	return returned(attacker, defender, move)
 
 
-## What Counter and its kin would pay back now: the damage of their kind `fighter` took from
+## What Counter and its kin would pay back now: the newest hit of their kind `fighter` took from
 ## `foe` in the last Rules.RETURN_SECONDS, times their factor.
 static func returned(fighter: Fighter, foe: Fighter, move: BattleMove) -> int:
 	var rule: Array = RETURNS.get(move.id, [])
 	if rule.is_empty():
 		return 0
-	var total := 0
-	for taken: Dictionary in fighter.taken:
+	for i in range(fighter.taken.size() - 1, -1, -1):
+		var taken: Dictionary = fighter.taken[i]
 		if int(taken.side) == foe.side and int(taken.slot) == foe.slot and (rule[0] == "any" or (rule[0] == "physical") == taken.physical):
-			total += int(taken.amount)
-	return floori(total * float(rule[1]))
+			return floori(int(taken.amount) * float(rule[1]))
+	return 0
 
 
 ## Power for valuing `move` in a standard moveset where its power follows the battle's state
